@@ -1,0 +1,112 @@
+name:                  ambiata-zebra
+version:               0.0.1
+license:               AllRightsReserved
+author:                Ambiata <info@ambiata.com>
+maintainer:            Ambiata <info@ambiata.com>
+copyright:             (c) 2015 Ambiata.
+synopsis:              zebra
+category:              System
+cabal-version:         >= 1.8
+build-type:            Custom
+description:           zebra
+
+library
+  build-depends:
+                      base                            >= 3          && < 5
+                    , ambiata-p
+                    , text                            == 1.2.*
+
+  ghc-options:
+                    -Wall
+
+  hs-source-dirs:
+                    src
+
+  exposed-modules:
+                    Paths_ambiata_zebra
+                    Zebra
+
+executable zebra
+  ghc-options:
+                    -Wall -threaded -O2
+
+  hs-source-dirs:
+                    gen                    
+
+  main-is:
+                    ../main/zebra.hs
+
+  build-depends:
+                      base
+                    , ambiata-zebra
+                    , ambiata-p
+                    , ambiata-x-optparse
+                    , optparse-applicative            == 0.12.*
+                    , text                            == 1.2.*
+
+
+test-suite test
+  type:
+                    exitcode-stdio-1.0
+
+  main-is:
+                    test.hs
+
+  ghc-options:
+                    -Wall -threaded -O2
+
+  hs-source-dirs:
+                    test
+
+  build-depends:
+                      base                            >= 3          && < 5
+                    , ambiata-disorder-core
+                    , ambiata-disorder-corpus
+                    , ambiata-disorder-jack
+                    , ambiata-p
+                    , ambiata-zebra
+                    , QuickCheck                      >= 2.8.2      && < 2.9
+                    , quickcheck-instances            == 0.3.*
+                    , text                            == 1.2.*
+
+test-suite test-io
+  type:
+                    exitcode-stdio-1.0
+
+  main-is:
+                    test-io.hs
+
+  ghc-options:
+                    -Wall -threaded -O2
+
+  hs-source-dirs:
+                    test
+
+  build-depends:
+                      base                            >= 3          && < 5
+                    , ambiata-zebra
+                    , ambiata-disorder-core
+                    , ambiata-disorder-corpus
+                    , ambiata-disorder-jack
+                    , ambiata-p
+                    , text
+                    , QuickCheck                      >= 2.8.2      && < 2.9
+                    , quickcheck-instances            == 0.3.*
+
+test-suite test-cli
+  type:
+                    exitcode-stdio-1.0
+
+  main-is:
+                    test-cli.hs
+
+  ghc-options:
+                    -Wall -threaded -O2
+
+  hs-source-dirs:
+                    test
+
+  build-depends:
+                      base                            >= 3          && < 5
+                    , ambiata-disorder-core
+                    , ambiata-zebra
