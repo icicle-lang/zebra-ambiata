@@ -13,8 +13,18 @@ description:           zebra
 library
   build-depends:
                       base                            >= 3          && < 5
+                    , ambiata-anemone
                     , ambiata-p
+                    , ambiata-x-bytestring
+                    , ambiata-x-show
+                    , ambiata-x-vector
+                    , attoparsec                      >= 0.13       && < 0.14
+                    , binary                          >= 0.7.2      && < 0.9
+                    , bytestring                      == 0.10.*
+                    , containers                      == 0.5.*
                     , text                            == 1.2.*
+                    , thyme                           == 0.3.*
+                    , vector                          >= 0.10       && < 0.12
 
   ghc-options:
                     -Wall
@@ -23,15 +33,18 @@ library
                     src
 
   exposed-modules:
-                    Paths_ambiata_zebra
                     Zebra
+                    Zebra.Array
+                    Zebra.Fact
+                    Zebra.Header
+                    Zebra.Schema
 
 executable zebra
   ghc-options:
                     -Wall -threaded -O2
 
   hs-source-dirs:
-                    gen                    
+                    gen
 
   main-is:
                     ../main/zebra.hs
@@ -65,9 +78,13 @@ test-suite test
                     , ambiata-disorder-jack
                     , ambiata-p
                     , ambiata-zebra
+                    , binary                          >= 0.7.2      && < 0.9
+                    , bytestring                      == 0.10.*
+                    , containers                      == 0.5.*
                     , QuickCheck                      >= 2.8.2      && < 2.9
                     , quickcheck-instances            == 0.3.*
                     , text                            == 1.2.*
+                    , vector                          >= 0.10       && < 0.12
 
 test-suite test-io
   type:
