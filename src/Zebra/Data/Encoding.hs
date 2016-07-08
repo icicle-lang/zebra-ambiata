@@ -1,7 +1,8 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE NoImplicitPrelude #-}
-module Zebra.Encoding (
+{-# OPTIONS_GHC -funbox-strict-fields #-}
+module Zebra.Data.Encoding (
     Encoding(..)
   , FieldName(..)
   , FieldEncoding(..)
@@ -28,8 +29,8 @@ instance Show FieldName where
     gshowsPrec
 
 data FieldObligation =
-    FieldOptional
-  | FieldRequired
+    OptionalField
+  | RequiredField
     deriving (Eq, Ord, Read, Show, Generic, Typeable)
 
 data FieldEncoding =

@@ -1,2 +1,7 @@
 {-# LANGUAGE NoImplicitPrelude #-}
-module Zebra where
+module Zebra (
+    module X
+  ) where
+
+import           Zebra.Data as X
+import           Zebra.Serial as X

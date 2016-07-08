@@ -16,15 +16,22 @@ library
                     , ambiata-anemone
                     , ambiata-p
                     , ambiata-x-bytestring
+                    , ambiata-x-eithert
                     , ambiata-x-show
                     , ambiata-x-vector
                     , attoparsec                      >= 0.13       && < 0.14
                     , binary                          >= 0.7.2      && < 0.9
                     , bytestring                      == 0.10.*
                     , containers                      == 0.5.*
+                    , hashable                        == 1.2.*
+                    , lens                            >= 4.7        && < 4.15
+                    , mtl                             == 2.2.*
+                    , primitive                       == 0.6.*
                     , text                            == 1.2.*
                     , thyme                           == 0.3.*
                     , vector                          >= 0.10       && < 0.12
+                    , vector-space                    == 0.10.*
+                    , vector-th-unbox                 == 0.2.*
 
   ghc-options:
                     -Wall
@@ -34,10 +41,18 @@ library
 
   exposed-modules:
                     Zebra
-                    Zebra.Array
-                    Zebra.Fact
-                    Zebra.Header
-                    Zebra.Schema
+                    Zebra.Data
+                    Zebra.Data.Block
+                    Zebra.Data.Encoding
+                    Zebra.Data.Entity
+                    Zebra.Data.Fact
+                    Zebra.Data.Index
+                    Zebra.Data.Record
+                    Zebra.Data.Schema
+                    Zebra.Serial
+                    Zebra.Serial.Array
+                    Zebra.Serial.Block
+                    Zebra.Serial.Header
 
 executable zebra
   ghc-options:
@@ -84,6 +99,7 @@ test-suite test
                     , QuickCheck                      >= 2.8.2      && < 2.9
                     , quickcheck-instances            == 0.3.*
                     , text                            == 1.2.*
+                    , thyme                           == 0.3.*
                     , vector                          >= 0.10       && < 0.12
 
 test-suite test-io

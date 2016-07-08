@@ -1,6 +1,6 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE TemplateHaskell #-}
-module Test.Zebra.Header where
+module Test.Zebra.Serial.Header where
 
 import           Data.Binary.Get (Get, ByteOffset)
 import qualified Data.Binary.Get as Get
@@ -13,14 +13,13 @@ import           Data.String (String)
 import           Disorder.Jack (Property, Jack)
 import           Disorder.Jack (quickCheckAll, gamble, tripping, listOf)
 
-import           Jack.Zebra.Fact
-import           Jack.Zebra.Schema
-
 import           P
 
 import           System.IO (IO)
 
-import           Zebra.Header
+import           Test.Zebra.Jack
+
+import           Zebra.Serial.Header
 
 
 prop_roundtrip_schema :: Property

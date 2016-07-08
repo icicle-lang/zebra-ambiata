@@ -4,7 +4,8 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-module Zebra.Schema (
+{-# OPTIONS_GHC -funbox-strict-fields #-}
+module Zebra.Data.Schema (
   -- * Data
     Schema(..)
   , Format(..)
@@ -32,8 +33,8 @@ import           P
 
 import           X.Text.Show (gshowsPrec)
 
-import           Zebra.Encoding
-import           Zebra.Fact
+import           Zebra.Data.Encoding
+import           Zebra.Data.Fact
 
 
 newtype Schema =
@@ -49,7 +50,7 @@ data Format =
     ByteFormat
   | WordFormat
   | DoubleFormat
-  | ArrayFormat Schema
+  | ListFormat !Schema
     deriving (Eq, Ord, Show)
 
 -- | Render a schema as a string. The schema string is run of characters which
@@ -72,7 +73,7 @@ renderSchema =
         "w"
       DoubleFormat ->
         "d"
-      ArrayFormat s ->
+      ListFormat s ->
         "[" <> renderSchema s <> "]"
   in
     foldMap go . unSchema
@@ -91,7 +92,7 @@ pFormat =
       ByteFormat <$ Atto.char 'b'
     , WordFormat <$ Atto.char 'w'
     , DoubleFormat <$ Atto.char 'd'
-    , ArrayFormat <$> (Atto.char '[' *> pSchema <* Atto.char ']')
+    , ListFormat <$> (Atto.char '[' *> pSchema <* Atto.char ']')
     ]
 
 schemaOfDictionary :: Map AttributeName Encoding -> Map AttributeName Schema
@@ -119,7 +120,7 @@ schemaOfFieldEncoding :: FieldEncoding -> Schema
 schemaOfFieldEncoding = \case
   FieldEncoding obligation encoding ->
     case obligation of
-      FieldRequired ->
+      RequiredField ->
         schemaOfEncoding encoding
-      FieldOptional ->
+      OptionalField ->
         Schema (pure WordFormat) <> schemaOfEncoding encoding
