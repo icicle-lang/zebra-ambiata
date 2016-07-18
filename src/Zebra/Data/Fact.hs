@@ -123,6 +123,11 @@ ivoryEpoch :: Day
 ivoryEpoch =
   YearMonthDay 1600 3 1 ^. re gregorian
 
+derivingUnbox "EntityHash"
+  [t| EntityHash -> Word32 |]
+  [| unEntityHash |]
+  [| EntityHash |]
+
 derivingUnbox "AttributeId"
   [t| AttributeId -> Int |]
   [| unAttributeId |]
