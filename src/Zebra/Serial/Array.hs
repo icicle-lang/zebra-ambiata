@@ -1,5 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
-module Zebra.Array (
+module Zebra.Serial.Array (
     bStrings
   , bByteArray
   , bWordArray

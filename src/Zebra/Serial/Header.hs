@@ -1,10 +1,9 @@
+{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE ViewPatterns #-}
-{-# LANGUAGE PatternSynonyms #-}
-module Zebra.Header (
+module Zebra.Serial.Header (
     bHeader
   , bMagic
 
@@ -26,9 +25,9 @@ import qualified Data.Vector as Boxed
 
 import           P
 
-import           Zebra.Array
-import           Zebra.Fact
-import           Zebra.Schema
+import           Zebra.Data.Fact
+import           Zebra.Data.Schema
+import           Zebra.Serial.Array
 
 
 -- | Encode the zebra header from a dictionary.

@@ -1,17 +1,17 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE TemplateHaskell #-}
-module Test.Zebra.Schema where
+module Test.Zebra.Data.Schema where
 
 import           Disorder.Jack (Property, quickCheckAll)
 import           Disorder.Jack (gamble, tripping)
-
-import           Jack.Zebra.Schema
 
 import           P
 
 import           System.IO (IO)
 
-import           Zebra.Schema
+import           Test.Zebra.Jack
+
+import           Zebra.Data.Schema
 
 
 prop_roundtrip_schema :: Property

@@ -1,7 +1,11 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NoImplicitPrelude #-}
-module Zebra.Fact (
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeFamilies #-}
+module Zebra.Data.Fact (
     Fact(..)
   , Value(..)
   , EntityId(..)
@@ -10,12 +14,20 @@ module Zebra.Fact (
   , AttributeName(..)
   , Time(..)
   , Priority(..)
+
+  , hashEntityId
+  , fromDay
   ) where
 
+import           Control.Lens ((^.), re)
+
+import           Data.AffineSpace ((.-.))
 import           Data.ByteString (ByteString)
-import           Data.Thyme.Calendar (Day)
+import           Data.Hashable (hash)
+import           Data.Thyme.Calendar (Day, YearMonthDay(..), gregorian)
 import           Data.Typeable (Typeable)
 import qualified Data.Vector as Boxed
+import           Data.Vector.Unboxed.Deriving (derivingUnbox)
 import           Data.Word (Word32)
 
 import           GHC.Generics (Generic)
@@ -98,3 +110,30 @@ instance Show Time where
 instance Show Priority where
   showsPrec =
     gshowsPrec
+
+hashEntityId :: EntityId -> EntityHash
+hashEntityId =
+  EntityHash . fromIntegral . hash . unEntityId
+
+fromDay :: Day -> Time
+fromDay day =
+  Time . fromIntegral $ (day .-. ivoryEpoch) * 86400
+
+ivoryEpoch :: Day
+ivoryEpoch =
+  YearMonthDay 1600 3 1 ^. re gregorian
+
+derivingUnbox "AttributeId"
+  [t| AttributeId -> Int |]
+  [| unAttributeId |]
+  [| AttributeId |]
+
+derivingUnbox "Time"
+  [t| Time -> Int64 |]
+  [| unTime |]
+  [| Time |]
+
+derivingUnbox "Priority"
+  [t| Priority -> Int |]
+  [| unPriority |]
+  [| Priority |]
