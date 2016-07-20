@@ -26,12 +26,10 @@ module Zebra.Serial.Block (
 
 import           Data.Binary.Get (Get)
 import qualified Data.Binary.Get as Get
-import           Data.Bits ((.&.), xor, shiftL, shiftR)
 import           Data.ByteString.Builder (Builder)
 import qualified Data.ByteString.Builder as Build
 import           Data.Coerce (coerce)
 import qualified Data.Vector as Boxed
-import           Data.Word (Word64)
 
 import           P
 
@@ -52,16 +50,16 @@ import           Zebra.Serial.Array
 bBlock :: Block -> Builder
 bBlock block =
   bEntities (blockEntities block) <>
-  bIndices (blockEpoch block) (blockIndices block) <>
+  bIndices (blockIndices block) <>
   bRecords (blockRecords block)
 
 getBlock :: Boxed.Vector Schema -> Get Block
 getBlock schemas = do
   entities <- getEntities
-  (epoch, indices) <- getIndices
+  indices <- getIndices
   records <- getRecords schemas
   pure $
-    Block epoch entities indices records
+    Block entities indices records
 
 -- | Encode the entities for a zebra block.
 --
@@ -222,19 +220,24 @@ getAttributes = do
 --
 --   /invariant: index_count == sum attr_id_count/
 --
-bIndices :: Time -> Unboxed.Vector Index -> Builder
-bIndices epoch xs =
+bIndices :: Unboxed.Vector Index -> Builder
+bIndices xs =
   let
     icount =
       fromIntegral $
       Unboxed.length xs
 
     iepoch =
-      unTime epoch
+      if Unboxed.null xs then
+        0
+      else
+        unTime .
+        Unboxed.minimum $
+        Unboxed.map indexTime xs
 
     deltas =
       Unboxed.convert $
-      Unboxed.map (zigZag64 . subtract iepoch . unTime . indexTime) xs
+      Unboxed.map (fromIntegral . subtract iepoch . unTime . indexTime) xs
 
     priorities =
       Unboxed.convert $
@@ -250,17 +253,17 @@ bIndices epoch xs =
     bWordArray priorities <>
     bWordArray tombstones
 
-getIndices :: Get (Time, Unboxed.Vector Index)
+getIndices :: Get (Unboxed.Vector Index)
 getIndices = do
   icount <- fromIntegral <$> Get.getWord32le
-  iepoch <- Time . fromIntegral <$> Get.getWord64le
+  iepoch <- fromIntegral <$> Get.getWord64le
   wdeltas <- getWordArray icount
   wpriorities <- getWordArray icount
   wtombstones <- getWordArray icount
 
   let
     times =
-      Unboxed.map ((+ iepoch) . Time . unZigZag64) $
+      Unboxed.map (Time . (+ iepoch) . fromIntegral) $
       Unboxed.convert wdeltas
 
     priorities =
@@ -271,16 +274,7 @@ getIndices = do
       Unboxed.map (tombstoneOfWord . fromIntegral) $
       Unboxed.convert wtombstones
 
-  pure (iepoch, Unboxed.zipWith3 Index times priorities tombstones)
-
-zigZag64 :: Int64 -> Word64
-zigZag64 n =
-  fromIntegral $!
-    (n `shiftL` 1) `xor` (n `shiftR` 63)
-
-unZigZag64 :: Word64 -> Int64
-unZigZag64 !n =
-  fromIntegral $! (n `shiftR` 1) `xor` negate (n .&. 0x1)
+  pure $ Unboxed.zipWith3 Index times priorities tombstones
 
 -- | Encode the record data for a zebra block.
 --

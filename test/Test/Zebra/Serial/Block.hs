@@ -37,9 +37,8 @@ prop_roundtrip_attributes =
 
 prop_roundtrip_indices :: Property
 prop_roundtrip_indices =
-  gamble jTime $ \epoch ->
-  gamble (Unboxed.fromList <$> listOf jIndex) $ \xs ->
-    trippingSerial (uncurry bIndices) getIndices (epoch, xs)
+  gamble (Unboxed.fromList <$> listOf jIndex) $
+    trippingSerial bIndices getIndices
 
 prop_roundtrip_records :: Property
 prop_roundtrip_records =

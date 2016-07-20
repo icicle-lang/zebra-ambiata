@@ -17,11 +17,12 @@ module Zebra.Data.Fact (
 
   , hashEntityId
   , fromDay
+  , toDay
   ) where
 
 import           Control.Lens ((^.), re)
 
-import           Data.AffineSpace ((.-.))
+import           Data.AffineSpace ((.-.), (.+^))
 import           Data.ByteString (ByteString)
 import           Data.Hashable (hash)
 import           Data.Thyme.Calendar (Day, YearMonthDay(..), gregorian)
@@ -118,6 +119,10 @@ hashEntityId =
 fromDay :: Day -> Time
 fromDay day =
   Time . fromIntegral $ (day .-. ivoryEpoch) * 86400
+
+toDay :: Time -> Day
+toDay (Time time) =
+  ivoryEpoch .+^ fromIntegral time `div` 86400
 
 ivoryEpoch :: Day
 ivoryEpoch =

@@ -46,8 +46,8 @@ data AttributeAcc =
 --     1. Entity Hash
 --     2. Entity Id
 --     3. Attribute
---     4. Priority
---     5. Time
+--     4. Time
+--     5. Priority
 --
 entitiesOfFacts :: Boxed.Vector Fact -> Boxed.Vector Entity
 entitiesOfFacts =
