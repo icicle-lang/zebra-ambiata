@@ -26,9 +26,11 @@ library
                     , hashable                        == 1.2.*
                     , lens                            >= 4.7        && < 4.15
                     , mtl                             == 2.2.*
+                    , pretty-show                     == 1.6.*
                     , primitive                       == 0.6.*
                     , text                            == 1.2.*
                     , thyme                           == 0.3.*
+                    , transformers                    == 0.5.*
                     , vector                          >= 0.10       && < 0.12
                     , vector-space                    == 0.10.*
                     , vector-th-unbox                 == 0.2.*

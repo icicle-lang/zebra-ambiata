@@ -1,14 +1,24 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 module Test.Zebra.Jack (
   -- * Zebra.Data.Block
     jBlock
 
+  -- * Zebra.Data.Encoding
+  , jEncoding
+  , jFieldEncoding
+  , jFieldName
+  , jFieldObligation
+
   -- * Zebra.Data.Fact
+  , jFact
   , jEntityId
   , jAttributeId
   , jAttributeName
   , jTime
+  , jDay
   , jPriority
+  , jValue
 
   -- * Zebra.Data.Entity
   , jEntity
@@ -35,10 +45,10 @@ import qualified Data.Vector as Boxed
 import qualified Data.Vector.Storable as Storable
 import qualified Data.Vector.Unboxed as Unboxed
 
-import           Disorder.Corpus (muppets, southpark)
+import           Disorder.Corpus (muppets, southpark, boats)
 import           Disorder.Jack (Jack, mkJack, shrinkTowards, sized)
-import           Disorder.Jack (elements, arbitrary, chooseInt)
-import           Disorder.Jack (oneOf, oneOfRec, listOf, justOf, listOfN)
+import           Disorder.Jack (elements, arbitrary, chooseInt, sizedBounded)
+import           Disorder.Jack (oneOf, oneOfRec, listOf, listOfN, justOf, maybeOf)
 
 import           P
 
@@ -48,6 +58,7 @@ import           Test.QuickCheck.Instances ()
 import           Text.Printf (printf)
 
 import           Zebra.Data.Block
+import           Zebra.Data.Encoding
 import           Zebra.Data.Entity
 import           Zebra.Data.Fact
 import           Zebra.Data.Index
@@ -68,6 +79,64 @@ jFormat =
     ] [
       ListFormat <$> jSchema
     ]
+
+jEncoding :: Jack Encoding
+jEncoding =
+  oneOfRec [
+      pure BoolEncoding
+    , pure Int64Encoding
+    , pure DoubleEncoding
+    , pure StringEncoding
+    , pure DateEncoding
+    ] [
+      StructEncoding . Boxed.fromList <$> listOfN 0 10 ((,) <$> jFieldName <*> jFieldEncoding)
+    , ListEncoding <$> jEncoding
+    ]
+
+jFieldName :: Jack FieldName
+jFieldName =
+  FieldName <$> elements boats
+
+jFieldEncoding :: Jack FieldEncoding
+jFieldEncoding =
+  FieldEncoding <$> jFieldObligation <*> jEncoding
+
+jFieldObligation :: Jack FieldObligation
+jFieldObligation =
+  elements [RequiredField, OptionalField]
+
+jFact :: Encoding -> AttributeId -> Jack Fact
+jFact encoding aid =
+  uncurry Fact
+    <$> jEntityHashId
+    <*> pure aid
+    <*> jTime
+    <*> jPriority
+    <*> (strictMaybe <$> maybeOf (jValue encoding))
+
+jValue :: Encoding -> Jack Value
+jValue = \case
+  BoolEncoding ->
+    BoolValue <$> elements [False, True]
+  Int64Encoding ->
+    Int64Value <$> sizedBounded
+  DoubleEncoding ->
+    DoubleValue <$> arbitrary
+  StringEncoding ->
+    StringValue <$> arbitrary
+  DateEncoding ->
+    DateValue <$> jDay
+  ListEncoding encoding ->
+    ListValue . Boxed.fromList <$> listOfN 0 10 (jValue encoding)
+  StructEncoding fields ->
+    StructValue <$> traverse (jFieldValue . snd) fields
+
+jFieldValue :: FieldEncoding -> Jack (Maybe' Value)
+jFieldValue = \case
+  FieldEncoding RequiredField encoding ->
+    Just' <$> jValue encoding
+  FieldEncoding OptionalField encoding ->
+    strictMaybe <$> maybeOf (jValue encoding)
 
 jEntityId :: Jack EntityId
 jEntityId =
@@ -110,23 +179,23 @@ jPriority =
 jBlock :: Jack Block
 jBlock =
   Block
-    <$> jTime
-    <*> (Boxed.fromList <$> listOf jEntity)
+    <$> (Boxed.fromList <$> listOf jEntity)
     <*> (Unboxed.fromList <$> listOf jIndex)
     <*> (Boxed.fromList <$> listOf jRecord)
 
-jEntity :: Jack Entity
-jEntity =
+jEntityHashId :: Jack (EntityHash, EntityId)
+jEntityHashId =
   let
     hash eid =
       EntityHash $ unEntityHash (hashEntityId eid) `mod` 10
-
-    mkEntity eid =
-      Entity (hash eid) eid
   in
-    mkEntity
-      <$> jEntityId
-      <*> (Boxed.fromList <$> listOf jAttribute)
+    (\eid -> (hash eid, eid)) <$> jEntityId
+
+jEntity :: Jack Entity
+jEntity =
+  uncurry Entity
+    <$> jEntityHashId
+    <*> (Boxed.fromList <$> listOf jAttribute)
 
 jAttribute :: Jack Attribute
 jAttribute =
