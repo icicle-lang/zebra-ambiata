@@ -7,6 +7,7 @@
 module Zebra.Merge.Entity
   ( EntityValues(..)
   , entitiesOfBlock
+  , recordSplitAt
   ) where
 
 import Zebra.Data
