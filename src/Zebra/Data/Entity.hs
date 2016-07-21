@@ -1,7 +1,10 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeFamilies #-}
 {-# OPTIONS_GHC -funbox-strict-fields #-}
 module Zebra.Data.Entity (
     Entity(..)
@@ -10,22 +13,17 @@ module Zebra.Data.Entity (
   ) where
 
 import           Data.Typeable (Typeable)
+import           Data.Vector.Unboxed.Deriving (derivingUnbox)
 
 import           GHC.Generics (Generic)
 
 import           P
 
 import qualified X.Data.Vector as Boxed
+import qualified X.Data.Vector.Unboxed as Unboxed
 
 import           Zebra.Data.Fact
 
-
-data Entity =
-  Entity {
-      entityHash :: !EntityHash
-    , entityId :: !EntityId
-    , entityAttributes :: !(Boxed.Vector Attribute)
-    } deriving (Eq, Ord, Show, Generic, Typeable)
 
 data Attribute =
   Attribute {
@@ -33,11 +31,25 @@ data Attribute =
     , attributeRecords :: !Int
     } deriving (Eq, Ord, Show, Generic, Typeable)
 
+-- This deriving Unbox needs to appear before using it in Entity below
+derivingUnbox "Attribute"
+  [t| Attribute -> (AttributeId, Int) |]
+  [| \(Attribute x y) -> (x, y) |]
+  [| \(x, y) -> Attribute x y |]
+
+
+data Entity =
+  Entity {
+      entityHash :: !EntityHash
+    , entityId :: !EntityId
+    , entityAttributes :: !(Unboxed.Vector Attribute)
+    } deriving (Eq, Ord, Show, Generic, Typeable)
+
 data EntityAcc =
   EntityAcc !EntityHash !EntityId !AttributeAcc !(Boxed.Vector Entity)
 
 data AttributeAcc =
-  AttributeAcc !AttributeId !Int !(Boxed.Vector Attribute)
+  AttributeAcc !AttributeId !Int !(Unboxed.Vector Attribute)
 
 -- | Convert facts to hierarchical entity representation.
 --
@@ -63,7 +75,7 @@ entitiesOfFacts =
 
 mkAttributeAcc :: AttributeId -> AttributeAcc
 mkAttributeAcc aid =
-  AttributeAcc aid 1 Boxed.empty
+  AttributeAcc aid 1 Unboxed.empty
 
 mkEntityAcc :: Fact -> EntityAcc
 mkEntityAcc (Fact ehash eid aid _ _ _) =
@@ -73,9 +85,9 @@ takeEntities :: EntityAcc -> Boxed.Vector Entity
 takeEntities (EntityAcc ehash eid attrs ents) =
   ents `Boxed.snoc` Entity ehash eid (takeAttributes attrs)
 
-takeAttributes :: AttributeAcc -> Boxed.Vector Attribute
+takeAttributes :: AttributeAcc -> Unboxed.Vector Attribute
 takeAttributes (AttributeAcc aid nrecs attrs) =
-  attrs `Boxed.snoc` Attribute aid nrecs
+  attrs `Unboxed.snoc` Attribute aid nrecs
 
 appendEntity :: EntityAcc -> Fact -> EntityAcc
 appendEntity acc0@(EntityAcc ehash0 eid0 attrs0 ents0) (Fact ehash1 eid1 aid1 _ _ _) =

@@ -195,7 +195,7 @@ jEntity :: Jack Entity
 jEntity =
   uncurry Entity
     <$> jEntityHashId
-    <*> (Boxed.fromList <$> listOf jAttribute)
+    <*> (Unboxed.fromList <$> listOf jAttribute)
 
 jAttribute :: Jack Attribute
 jAttribute =

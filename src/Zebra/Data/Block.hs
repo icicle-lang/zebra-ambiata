@@ -85,7 +85,10 @@ data ValueState =
 takeEntityFacts :: Boxed.Vector Entity -> EitherT FactError (State ValueState) (Boxed.Vector Fact)
 takeEntityFacts entities =
   concatFor entities $ \(Entity ehash eid attrs) ->
-    concatFor attrs $ \(Attribute aid nfacts) ->
+    -- The conversion from unboxed to boxed is not ideal here, but this
+    -- function is more for testing than actual execution:
+    -- the performance hit does not matter.
+    concatFor (Boxed.convert attrs) $ \(Attribute aid nfacts) ->
       takeFacts ehash eid aid nfacts
 
 concatFor :: Applicative m => Boxed.Vector a -> (a -> m (Boxed.Vector b)) -> m (Boxed.Vector b)
