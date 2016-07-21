@@ -51,6 +51,7 @@ library
                     Zebra.Data.Index
                     Zebra.Data.Record
                     Zebra.Data.Schema
+                    Zebra.Merge.Entity
                     Zebra.Serial
                     Zebra.Serial.Array
                     Zebra.Serial.Block
