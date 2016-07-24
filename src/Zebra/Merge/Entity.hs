@@ -7,7 +7,6 @@
 module Zebra.Merge.Entity
   ( EntityValues(..)
   , entitiesOfBlock
-  , recordSplitAt
   ) where
 
 import Zebra.Data
@@ -15,8 +14,6 @@ import Zebra.Data
 import qualified X.Data.Vector as Boxed
 import qualified X.Data.Vector.Unboxed as Unboxed
 import qualified X.Data.Vector.Generic as Generic
-import qualified X.Data.Vector.Storable as Storable
-import qualified Data.ByteString as B
 
 import qualified X.Text.Show as Show
 import GHC.Generics (Generic(..))
@@ -48,7 +45,7 @@ entitiesOfBlock (Block entities indices records) =
            dense_attrs       = denseAttributeCount rx attrs
            ix_attrs          = Generic.unsafeSplits id ix_here dense_attrs
            dense_counts      = Boxed.map countNotTombstone ix_attrs
-           (rx_here,rx_rest) = Boxed.unzip $ Boxed.zipWith recordSplitAt dense_counts rx
+           (rx_here,rx_rest) = Boxed.unzip $ Boxed.zipWith splitAtRecords dense_counts rx
 
            acc' = (ix_rest, rx_rest)
            ev   = EntityValues ent ix_attrs rx_here
@@ -85,26 +82,4 @@ denseAttributeCount rs attr =
      | otherwise
      = (attrs, 0)
 
-
-recordSplitAt :: Int -> Record -> (Record, Record)
-recordSplitAt i (Record fs) =
-  let (as,bs) = Boxed.unzip $ Boxed.map (fieldSplitAt i) fs
-  in  (Record as, Record bs)
-
-fieldSplitAt :: Int -> Field -> (Field, Field)
-fieldSplitAt i =
-  \case
-    ByteField vs
-     -> bye ByteField $ B.splitAt i vs
-    WordField vs
-     -> bye WordField $ Storable.splitAt i vs
-    DoubleField vs
-     -> bye DoubleField $ Storable.splitAt i vs
-    ListField len rec
-     -> let (len1, len2) = Storable.splitAt i len
-            nested_count = fromIntegral $ Storable.sum len1
-            (rec1, rec2) = recordSplitAt nested_count rec
-        in  (ListField len1 rec1, ListField len2 rec2)
-  where
-   bye f = bimap f f
 
