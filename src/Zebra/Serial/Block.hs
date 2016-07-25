@@ -35,6 +35,8 @@ import           P
 
 import qualified X.Data.Vector.Storable as Storable
 import qualified X.Data.Vector.Unboxed as Unboxed
+import qualified X.Data.Vector.Generic as Generic
+import qualified X.Data.Vector.Stream as Stream
 
 import           Zebra.Data.Block
 import           Zebra.Data.Entity
@@ -100,10 +102,12 @@ bEntities xs =
       fmap (unEntityId . entityId) xs
 
     acounts =
-      Boxed.convert $ fmap (fromIntegral . Boxed.length . entityAttributes) xs
+      Boxed.convert $ fmap (fromIntegral . Unboxed.length . entityAttributes) xs
 
     attributes =
-      Boxed.concatMap entityAttributes xs
+      Stream.vectorOfStream $
+      Stream.concatMap (Stream.streamOfVector . entityAttributes) $
+      Stream.streamOfVector xs
   in
     Build.word32LE ecount <>
     bWordArray hashes <>
@@ -117,33 +121,9 @@ getEntities = do
   hashes <- fmap (EntityHash . fromIntegral) . Boxed.convert <$> getWordArray ecount
   ids <- fmap EntityId <$> getStrings ecount
   acounts <- Unboxed.map fromIntegral . Unboxed.convert <$> getWordArray ecount
-  attributes <- takes acounts <$> getAttributes
+  attributes <- Generic.unsafeSplits id <$> getAttributes <*> pure acounts
   pure $
     Boxed.zipWith3 Entity hashes ids attributes
-
-data IdxOff =
-  IdxOff !Int !Int
-
-takes :: Unboxed.Vector Int -> Boxed.Vector a -> Boxed.Vector (Boxed.Vector a)
-takes ns xs =
-  let
-    !total =
-      Boxed.length xs
-
-    loop (IdxOff idx off) =
-      let
-        !len =
-          Unboxed.unsafeIndex ns idx
-
-        !off' =
-          off + len
-      in
-        if off' <= total then
-          Just (Boxed.unsafeSlice off len xs, IdxOff (idx + 1) off')
-        else
-          Nothing
-  in
-    Boxed.unfoldrN (Unboxed.length ns) loop (IdxOff 0 0)
 
 -- | Encode the attributes for a zebra block.
 --
@@ -168,7 +148,7 @@ takes ns xs =
 --   /invariant: attr_count == sum entity_attr_count/
 --   /invariant: attr_ids are sorted for each entity/
 --
-bAttributes :: Boxed.Vector Attribute -> Builder
+bAttributes :: Unboxed.Vector Attribute -> Builder
 bAttributes xs =
   let
     acount =
@@ -176,24 +156,24 @@ bAttributes xs =
       Storable.length ids
 
     ids =
-      Boxed.convert $
-      fmap (fromIntegral . unAttributeId . attributeId) xs
+      Unboxed.convert $
+      Unboxed.map (fromIntegral . unAttributeId . attributeId) xs
 
     counts =
-      Boxed.convert $
-      fmap (fromIntegral . attributeRecords) xs
+      Unboxed.convert $
+      Unboxed.map (fromIntegral . attributeRecords) xs
   in
     Build.word32LE acount <>
     bWordArray ids <>
     bWordArray counts
 
-getAttributes :: Get (Boxed.Vector Attribute)
+getAttributes :: Get (Unboxed.Vector Attribute)
 getAttributes = do
   acount <- fromIntegral <$> Get.getWord32le
-  ids <- fmap (AttributeId . fromIntegral) . Unboxed.convert <$> getWordArray acount
-  counts <- fmap fromIntegral . Boxed.convert <$> getWordArray acount
+  ids <- Unboxed.map (AttributeId . fromIntegral) . Unboxed.convert <$> getWordArray acount
+  counts <- Unboxed.map fromIntegral . Unboxed.convert <$> getWordArray acount
   pure $
-    Boxed.zipWith Attribute ids counts
+    Unboxed.zipWith Attribute ids counts
 
 -- | Encode the record index for a zebra block.
 --

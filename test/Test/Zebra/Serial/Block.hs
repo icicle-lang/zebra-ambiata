@@ -32,7 +32,7 @@ prop_roundtrip_entities =
 
 prop_roundtrip_attributes :: Property
 prop_roundtrip_attributes =
-  gamble (Boxed.fromList <$> listOf jAttribute) $
+  gamble (Unboxed.fromList <$> listOf jAttribute) $
     trippingSerial bAttributes getAttributes
 
 prop_roundtrip_indices :: Property

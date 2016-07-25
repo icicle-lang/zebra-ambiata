@@ -22,6 +22,13 @@ module Zebra.Data.Record (
   , recordOfField
 
   , valuesOfRecord
+
+  , concatRecords
+  , concatFields
+  , appendRecords
+  , appendFields
+  , splitAtRecords
+  , splitAtFields
   ) where
 
 import           Control.Monad.Primitive (PrimMonad(..))
@@ -419,6 +426,28 @@ appendFields x y =
 
     (_, _) ->
       Left $ RecordAppendFieldsMismatch x y
+
+splitAtRecords :: Int -> Record -> (Record, Record)
+splitAtRecords i (Record fs) =
+  let (as,bs) = Boxed.unzip $ Boxed.map (splitAtFields i) fs
+  in  (Record as, Record bs)
+
+splitAtFields :: Int -> Field -> (Field, Field)
+splitAtFields i =
+  \case
+    ByteField vs
+     -> bye ByteField $ B.splitAt i vs
+    WordField vs
+     -> bye WordField $ Storable.splitAt i vs
+    DoubleField vs
+     -> bye DoubleField $ Storable.splitAt i vs
+    ListField len rec
+     -> let (len1, len2) = Storable.splitAt i len
+            nested_count = fromIntegral $ Storable.sum len1
+            (rec1, rec2) = splitAtRecords nested_count rec
+        in  (ListField len1 rec1, ListField len2 rec2)
+  where
+   bye f = bimap f f
 
 ------------------------------------------------------------------------
 
