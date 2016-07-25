@@ -95,6 +95,7 @@ test-suite test
                     , ambiata-disorder-corpus
                     , ambiata-disorder-jack
                     , ambiata-p
+                    , ambiata-x-vector
                     , ambiata-zebra
                     , binary                          >= 0.7.2      && < 0.9
                     , bytestring                      == 0.10.*
