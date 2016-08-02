@@ -3,7 +3,6 @@
 module Test.Zebra.Jack (
   -- * Zebra.Data.Block
     jBlock
-  , jBlockValid
 
   -- * Zebra.Data.Encoding
   , jEncoding
@@ -14,6 +13,7 @@ module Test.Zebra.Jack (
   -- * Zebra.Data.Fact
   , jFact
   , jEntityId
+  , jEntityHashId
   , jAttributeId
   , jAttributeName
   , jTime
@@ -45,7 +45,6 @@ import           Data.Thyme.Calendar (Year, Day, YearMonthDay(..), gregorianVali
 import qualified Data.Vector as Boxed
 import qualified Data.Vector.Storable as Storable
 import qualified Data.Vector.Unboxed as Unboxed
-import qualified Data.List as List
 
 import           Disorder.Corpus (muppets, southpark, boats)
 import           Disorder.Jack (Jack, mkJack, shrinkTowards, sized)
@@ -67,7 +66,6 @@ import           Zebra.Data.Index
 import           Zebra.Data.Record
 import           Zebra.Data.Schema
 
-import qualified Prelude as Savage
 
 jSchema :: Jack Schema
 jSchema =
@@ -185,20 +183,6 @@ jBlock =
     <$> (Boxed.fromList <$> listOf jEntity)
     <*> (Unboxed.fromList <$> listOf jIndex)
     <*> (Boxed.fromList <$> listOf jRecord)
-
-jBlockValid :: Jack Block
-jBlockValid = sized $ \size -> do
-  encs <- listOfN 0 5 jEncoding
-  let encs' = List.zip encs (fmap AttributeId [0..])
-  let maxFacts = size `div` length encs
-  facts <- List.concat <$> mapM (\(enc,aid) -> listOfN 0 maxFacts $ jFact enc aid) encs'
-  case blockOfFacts (Boxed.fromList encs) (Boxed.fromList facts) of
-   Left e -> Savage.error
-              ("jBlockValid: invariant failed\n"
-              <> "\tgenerated facts cannot be converted to block\n"
-              <> "\t" <> show e)
-   Right b -> return b
-
 
 jEntityHashId :: Jack (EntityHash, EntityId)
 jEntityHashId =
