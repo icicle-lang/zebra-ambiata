@@ -532,7 +532,7 @@ singletonString bs =
 
 singletonEmptyList :: Record -> Record
 singletonEmptyList =
-  Record . Boxed.singleton . ListField (Storable.singleton 1)
+  Record . Boxed.singleton . ListField (Storable.singleton 0)
 
 defaultOfEncoding :: Encoding -> Record
 defaultOfEncoding = \case
@@ -552,7 +552,7 @@ defaultOfEncoding = \case
     else
       Record $ Boxed.concatMap (recordFields . defaultOfFieldEncoding . snd) fields
   ListEncoding encoding ->
-    singletonEmptyList $ defaultOfEncoding encoding
+    singletonEmptyList $ emptyOfEncoding encoding
 
 defaultOfFieldEncoding :: FieldEncoding -> Record
 defaultOfFieldEncoding = \case
