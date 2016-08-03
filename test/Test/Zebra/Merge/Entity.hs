@@ -56,13 +56,13 @@ jBlockValid = do
   blockOfFacts' encs <$> jFactsFor encs
 
 
-zprop_entitiesOfBlock_entities :: Property
-zprop_entitiesOfBlock_entities =
+prop_entitiesOfBlock_entities :: Property
+prop_entitiesOfBlock_entities =
   gamble jBlock $ \block ->
     fmap evEntity (entitiesOfBlock fakeBlockId block) === blockEntities block
 
-zprop_entitiesOfBlock_indices :: Property
-zprop_entitiesOfBlock_indices =
+prop_entitiesOfBlock_indices :: Property
+prop_entitiesOfBlock_indices =
   gamble jBlockValid $ \block ->
     catIndices (entitiesOfBlock fakeBlockId block) === takeIndices block
  where
@@ -75,8 +75,8 @@ zprop_entitiesOfBlock_indices =
    = Boxed.convert
    $ blockIndices block
 
-zprop_entitiesOfBlock_records_1_entity :: Property
-zprop_entitiesOfBlock_records_1_entity =
+prop_entitiesOfBlock_records_1_entity :: Property
+prop_entitiesOfBlock_records_1_entity =
   gamble jEncodings $ \encs ->
   gamble (jFactsFor encs) $ \facts ->
   gamble jEntityHashId $ \(ehash,eid) ->
@@ -92,8 +92,8 @@ zprop_entitiesOfBlock_records_1_entity =
 getFakeRecordValues :: Boxed.Vector EntityValues -> Boxed.Vector (Boxed.Vector Record)
 getFakeRecordValues = fmap (fmap (Map.! fakeBlockId) . evRecords)
 
-zprop_mergeEntityRecords_1_block :: Property
-zprop_mergeEntityRecords_1_block =
+prop_mergeEntityRecords_1_block :: Property
+prop_mergeEntityRecords_1_block =
   gamble jBlockValid $ \block ->
   let es = entitiesOfBlock fakeBlockId block
       recs_l = mapM mergeEntityRecords es
@@ -121,5 +121,5 @@ prop_mergeEntityRecords_2_blocks =
 
 return []
 tests :: IO Bool
-tests = $disorderCheckEnvAll TestRunMore
+tests = $disorderCheckEnvAll TestRunNormal
 
