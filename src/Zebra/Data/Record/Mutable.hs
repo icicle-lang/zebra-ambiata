@@ -15,9 +15,14 @@ module Zebra.Data.Record.Mutable (
   , insertDefault
   , withMRecord
   , unsafeFreezeRecord
+
+  , recordsOfFacts
+
+  , MutableError(..)
   ) where
 
 import           Control.Monad.Primitive (PrimMonad(..))
+import           Control.Monad.ST (runST)
 import           Control.Monad.Trans (lift)
 import           Control.Monad.Trans.State.Strict (StateT, runStateT, get, put)
 
@@ -34,7 +39,7 @@ import           GHC.Generics (Generic)
 
 import           P
 
-import           X.Control.Monad.Trans.Either (EitherT, left)
+import           X.Control.Monad.Trans.Either (EitherT, runEitherT, left)
 import           X.Data.Vector.Grow (Grow)
 import qualified X.Data.Vector.Grow as Grow
 
@@ -65,6 +70,7 @@ data MutableError =
   | MutableEncodingMismatch !Encoding !Value
   | MutableStructFieldsMismatch !(Boxed.Vector FieldEncoding) !(Boxed.Vector (Maybe' Value))
   | MutableRequiredFieldMissing !Encoding
+  | MutableAttributeNotFound !AttributeId
     deriving (Eq, Ord, Show)
 
 data FoundMField =
@@ -75,6 +81,10 @@ data FoundMField =
     deriving (Eq, Ord, Show)
 
 ------------------------------------------------------------------------
+
+unsafeFreezeRecords :: PrimMonad m => MRecordBox (PrimState m) -> m (Boxed.Vector Record)
+unsafeFreezeRecords (MRecordBox records) =
+  traverse (unsafeFreezeRecord . snd) records
 
 unsafeFreezeRecord :: PrimMonad m => MRecord (PrimState m) -> m Record
 unsafeFreezeRecord =
@@ -94,6 +104,42 @@ unsafeFreezeField = \case
     pure $ ListField ns record
 
 ------------------------------------------------------------------------
+
+newtype MRecordBox s =
+  MRecordBox (Boxed.Vector (Encoding, MRecord s))
+
+mkMRecordBox :: PrimMonad m => Boxed.Vector Encoding -> m (MRecordBox (PrimState m))
+mkMRecordBox encodings = do
+  xs <- traverse newMRecord encodings
+  pure . MRecordBox $ Boxed.zip encodings xs
+
+insertRecord ::
+  PrimMonad m =>
+  MRecordBox (PrimState m) ->
+  AttributeId ->
+  Maybe' Value ->
+  EitherT MutableError m ()
+insertRecord (MRecordBox records) aid@(AttributeId ix) mvalue = do
+  case records Boxed.!? ix of
+    Nothing ->
+      left $ MutableAttributeNotFound aid
+    Just (encoding, record) ->
+      insertMaybeValue encoding record mvalue
+
+------------------------------------------------------------------------
+
+recordsOfFacts ::
+  Boxed.Vector Encoding ->
+  Boxed.Vector Fact ->
+  Either MutableError (Boxed.Vector Record)
+recordsOfFacts encodings facts =
+  runST $ runEitherT $ do
+    box <- lift $ mkMRecordBox encodings
+
+    for_ facts $ \fact ->
+      insertRecord box (factAttributeId fact) (factValue fact)
+
+    lift $ unsafeFreezeRecords box
 
 insertMaybeValue ::
   PrimMonad m =>

@@ -13,7 +13,6 @@ import           System.IO (IO)
 import           Test.Zebra.Jack
 
 import           Zebra.Data
-import           Zebra.Data.Encoding
 import           Zebra.Merge.Entity
 
 import qualified X.Data.Vector as Boxed

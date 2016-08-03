@@ -17,7 +17,7 @@ import           Text.Show.Pretty (ppShow)
 
 import           Zebra.Data.Block
 import           Zebra.Data.Fact
-import           Zebra.Data.Record
+import           Zebra.Data.Record.Mutable
 
 
 prop_roundtrip_facts :: Property
@@ -37,7 +37,7 @@ prop_roundtrip_facts =
         input
 
 data SomeError =
-    RecordError !RecordError
+    RecordError !MutableError
   | FactError !FactError
     deriving (Eq, Show)
 
