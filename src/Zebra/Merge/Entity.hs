@@ -139,13 +139,11 @@ mergeEntityValues ls rs
   -- id and hash are equal
   joinEV e1 e2
    = let evIxs = Boxed.zipWith mergeIxs (evIndices e1) (evIndices e2)
-         evRcs = Boxed.zipWith mergeRcs (evRecords e1) (evRecords e2)
+         evRcs = Boxed.zipWith Map.union (evRecords e1) (evRecords e2)
      in  Stream.MergePullBoth e1 { evIndices = evIxs, evRecords = evRcs }
 
   mergeIxs
    = Unboxed.merge (Stream.mergePullOrd (\(i,_) -> (indexTime i, indexPriority i)))
-  mergeRcs
-   = Map.union -- Boxed.merge (Stream.mergePullOrd fst)
 
   ordEV ev
    = let e = evEntity ev
@@ -154,8 +152,6 @@ mergeEntityValues ls rs
 -- mergeRecords: gather and concatenate all the records from different blocks.
 -- This should be done after all the indices have been merged, so that it only has to
 -- slice and concat the actual data once, instead of for each pair of merges.
---
--- mergeRecords :: EntityValues -> EntityValues
 mergeEntityRecords :: EntityValues -> Either MergeError (Boxed.Vector Record)
 mergeEntityRecords (EntityValues _ aixs recs) =
   Boxed.mapM go (Boxed.zip (Boxed.indexed aixs) recs)
