@@ -13,7 +13,6 @@ module Zebra.Merge.Base
   , EntityMerged(..)
   , EntityValues(..)
   , MergeError(..)
-  , treeMerge
   , treeFold
   ) where
 
@@ -24,7 +23,6 @@ import qualified Data.Map as Map
 import           Data.Vector.Unboxed.Deriving (derivingUnbox)
 import qualified X.Data.Vector as Boxed
 import qualified X.Data.Vector.Unboxed as Unboxed
-import qualified X.Data.Vector.Stream as Stream
 
 import qualified X.Text.Show as Show
 import GHC.Generics (Generic(..))
