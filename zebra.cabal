@@ -50,6 +50,7 @@ library
                     Zebra.Data.Fact
                     Zebra.Data.Index
                     Zebra.Data.Record
+                    Zebra.Data.Record.Mutable
                     Zebra.Data.Schema
                     Zebra.Merge.Entity
                     Zebra.Serial

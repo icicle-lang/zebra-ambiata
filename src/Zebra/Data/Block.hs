@@ -31,6 +31,7 @@ import           Zebra.Data.Entity
 import           Zebra.Data.Fact
 import           Zebra.Data.Index
 import           Zebra.Data.Record
+import           Zebra.Data.Record.Mutable
 
 
 data Block =
@@ -49,7 +50,7 @@ data FactError =
   | FactLeftoverValues !(Boxed.Vector (Boxed.Vector Value))
     deriving (Eq, Ord, Show, Generic, Typeable)
 
-blockOfFacts :: Boxed.Vector Encoding -> Boxed.Vector Fact -> Either RecordError Block
+blockOfFacts :: Boxed.Vector Encoding -> Boxed.Vector Fact -> Either MutableError Block
 blockOfFacts encodings facts =
   Block (entitiesOfFacts facts) (indicesOfFacts facts) <$> recordsOfFacts encodings facts
 

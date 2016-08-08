@@ -15,7 +15,6 @@ module Zebra.Data.Record (
   , schemaOfRecord
   , schemaOfField
 
-  , recordsOfFacts
   , recordOfMaybeValue
   , recordOfValue
   , recordOfStruct
@@ -31,10 +30,7 @@ module Zebra.Data.Record (
   , splitAtFields
   ) where
 
-import           Control.Monad.Primitive (PrimMonad(..))
-import           Control.Monad.ST (runST)
 import           Control.Monad.State.Strict (MonadState(..))
-import           Control.Monad.Trans (lift)
 import           Control.Monad.Trans.State.Strict (State, runState)
 
 import           Data.ByteString (ByteString)
@@ -42,7 +38,6 @@ import qualified Data.ByteString as B
 import           Data.Coerce (coerce)
 import qualified Data.Text.Encoding as T
 import           Data.Typeable (Typeable)
-import qualified Data.Vector.Mutable as MBoxed
 import           Data.Word (Word64)
 
 import           GHC.Generics (Generic)
@@ -99,21 +94,6 @@ instance Show Record where
 instance Show Field where
   showsPrec =
     gshowsPrec
-
-recordsOfFacts :: Boxed.Vector Encoding -> Boxed.Vector Fact -> Either RecordError (Boxed.Vector Record)
-recordsOfFacts encodings facts =
-  runST $ runEitherT $ do
-    sm <- lift $ mkRecordBox encodings
-
-    for_ facts $ \fact ->
-      case encodings Boxed.!? (unAttributeId $ factAttributeId fact) of
-        Nothing ->
-          pure ()
-        Just encoding -> do
-          s <- hoistEither . recordOfMaybeValue encoding $ factValue fact
-          insertRecord sm (factAttributeId fact) s
-
-    lift $ freezeRecords sm
 
 recordOfMaybeValue :: Encoding -> Maybe' Value -> Either RecordError Record
 recordOfMaybeValue encoding = \case
@@ -451,26 +431,6 @@ splitAtFields i =
 
 ------------------------------------------------------------------------
 
-newtype RecordBox s =
-  RecordBox (MBoxed.MVector s Record)
-
-mkRecordBox :: PrimMonad m => Boxed.Vector Encoding -> m (RecordBox (PrimState m))
-mkRecordBox encodings = do
-  mv <- Boxed.thaw $ fmap emptyOfEncoding encodings
-  pure $ RecordBox mv
-
-insertRecord :: PrimMonad m => RecordBox (PrimState m) -> AttributeId -> Record -> EitherT RecordError m ()
-insertRecord (RecordBox mv) (AttributeId aid) new = do
-  old <- MBoxed.read mv aid
-  both <- hoistEither $ appendRecords old new
-  MBoxed.write mv aid both
-
-freezeRecords :: PrimMonad m => RecordBox (PrimState m) -> m (Boxed.Vector Record)
-freezeRecords (RecordBox mv) =
-  Boxed.freeze mv
-
-------------------------------------------------------------------------
-
 emptyByte :: Record
 emptyByte =
   Record . Boxed.singleton $ ByteField B.empty
@@ -532,7 +492,7 @@ singletonString bs =
 
 singletonEmptyList :: Record -> Record
 singletonEmptyList =
-  Record . Boxed.singleton . ListField (Storable.singleton 1)
+  Record . Boxed.singleton . ListField (Storable.singleton 0)
 
 defaultOfEncoding :: Encoding -> Record
 defaultOfEncoding = \case
@@ -552,7 +512,7 @@ defaultOfEncoding = \case
     else
       Record $ Boxed.concatMap (recordFields . defaultOfFieldEncoding . snd) fields
   ListEncoding encoding ->
-    singletonEmptyList $ defaultOfEncoding encoding
+    singletonEmptyList $ emptyOfEncoding encoding
 
 defaultOfFieldEncoding :: FieldEncoding -> Record
 defaultOfFieldEncoding = \case
