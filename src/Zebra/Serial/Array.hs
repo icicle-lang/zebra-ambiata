@@ -25,6 +25,8 @@ import           P
 
 import qualified Prelude as Savage
 
+import qualified Snapper as Snappy
+
 import           X.Data.ByteString.Unsafe (unsafeSplits)
 import qualified X.Data.Vector as Boxed
 import qualified X.Data.Vector.Storable as Storable
@@ -63,25 +65,34 @@ getStrings n = do
 --
 -- @
 --   byte_array {
---     size_compressed   : u32
 --     size_uncompressed : u32
+--     size_compressed   : u32
 --     bytes             : size_compressed * u8
 --   }
 -- @
 bByteArray :: ByteString -> Builder
-bByteArray bs =
-  -- compression level = id --
-  Build.word32LE (fromIntegral $ B.length bs) <>
-  Build.word32LE (fromIntegral $ B.length bs) <>
-  Build.byteString bs
+bByteArray uncompressed =
+  let
+    compressed =
+      Snappy.compress uncompressed
+  in
+    Build.word32LE (fromIntegral $ B.length uncompressed) <>
+    Build.word32LE (fromIntegral $ B.length compressed) <>
+    Build.byteString compressed
 
 getByteArray :: Get ByteString
 getByteArray = do
-  n_compressed <- Get.getWord32le
   n_uncompressed <- Get.getWord32le
-  when (n_compressed /= n_uncompressed) $
-    fail "Only identity compression is supported."
-  Get.getByteString $ fromIntegral n_uncompressed
+  n_compressed <- Get.getWord32le
+  compressed <- Get.getByteString $ fromIntegral n_compressed
+  case Snappy.decompress compressed of
+    Nothing ->
+      fail $
+        "could not decompress snappy encoded payload " <>
+        "(compressed size = " <> show n_compressed <> " bytes" <>
+        ", uncompressed size = " <> show n_uncompressed <> " bytes)"
+    Just uncompressed ->
+      pure uncompressed
 
 -- | Encodes a vector of words.
 --
