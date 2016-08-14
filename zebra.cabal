@@ -80,6 +80,7 @@ executable zebra
                     , ambiata-x-vector
                     , optparse-applicative            == 0.12.*
                     , text                            == 1.2.*
+                    , binary
                     , containers
                     , bytestring
 

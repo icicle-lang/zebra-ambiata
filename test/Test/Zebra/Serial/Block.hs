@@ -6,7 +6,8 @@ import qualified Data.Vector as Boxed
 import qualified Data.Vector.Unboxed as Unboxed
 
 import           Disorder.Jack (Property)
-import           Disorder.Jack (quickCheckAll, gamble, listOf, counterexample)
+import           Disorder.Jack (gamble, listOf, counterexample)
+import           Disorder.Core.Run
 
 import           P
 
@@ -82,5 +83,4 @@ prop_roundtrip_field =
 
 return []
 tests :: IO Bool
-tests =
-  $quickCheckAll
+tests = $disorderCheckEnvAll TestRunNormal

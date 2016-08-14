@@ -6,7 +6,8 @@ import           Data.Map (Map)
 import qualified Data.Map as Map
 
 import           Disorder.Jack (Property, Jack)
-import           Disorder.Jack (quickCheckAll, gamble, listOf)
+import           Disorder.Jack (gamble, listOf)
+import           Disorder.Core.Run
 
 import           P
 
@@ -29,5 +30,4 @@ mapOf k v =
 
 return []
 tests :: IO Bool
-tests =
-  $quickCheckAll
+tests = $disorderCheckEnvAll TestRunNormal

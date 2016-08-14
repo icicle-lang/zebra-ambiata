@@ -5,8 +5,9 @@ module Test.Zebra.Serial.Array where
 import qualified Data.Vector as Boxed
 import qualified Data.Vector.Storable as Storable
 
-import           Disorder.Jack (Property, quickCheckAll)
+import           Disorder.Jack (Property)
 import           Disorder.Jack (gamble, listOf, arbitrary, sizedBounded)
+import           Disorder.Core.Run
 
 import           P
 
@@ -35,5 +36,4 @@ prop_roundtrip_words =
 
 return []
 tests :: IO Bool
-tests =
-  $quickCheckAll
+tests = $disorderCheckEnvAll TestRunNormal
