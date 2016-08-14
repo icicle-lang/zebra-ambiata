@@ -26,6 +26,7 @@ module Zebra.Data.Schema (
 
 import qualified Data.Attoparsec.Text as Atto
 import           Data.Map (Map)
+import qualified Data.Vector as Boxed
 
 import           GHC.Generics (Generic)
 
@@ -108,13 +109,16 @@ schemaOfEncoding = \case
   DoubleEncoding ->
     Schema (pure DoubleFormat)
   StringEncoding ->
-    Schema (pure ByteFormat)
+    Schema (pure . ListFormat $ Schema [ByteFormat])
   DateEncoding ->
     Schema (pure WordFormat)
   StructEncoding fields ->
-    foldMap (schemaOfFieldEncoding . snd) fields
+    if Boxed.null fields then
+      Schema (pure WordFormat)
+    else
+      foldMap (schemaOfFieldEncoding . snd) fields
   ListEncoding encoding ->
-    Schema (pure WordFormat) <> schemaOfEncoding encoding
+    Schema (pure . ListFormat $ schemaOfEncoding encoding)
 
 schemaOfFieldEncoding :: FieldEncoding -> Schema
 schemaOfFieldEncoding = \case

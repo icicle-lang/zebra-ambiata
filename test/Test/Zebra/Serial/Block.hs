@@ -6,19 +6,44 @@ import qualified Data.Vector as Boxed
 import qualified Data.Vector.Unboxed as Unboxed
 
 import           Disorder.Jack (Property)
-import           Disorder.Jack (quickCheckAll, gamble, listOf)
+import           Disorder.Jack (quickCheckAll, gamble, listOf, counterexample)
 
 import           P
+
+import qualified Prelude as Savage
 
 import           System.IO (IO)
 
 import           Test.Zebra.Jack
 import           Test.Zebra.Util
 
+import           Text.Show.Pretty (ppShow)
+
 import           Zebra.Data.Block
+import           Zebra.Data.Fact
 import           Zebra.Data.Record
+import           Zebra.Data.Schema
 import           Zebra.Serial.Block
 
+
+prop_roundtrip_from_facts :: Property
+prop_roundtrip_from_facts =
+  gamble jEncoding $ \encoding ->
+  gamble (listOf $ jFact encoding (AttributeId 0)) $ \facts ->
+    let
+      encodings =
+        Boxed.singleton encoding
+
+      schema =
+        fmap schemaOfEncoding encodings
+
+      block =
+        either (Savage.error . show) id .
+        blockOfFacts encodings $
+        Boxed.fromList facts
+    in
+      counterexample (ppShow schema) $
+      trippingSerial bBlock (getBlock schema) block
 
 prop_roundtrip_block :: Property
 prop_roundtrip_block =
