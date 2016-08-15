@@ -19,7 +19,6 @@ import           Zebra.Data.Block
 import           Zebra.Data.Fact
 import           Zebra.Data.Record.Mutable
 
-
 prop_roundtrip_facts :: Property
 prop_roundtrip_facts =
   gamble jEncoding $ \encoding ->
