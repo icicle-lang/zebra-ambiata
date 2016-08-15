@@ -186,7 +186,7 @@ streamOfFile fp = do
   where
     getBytes Nothing = return $ Stream.Done
     getBytes (Just handle) = do
-      bytes <- B.hGet handle 100 -- (300 * 1024 * 1024)
+      bytes <- B.hGet handle (300 * 1024 * 1024)
       case B.null bytes of
        True -> do
         hClose handle
