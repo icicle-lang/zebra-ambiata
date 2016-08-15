@@ -4,6 +4,7 @@
 {-# LANGUAGE DoAndIfThenElse #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# OPTIONS_GHC -funbox-strict-fields #-}
 module Zebra.Data.Record.Mutable (
     MRecord(..)
@@ -19,6 +20,7 @@ module Zebra.Data.Record.Mutable (
   , recordsOfFacts
 
   , MutableError(..)
+  , renderMutableError
   ) where
 
 import           Control.Monad.Primitive (PrimMonad(..))
@@ -28,6 +30,7 @@ import           Control.Monad.Trans.State.Strict (StateT, runStateT, get, put)
 
 import qualified Data.ByteString as B
 import           Data.ByteString.Internal (ByteString(..))
+import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import           Data.Typeable (Typeable)
 import qualified Data.Vector as Boxed
@@ -79,6 +82,56 @@ data FoundMField =
   | FoundMDoubleField
   | FoundMListField ![FoundMField]
     deriving (Eq, Ord, Show)
+
+renderMutableError :: MutableError -> Text
+renderMutableError = \case
+  MutableExpectedByteField field ->
+    "Expected byte field, but found: " <> renderFoundMField field
+  MutableExpectedWordField field ->
+    "Expected word field, but found: " <> renderFoundMField field
+  MutableExpectedDoubleField field ->
+    "Expected double field, but found: " <> renderFoundMField field
+  MutableExpectedListField field ->
+    "Expected list field, but found: " <> renderFoundMField field
+  MutableNoMoreFields ->
+    "Expected to find more fields in record - ran out when trying to insert."
+  MutableLeftoverFields fields ->
+    "Found more fields than expected in record: " <> renderFoundMFields fields
+  MutableEncodingMismatch encoding value ->
+    "Encoding did not match value:" <>
+    "\n" <>
+    "\n  encoding =" <>
+    "\n    " <> T.pack (show encoding) <>
+    "\n" <>
+    "\n  value =" <>
+    "\n    " <> T.pack (show value)
+  MutableStructFieldsMismatch fields values ->
+    "Struct field encodings did not match their values:" <>
+    "\n" <>
+    "\n  field encodings =" <>
+    "\n    " <> T.pack (show fields) <>
+    "\n" <>
+    "\n  fields values =" <>
+    "\n    " <> T.pack (show values)
+  MutableRequiredFieldMissing encoding ->
+    "Struct required field missing: " <> T.pack (show encoding)
+  MutableAttributeNotFound (AttributeId aid) ->
+    "Attribute not found: " <> T.pack (show aid)
+
+renderFoundMField :: FoundMField -> Text
+renderFoundMField = \case
+  FoundMByteField ->
+    "byte"
+  FoundMWordField ->
+    "word"
+  FoundMDoubleField ->
+    "double"
+  FoundMListField xs ->
+    "list (" <> renderFoundMFields xs <> ")"
+
+renderFoundMFields :: [FoundMField] -> Text
+renderFoundMFields =
+  T.intercalate ", " . fmap renderFoundMField
 
 ------------------------------------------------------------------------
 
