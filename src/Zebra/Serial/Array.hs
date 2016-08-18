@@ -86,6 +86,9 @@ getByteArray = do
   n_compressed <- Get.getWord32le
   compressed <- Get.getByteString $ fromIntegral n_compressed
   case Snappy.decompress compressed of
+    Nothing
+     | n_uncompressed == 0
+     -> pure B.empty
     Nothing ->
       fail $
         "could not decompress snappy encoded payload " <>

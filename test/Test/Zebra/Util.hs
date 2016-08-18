@@ -2,6 +2,7 @@
 module Test.Zebra.Util (
     trippingSerial
   , runGetEither
+  , runGetEitherConsumeAll
   ) where
 
 import           Data.Binary.Get (Get, ByteOffset)
@@ -26,3 +27,13 @@ runGetEither g =
     third (_, _, x) = x
   in
     second third . Get.runGetOrFail g
+
+runGetEitherConsumeAll :: Get a -> Lazy.ByteString -> Either (Lazy.ByteString, ByteOffset, String) a
+runGetEitherConsumeAll g bs =
+  case Get.runGetOrFail g bs of
+    Left err -> Left err
+    Right (leftovers,off,v)
+     | Lazy.null leftovers
+     -> Right v
+     | otherwise
+     -> Left (leftovers, off, "Not all input consumed")
