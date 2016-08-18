@@ -58,6 +58,28 @@ prop_runStreamMany_getByteArray_filtered =
     checkRunStreamMany getByteArray (Stream.filter (\b -> B.length b `mod` 2 == 0) $ Stream.streamOfVector bss)
 
 
+prop_runStreamMany_getWordArray_prefix_size :: Property
+prop_runStreamMany_getWordArray_prefix_size =
+  gamble jSplits $ \bss ->
+    checkRunStreamMany get (Stream.streamOfVector bss)
+  where
+   get = do
+    i <- Get.getWord32be
+    getWordArray (fromIntegral i)
+
+prop_runStreamMany_getWordArray_static_size :: Property
+prop_runStreamMany_getWordArray_static_size =
+  gamble jSplits $ \bss ->
+  gamble arbitrary $ \num ->
+    checkRunStreamMany (getWordArray $ abs num) (Stream.streamOfVector bss)
+
+-- Adding a filter makes sure there are "Skips" in the stream
+prop_runStreamMany_getStrings_filtered :: Property
+prop_runStreamMany_getStrings_filtered =
+  gamble jSplits $ \bss ->
+  gamble (chooseInt (0,100)) $ \num ->
+    checkRunStreamMany (getStrings num) (Stream.filter (\b -> B.length b `mod` 2 == 0) $ Stream.streamOfVector bss)
+
 return []
 tests :: IO Bool
 tests = $disorderCheckEnvAll TestRunNormal
