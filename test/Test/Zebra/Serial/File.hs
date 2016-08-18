@@ -40,16 +40,68 @@ checkRunStreamMany get bss =
        Right rs' -> Right (r : rs')
        Left e    -> Left e
 
+checkRunStreamOne :: (Show a, Eq a) => Get.Get a -> Stream.Stream Stream.Id B.ByteString -> Property
+checkRunStreamOne get bss =
+  let bs = fold $ Stream.listOfStream bss
+      expect = Get.runGetOrFail get (BL.fromStrict bs)
+      actual = Stream.unId $ runStreamOne get bss
+  in  getExpect expect === getActual actual
+
+  where
+   getExpect (Left  (leftovers, _, _)) = Left  (BL.toStrict leftovers)
+   getExpect (Right (leftovers, _, val)) = Right (BL.toStrict leftovers, val)
+
+   getActual (Left    _, leftovers)      = Left  (fold $ Stream.listOfStream leftovers)
+   getActual (Right val, leftovers)      = Right (fold $ Stream.listOfStream leftovers, val)
+
+prop_runStreamOne_getWord64be :: Property
+prop_runStreamOne_getWord64be =
+  gamble jSplits $ \bss ->
+    checkRunStreamOne Get.getWord64be (Stream.streamOfVector bss)
+
+prop_runStreamOne_getByteArray :: Property
+prop_runStreamOne_getByteArray =
+  gamble jSplits $ \bss ->
+    checkRunStreamOne getByteArray (Stream.streamOfVector bss)
+
+-- Adding a filter makes sure there are "Skips" in the stream
+prop_runStreamOne_getByteArray_filtered :: Property
+prop_runStreamOne_getByteArray_filtered =
+  gamble jSplits $ \bss ->
+    checkRunStreamOne getByteArray (Stream.filter (\b -> B.length b `mod` 2 == 0) $ Stream.streamOfVector bss)
+
+
+prop_runStreamOne_getWordArray_prefix_size :: Property
+prop_runStreamOne_getWordArray_prefix_size =
+  gamble jSplits $ \bss ->
+    checkRunStreamOne get (Stream.streamOfVector bss)
+  where
+   get = do
+    i <- Get.getWord32be
+    getWordArray (fromIntegral i)
+
+prop_runStreamOne_getWordArray_static_size :: Property
+prop_runStreamOne_getWordArray_static_size =
+  gamble jSplits $ \bss ->
+  gamble arbitrary $ \num ->
+    checkRunStreamOne (getWordArray $ abs num) (Stream.streamOfVector bss)
+
+-- Adding a filter makes sure there are "Skips" in the stream
+prop_runStreamOne_getStrings_filtered :: Property
+prop_runStreamOne_getStrings_filtered =
+  gamble jSplits $ \bss ->
+  gamble (chooseInt (0,100)) $ \num ->
+    checkRunStreamOne (getStrings num) (Stream.filter (\b -> B.length b `mod` 2 == 0) $ Stream.streamOfVector bss)
 
 prop_runStreamMany_getWord64be :: Property
 prop_runStreamMany_getWord64be =
   gamble jSplits $ \bss ->
-    checkRunStreamMany Get.getWord64be (Stream.streamOfVector bss) 
+    checkRunStreamMany Get.getWord64be (Stream.streamOfVector bss)
 
 prop_runStreamMany_getByteArray :: Property
 prop_runStreamMany_getByteArray =
   gamble jSplits $ \bss ->
-    checkRunStreamMany getByteArray (Stream.streamOfVector bss) 
+    checkRunStreamMany getByteArray (Stream.streamOfVector bss)
 
 -- Adding a filter makes sure there are "Skips" in the stream
 prop_runStreamMany_getByteArray_filtered :: Property

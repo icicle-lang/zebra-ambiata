@@ -5,18 +5,13 @@ import           BuildInfo_ambiata_zebra
 import           DependencyInfo_ambiata_zebra
 
 import           Zebra.Data.Block
-import           Zebra.Serial.Header
-import           Zebra.Serial.Block
 import           Zebra.Serial.File
 
 import           Options.Applicative
 
 import           P
 
-import qualified Data.Binary.Get as Get
 import qualified Data.ByteString as B
-import qualified Data.ByteString.Lazy as Lazy
-import qualified Data.Map as Map
 import qualified X.Data.Vector as Boxed
 import qualified X.Data.Vector.Unboxed as Unboxed
 import qualified X.Data.Vector.Stream as Stream
@@ -45,7 +40,6 @@ main = do
 
 data Command =
     FileDump FilePath
-  | FileDumpLazy FilePath
   | FileHeader FilePath
   | MergeFiles [FilePath] (Maybe FilePath)
   deriving (Eq, Show)
@@ -64,10 +58,6 @@ commands =
       (FileDump <$> pZebraFile)
       "dump"
       "Dump all information in a Zebra file."
-  , cmd
-      (FileDumpLazy <$> pZebraFile)
-      "lazy"
-      "Lazy IO Dump all information in a Zebra file. For testing streaming version"
   , cmd
       (FileHeader <$> pZebraFile)
       "header"
@@ -112,16 +102,6 @@ run c = case c of
       putStrLn "Header information:"
       putStrLn (show r)
       showBlocks blocks
-
-  FileDumpLazy f -> do
-    file <- B.readFile f
-    let Right (leftovers, sz, header') = Get.runGetOrFail getHeader (Lazy.fromStrict file)
-    print header'
-    print sz
-    let schema = Boxed.fromList $ Map.elems header'
-    let l = Get.runGet (getBlock schema) leftovers
-    print (Boxed.length $ blockEntities l)
-
 
   FileHeader f -> do
     stream <- streamOfFile f
@@ -186,7 +166,7 @@ streamOfFile fp = do
   where
     getBytes Nothing = return $ Stream.Done
     getBytes (Just handle) = do
-      bytes <- B.hGet handle (300 * 1024 * 1024)
+      bytes <- B.hGet handle (1024*1024)
       case B.null bytes of
        True -> do
         hClose handle

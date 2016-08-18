@@ -56,20 +56,18 @@ runStreamOne get (Stream.Stream s'go s'init) = do
   (v,s') <- runOne Stream.SPEC s'init $ Get.runGetIncremental get
   return (v, Stream.Stream runRest s')
   where
-    runOne !_ s g
+    runOne !_ s (Get.Fail leftovers _ err)
+     = return (Left $ DecodeError err, (leftovers, s))
+    runOne !_ s (Get.Done leftovers _ a)
+     = return (Right a, (leftovers, s))
+    runOne !_ s (Get.Partial p)
      = s'go s >>= \case
         Stream.Yield str' s'
-         -> case g of
-             Get.Fail leftovers _ err -> return (Left $ DecodeError err, (leftovers, s'))
-             Get.Partial p -> runOne Stream.SPEC s' (p $ Just str')
-             Get.Done leftovers _ a -> return (Right a, (leftovers, s))
+         -> runOne Stream.SPEC s' (p $ Just str')
         Stream.Skip s'
-         -> runOne Stream.SPEC s' g
+         -> runOne Stream.SPEC s' (Get.Partial p)
         Stream.Done
-         -> case g of
-             Get.Fail leftovers _ err -> return (Left $ DecodeError err, (leftovers, s))
-             Get.Partial p -> runOne Stream.SPEC s (p Nothing)
-             Get.Done leftovers _ a -> return (Right a, (leftovers, s))
+         -> runOne Stream.SPEC s (p Nothing)
 
     runRest (leftovers, s)
      | B.null leftovers
