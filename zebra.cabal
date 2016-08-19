@@ -58,6 +58,7 @@ library
                     Zebra.Serial.Array
                     Zebra.Serial.Block
                     Zebra.Serial.Header
+                    Zebra.Serial.File
 
 executable zebra
   ghc-options:
@@ -74,8 +75,12 @@ executable zebra
                     , ambiata-zebra
                     , ambiata-p
                     , ambiata-x-optparse
+                    , ambiata-x-vector
                     , optparse-applicative            == 0.12.*
                     , text                            == 1.2.*
+                    , binary
+                    , containers
+                    , bytestring
 
 
 test-suite test
@@ -97,6 +102,7 @@ test-suite test
                     , ambiata-disorder-corpus
                     , ambiata-disorder-jack
                     , ambiata-p
+                    , ambiata-x-eithert
                     , ambiata-x-vector
                     , ambiata-zebra
                     , binary                          >= 0.7.2      && < 0.9
