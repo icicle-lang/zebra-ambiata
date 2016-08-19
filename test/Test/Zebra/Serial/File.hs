@@ -22,6 +22,8 @@ import           Test.Zebra.Util
 import           Zebra.Serial.Array
 import           Zebra.Serial.File
 
+import           X.Control.Monad.Trans.Either
+
 jSplits :: Jack (Boxed.Vector B.ByteString)
 jSplits = arbitrary
 
@@ -29,16 +31,8 @@ checkRunStreamMany :: (Show a, Eq a) => Get.Get a -> Stream.Stream Stream.Id B.B
 checkRunStreamMany get bss =
   let bs = fold $ Stream.listOfStream bss
       one = runGetEitherConsumeAll (many get) (BL.fromStrict bs)
-      alls = listErrs $ Stream.listOfStream $ runStreamMany get bss
+      alls = Stream.unId $ runEitherT $ Stream.listOfStreamM $ runStreamMany get bss
   in  first (const ()) one === first (const ()) alls
-
-  where
-   listErrs [] = Right []
-   listErrs (Left e : _) = Left e
-   listErrs (Right r : rs)
-    = case listErrs rs of
-       Right rs' -> Right (r : rs')
-       Left e    -> Left e
 
 checkRunStreamOne :: (Show a, Eq a) => Get.Get a -> Stream.Stream Stream.Id B.ByteString -> Property
 checkRunStreamOne get bss =

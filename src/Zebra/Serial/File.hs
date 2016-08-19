@@ -29,14 +29,17 @@ import           Zebra.Serial.Block
 import qualified X.Data.Vector as Boxed
 import qualified X.Data.Vector.Stream as Stream
 
+import           X.Control.Monad.Trans.Either
+import           Control.Monad.Trans.Class
+
 data DecodeError
  = DecodeError String
  | DecodeErrorBadParserFailImmediately String
  | DecodeErrorBadParserExpectsMoreAfterEnd
  deriving (Show)
 
-getFile :: Monad m => Stream.Stream m B.ByteString -> m (Either DecodeError (Map AttributeName Schema, Stream.Stream m (Either DecodeError Block)))
-getFile input = do
+getFile :: Monad m => Stream.Stream m B.ByteString -> EitherT DecodeError m (Map AttributeName Schema, Stream.Stream (EitherT DecodeError m) Block)
+getFile input = EitherT $ do
   (header, rest) <- runStreamOne getHeader input
   case header of
    Left err -> return $ Left err
@@ -45,7 +48,7 @@ getFile input = do
         blocks = runStreamMany (getBlock schema) rest
     in  return $ Right (header', blocks)
 
-getBlocks :: Monad m => Boxed.Vector Schema -> Stream.Stream m B.ByteString -> Stream.Stream m (Either DecodeError Block)
+getBlocks :: Monad m => Boxed.Vector Schema -> Stream.Stream m B.ByteString -> Stream.Stream (EitherT DecodeError m) Block
 getBlocks schemas inp = runStreamMany (getBlock schemas) inp
 
 
@@ -83,7 +86,7 @@ runStreamOne get (Stream.Stream s'go s'init) = do
 
 
 -- | Keep running a 'Get' binary decoder over a stream of strict bytestrings.
-runStreamMany :: Monad m => Get a -> Stream.Stream m B.ByteString -> Stream.Stream m (Either DecodeError a)
+runStreamMany :: Monad m => Get a -> Stream.Stream m B.ByteString -> Stream.Stream (EitherT DecodeError m) a
 runStreamMany g (Stream.Stream s'go s'init) =
   Stream.Stream go (s'init, "", Nothing)
   where
@@ -91,7 +94,7 @@ runStreamMany g (Stream.Stream s'go s'init) =
 
     go (s, str, decoder)
      | B.null str
-     = s'go s >>= \case
+     = lift (s'go s) >>= \case
         Stream.Yield str' s'
          -> return $ Stream.Skip (s', str', decoder)
         Stream.Skip  s'
@@ -102,22 +105,22 @@ runStreamMany g (Stream.Stream s'go s'init) =
               return $ Stream.Done
              Just partial ->
               case partial Nothing of
-                Get.Fail _ _ err -> return $ Stream.Yield (Left $ DecodeError err) (s, "", Nothing)
-                Get.Partial _ -> return $ Stream.Yield (Left $ DecodeErrorBadParserExpectsMoreAfterEnd) (s, "", Nothing)
-                Get.Done _ _ a -> return $ Stream.Yield (Right a) (s, "", Nothing)
+                Get.Fail _ _ err -> left $ DecodeError err
+                Get.Partial _ -> left $ DecodeErrorBadParserExpectsMoreAfterEnd
+                Get.Done _ _ a -> return $ Stream.Yield a (s, "", Nothing)
     go (s, str, Nothing)
      = case g'init of
         Get.Partial p -> return $ Stream.Skip (s, str, Just p)
         -- If the parser fails immediately, we want to throw away the input since otherwise we would have an infinite stream of errors
-        Get.Fail _ _ err -> return $ Stream.Yield (Left $ DecodeErrorBadParserFailImmediately err) (s, "", Nothing)
+        Get.Fail _ _ err -> left $ DecodeErrorBadParserFailImmediately err
         -- If the parser returns immediately, we will have an infinite stream of values. Strange. I expect this shouldn't happen.
-        Get.Done _ _ a -> return $ Stream.Yield (Right a) (s, str, Nothing)
+        Get.Done _ _ a -> return $ Stream.Yield a (s, str, Nothing)
     go (s, str, Just decoder)
      = case decoder (Just str) of
-        Get.Fail str' _ err
-         -> return $ Stream.Yield (Left $ DecodeError err) (s, str', Nothing)
+        Get.Fail _ _ err
+         -> left $ DecodeError err
         Get.Partial decoder'
          -> return $ Stream.Skip (s, "", Just decoder')
         Get.Done str' _ ret
-         -> return $ Stream.Yield (Right ret) (s, str', Nothing)
+         -> return $ Stream.Yield ret (s, str', Nothing)
 
