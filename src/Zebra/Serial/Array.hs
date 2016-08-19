@@ -1,5 +1,4 @@
 {-# LANGUAGE NoImplicitPrelude #-}
-{-# LANGUAGE DoAndIfThenElse #-}
 module Zebra.Serial.Array (
     bStrings
   , bByteArray
@@ -86,12 +85,14 @@ getByteArray = do
   n_uncompressed <- Get.getWord32le
   n_compressed <- Get.getWord32le
   compressed <- Get.getByteString $ fromIntegral n_compressed
-  if n_uncompressed == 0
-  then pure B.empty
-  else fromMaybe (fail $ "could not decompress snappy encoded payload " <>
-                         "(compressed size = " <> show n_compressed <> " bytes" <>
-                         ", uncompressed size = " <> show n_uncompressed <> " bytes)")
-                 (pure <$> Snappy.decompress compressed)
+  case Snappy.decompress compressed of
+    Nothing ->
+      fail $
+        "could not decompress snappy encoded payload " <>
+        "(compressed size = " <> show n_compressed <> " bytes" <>
+        ", uncompressed size = " <> show n_uncompressed <> " bytes)"
+    Just uncompressed ->
+      pure uncompressed
 
 -- | Encodes a vector of words.
 --
