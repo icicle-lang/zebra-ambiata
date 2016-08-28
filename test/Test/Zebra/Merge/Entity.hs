@@ -1,6 +1,7 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module Test.Zebra.Merge.Entity where
 
 import           Disorder.Jack
@@ -13,6 +14,7 @@ import           System.IO (IO)
 import           Test.Zebra.Jack
 
 import           Zebra.Data
+import           Zebra.Merge.Base
 import           Zebra.Merge.Entity
 
 import qualified X.Data.Vector as Boxed
@@ -24,6 +26,9 @@ import           Text.Show.Pretty (ppShow)
 
 fakeBlockId :: BlockDataId
 fakeBlockId = BlockDataId 0
+
+entitiesOfBlock' :: BlockDataId -> Block -> Boxed.Vector EntityValues
+entitiesOfBlock' blockId block = Stream.vectorOfStream $ entitiesOfBlock blockId block
 
 ppCounter :: (Show a, Testable p) => Savage.String -> a -> p -> Property
 ppCounter heading thing prop
@@ -58,12 +63,12 @@ jBlockValid = do
 prop_entitiesOfBlock_entities :: Property
 prop_entitiesOfBlock_entities =
   gamble jBlock $ \block ->
-    fmap evEntity (entitiesOfBlock fakeBlockId block) === blockEntities block
+    fmap evEntity (entitiesOfBlock' fakeBlockId block) === blockEntities block
 
 prop_entitiesOfBlock_indices :: Property
 prop_entitiesOfBlock_indices =
   gamble jBlockValid $ \block ->
-    catIndices (entitiesOfBlock fakeBlockId block) === takeIndices block
+    catIndices (entitiesOfBlock' fakeBlockId block) === takeIndices block
  where
   catIndices evs
    = Boxed.map fst
@@ -82,7 +87,7 @@ prop_entitiesOfBlock_records_1_entity =
   let fixFact f = f { factEntityHash = ehash, factEntityId = eid }
       facts'    = List.sort $ fmap fixFact facts
       block     = blockOfFacts' encs facts'
-      es        = entitiesOfBlock fakeBlockId block
+      es        = entitiesOfBlock' fakeBlockId block
   in  ppCounter "Block" block
     $ ppCounter "Entities" es
     ( length facts > 0
@@ -94,7 +99,7 @@ getFakeRecordValues = fmap (fmap (Map.! fakeBlockId) . evRecords)
 prop_mergeEntityRecords_1_block :: Property
 prop_mergeEntityRecords_1_block =
   gamble jBlockValid $ \block ->
-  let es = entitiesOfBlock fakeBlockId block
+  let es = entitiesOfBlock' fakeBlockId block
       recs_l = mapM mergeEntityRecords es
 
       recs_r = getFakeRecordValues es
@@ -110,13 +115,27 @@ prop_mergeEntityRecords_2_blocks =
       b2 = blockOfFacts' encs f2
       bMerge = blockOfFacts' encs $ List.sort (f1 <> f2)
 
-      entsOf bid bk = Stream.streamOfVector $ entitiesOfBlock (BlockDataId bid) bk
+      entsOf bid bk = entitiesOfBlock (BlockDataId bid) bk
       es = Stream.vectorOfStream $ mergeEntityValues (entsOf 1 b1) (entsOf 2 b2)
+
+      expect =  entitiesOfBlock' fakeBlockId bMerge
   in  ppCounter "Block 1" b1
     $ ppCounter "Block 2" b2
     $ ppCounter "Block of append" bMerge
     $ ppCounter "Merged" es
-    ( fmap extractEntityValues es === fmap extractEntityValues (entitiesOfBlock fakeBlockId bMerge) )
+    ( fmap entityMergedOfEntityValues es === fmap entityMergedOfEntityValues expect )
+
+
+prop_treeFold_sum :: Property
+prop_treeFold_sum =
+  gamble arbitrary $ \(bs :: [Int]) ->
+  List.sum bs === treeFold (+) 0 id (Boxed.fromList bs)
+
+prop_treeFold_with_map :: Property
+prop_treeFold_with_map =
+  gamble arbitrary $ \(bs :: [Int]) ->
+  List.sum (fmap (+1) bs) === treeFold (+) 0 (+1) (Boxed.fromList bs)
+
 
 return []
 tests :: IO Bool
