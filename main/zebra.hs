@@ -9,8 +9,6 @@ import           Zebra.Serial.File
 import           Zebra.Merge.Base
 import           Zebra.Merge.Block
 
-import           Options.Applicative
-
 import           P
 
 import qualified Data.ByteString as B
@@ -18,28 +16,30 @@ import qualified X.Data.Vector as Boxed
 import qualified X.Data.Vector.Unboxed as Unboxed
 import qualified X.Data.Vector.Stream as Stream
 
-import           X.Control.Monad.Trans.Either
-import           Control.Monad.Trans.Class
+import           X.Control.Monad.Trans.Either (runEitherT, EitherT)
+import           Control.Monad.Trans.Class (lift)
 
 import           Data.String (String)
-import           System.IO
-import           System.IO.Unsafe (unsafePerformIO)
-import           Data.IORef
-import           System.Exit
-import           X.Options.Applicative
+import           System.IO (IO, FilePath)
+import qualified System.IO as IO
+import qualified Data.IORef as IORef
+import qualified System.Exit as Exit
+import           X.Options.Applicative (Parser, SafeCommand(..), RunType(..), Mod, CommandFields)
+import           X.Options.Applicative (dispatch, safeCommand, command', str, metavar, subparser)
+import           X.Options.Applicative (help, argument)
 
 main :: IO ()
 main = do
-  hSetBuffering stdout LineBuffering
-  hSetBuffering stderr LineBuffering
+  IO.hSetBuffering IO.stdout IO.LineBuffering
+  IO.hSetBuffering IO.stderr IO.LineBuffering
   dispatch parser >>= \sc ->
     case sc of
       VersionCommand ->
-        putStrLn buildInfoVersion >> exitSuccess
+        IO.putStrLn buildInfoVersion >> Exit.exitSuccess
       DependencyCommand ->
-        mapM_ putStrLn dependencyInfo
+        mapM_ IO.putStrLn dependencyInfo
       RunCommand DryRun c ->
-        print c >> exitSuccess
+        IO.print c >> Exit.exitSuccess
       RunCommand RealRun c ->
         run c
 
@@ -92,11 +92,11 @@ run c = case c of
     res <- runEitherT $ getFile stream
     case res of
      Left err -> do
-      putStrLn ("Error: " <> show err)
-      exitFailure
+      IO.putStrLn ("Error: " <> show err)
+      Exit.exitFailure
      Right (r,blocks) -> do
-      putStrLn "Header information:"
-      putStrLn (show r)
+      IO.putStrLn "Header information:"
+      IO.putStrLn (show r)
       showBlocks blocks
 
   FileHeader f -> do
@@ -104,25 +104,25 @@ run c = case c of
     res <- runEitherT $ getFile stream
     case res of
      Left err -> do
-      putStrLn ("Error: " <> show err)
-      exitFailure
+      IO.putStrLn ("Error: " <> show err)
+      Exit.exitFailure
      Right (r,_) -> do
-      putStrLn "Header information:"
-      putStrLn (show r)
+      IO.putStrLn "Header information:"
+      IO.putStrLn (show r)
 
   MergeFiles [] -> do
-    putStrLn "Merge: No files"
-    exitFailure
+    IO.putStrLn "Merge: No files"
+    Exit.exitFailure
 
   MergeFiles ins@(i:_) -> do
     res <- getHeader i
     case res of
      Left err -> do
-      putStrLn ("Error reading header information: " <> show err)
-      exitFailure
+      IO.putStrLn ("Error reading header information: " <> show err)
+      Exit.exitFailure
      Right fileheader -> do
       let ms = mergeFiles (readBlocksCheckHeader fileheader) (Boxed.fromList ins)
-      _ <- runEitherT $ Stream.mapM_ (lift . putStrLn . printEntityInfo) ms
+      _ <- runEitherT $ Stream.mapM_ (lift . IO.putStrLn . printEntityInfo) ms
       return ()
 
 
@@ -131,19 +131,15 @@ run c = case c of
     stream <- streamOfFile f
     second fst <$> runEitherT (getFile stream)
 
-  -- TODO: this should use `embed` rather than unsafePerformIO, once that is in x-vector
-  readBlocksCheckHeader fileheader f = unsafePerformIO $ do
-    stream <- streamOfFile f
-    res <- runEitherT $ getFile stream
-    case res of
-     Left err -> do
-      putStrLn ("Block error: reading file " <> show f <> " got error " <> show err)
-      exitFailure
-     Right (h,bs)
-      | h /= fileheader -> do
-        putStrLn ("Block error: reading file " <> show f <> " has different header")
-        exitFailure
-      | otherwise -> return bs
+  readBlocksCheckHeader fileheader f = Stream.embed $ do
+    stream <- lift $ streamOfFile f
+    (h,bs) <- getFile stream
+    case h /= fileheader of
+     True -> do
+      lift $ IO.putStrLn ("Block error: reading file " <> show f <> " has different header")
+      lift Exit.exitFailure
+     False ->
+      return bs
 
   printEntityInfo (Left err)  = "\nError: " <> show err <> "\n"
   printEntityInfo (Right ent)
@@ -154,44 +150,44 @@ run c = case c of
 showBlocks :: Stream.Stream (EitherT DecodeError IO) Block -> IO ()
 showBlocks blocks = do
   let int0 = 0 :: Int
-  totalBlocks <- newIORef int0
-  totalEnts <- newIORef int0
-  totalIxs <- newIORef int0
+  totalBlocks <- IORef.newIORef int0
+  totalEnts <- IORef.newIORef int0
+  totalIxs <- IORef.newIORef int0
 
   let go block = lift $ do
-        num <- readIORef totalBlocks
-        modifyIORef totalBlocks (+1)
-        putStrLn ("Block " <> show num)
+        num <- IORef.readIORef totalBlocks
+        IORef.modifyIORef totalBlocks (+1)
+        IO.putStrLn ("Block " <> show num)
 
         let numEnts = Boxed.length $ blockEntities block
-        modifyIORef totalEnts (+numEnts)
-        putStrLn ("\tEntities: " <> show numEnts)
+        IORef.modifyIORef totalEnts (+numEnts)
+        IO.putStrLn ("\tEntities: " <> show numEnts)
 
         let numIxs = Unboxed.length $ blockIndices block
-        modifyIORef totalIxs (+numIxs)
-        putStrLn ("\tIndices:  " <> show numIxs)
+        IORef.modifyIORef totalIxs (+numIxs)
+        IO.putStrLn ("\tIndices:  " <> show numIxs)
 
   res <- runEitherT $ Stream.mapM_ go blocks
 
-  numBlocks <- readIORef totalBlocks
-  numEnts <- readIORef totalEnts
-  numIxs <- readIORef totalIxs
+  numBlocks <- IORef.readIORef totalBlocks
+  numEnts <- IORef.readIORef totalEnts
+  numIxs <- IORef.readIORef totalIxs
 
-  putStrLn ""
-  putStrLn "Total:"
+  IO.putStrLn ""
+  IO.putStrLn "Total:"
 
-  putStrLn ("\tBlocks:   " <> show numBlocks)
-  putStrLn ("\tEntities: " <> show numEnts)
-  putStrLn ("\tIndices:  " <> show numIxs)
+  IO.putStrLn ("\tBlocks:   " <> show numBlocks)
+  IO.putStrLn ("\tEntities: " <> show numEnts)
+  IO.putStrLn ("\tIndices:  " <> show numIxs)
 
   case res of
    Left err -> do
-    putStrLn ("Error: " <> show err)
+    IO.putStrLn ("Error: " <> show err)
    _ -> return ()
 
 streamOfFile :: FilePath -> IO (Stream.Stream IO B.ByteString)
 streamOfFile fp = do
-  handle <- openBinaryFile fp ReadMode
+  handle <- IO.openBinaryFile fp IO.ReadMode
   return $ Stream.Stream getBytes (Just handle)
   where
     getBytes Nothing = return $ Stream.Done
@@ -199,7 +195,7 @@ streamOfFile fp = do
       bytes <- B.hGet handle (1024*1024)
       case B.null bytes of
        True -> do
-        hClose handle
+        IO.hClose handle
         return $ Stream.Skip Nothing
        False -> do
         return $ Stream.Yield bytes (Just handle)
