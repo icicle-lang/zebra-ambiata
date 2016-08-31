@@ -12,11 +12,14 @@ import           Zebra.Merge.Block
 import           P
 
 import qualified Data.ByteString as B
+import qualified Data.Text as Text
+import qualified Data.Text.IO as TextIO
 import qualified X.Data.Vector as Boxed
 import qualified X.Data.Vector.Unboxed as Unboxed
 import qualified X.Data.Vector.Stream as Stream
 
-import           X.Control.Monad.Trans.Either (runEitherT, EitherT)
+import           X.Control.Monad.Trans.Either (EitherT, left)
+import           X.Control.Monad.Trans.Either.Exit (orDie)
 import           Control.Monad.Trans.Class (lift)
 
 import           Data.String (String)
@@ -87,72 +90,53 @@ pInputFiles =
 
 run :: Command -> IO ()
 run c = case c of
-  FileDump f -> do
-    stream <- streamOfFile f
-    res <- runEitherT $ getFile stream
-    case res of
-     Left err -> do
-      IO.putStrLn ("Error: " <> show err)
-      Exit.exitFailure
-     Right (r,blocks) -> do
-      IO.putStrLn "Header information:"
-      IO.putStrLn (show r)
-      showBlocks blocks
+  FileDump f -> orDie id $ do
+    (r,blocks) <- getFile' f
+    lift $ IO.putStrLn "Header information:"
+    lift $ IO.putStrLn (show r)
+    showBlocks blocks
 
-  FileHeader f -> do
-    stream <- streamOfFile f
-    res <- runEitherT $ getFile stream
-    case res of
-     Left err -> do
-      IO.putStrLn ("Error: " <> show err)
-      Exit.exitFailure
-     Right (r,_) -> do
-      IO.putStrLn "Header information:"
-      IO.putStrLn (show r)
+  FileHeader f -> orDie id $ do
+    (fileheader,_) <- getFile' f
+    lift $ IO.putStrLn "Header information:"
+    lift $ IO.putStrLn (show fileheader)
 
   MergeFiles [] -> do
     IO.putStrLn "Merge: No files"
     Exit.exitFailure
 
-  MergeFiles ins@(i:_) -> do
-    res <- getHeader i
-    case res of
-     Left err -> do
-      IO.putStrLn ("Error reading header information: " <> show err)
-      Exit.exitFailure
-     Right fileheader -> do
-      let ms = mergeFiles (readBlocksCheckHeader fileheader) (Boxed.fromList ins)
-      _ <- runEitherT $ Stream.mapM_ (lift . IO.putStrLn . printEntityInfo) ms
-      return ()
+  MergeFiles ins@(i:_) -> orDie id $ do
+    fileheader <- fst <$> getFile' i
+    let ms = mergeFiles (readBlocksCheckHeader fileheader) (Boxed.fromList ins)
+    Stream.mapM_ (lift . TextIO.putStrLn . printEntityInfo) ms
+    return ()
 
 
  where
-  getHeader f = do
-    stream <- streamOfFile f
-    second fst <$> runEitherT (getFile stream)
+  getFile' f = do
+    stream <- lift $ streamOfFile f
+    (h,bs) <- firstT renderDecodeError $ getFile stream
+    return (h, Stream.trans (firstT renderDecodeError) bs)
 
   readBlocksCheckHeader fileheader f = Stream.embed $ do
-    stream <- lift $ streamOfFile f
-    (h,bs) <- getFile stream
-    case h /= fileheader of
-     True -> do
-      lift $ IO.putStrLn ("Block error: reading file " <> show f <> " has different header")
-      lift Exit.exitFailure
-     False ->
-      return bs
+    (h,bs) <- getFile' f
+    when (h /= fileheader) $
+      left ("Block error: reading file " <> Text.pack f <> " has different header")
+    return bs
 
-  printEntityInfo (Left err)  = "\nError: " <> show err <> "\n"
+  printEntityInfo (Left err)  = renderMergeError err <> "\n"
   printEntityInfo (Right ent)
-   = "Entity: " <> show (emEntityHash ent) <> " : " <> show (emEntityId ent)
-   <> "\tValues: " <> show (Boxed.sum $ Boxed.map Unboxed.length $ emIndices ent)
+   = Text.pack
+   ( "Entity: " <> show (emEntityHash ent) <> " : " <> show (emEntityId ent)
+   <> "\tValues: " <> show (Boxed.sum $ Boxed.map Unboxed.length $ emIndices ent))
 
 
-showBlocks :: Stream.Stream (EitherT DecodeError IO) Block -> IO ()
+showBlocks :: Stream.Stream (EitherT Text IO) Block -> EitherT Text IO ()
 showBlocks blocks = do
   let int0 = 0 :: Int
-  totalBlocks <- IORef.newIORef int0
-  totalEnts <- IORef.newIORef int0
-  totalIxs <- IORef.newIORef int0
+  totalBlocks <- lift $ IORef.newIORef int0
+  totalEnts <- lift $ IORef.newIORef int0
+  totalIxs <- lift $ IORef.newIORef int0
 
   let go block = lift $ do
         num <- IORef.readIORef totalBlocks
@@ -167,23 +151,20 @@ showBlocks blocks = do
         IORef.modifyIORef totalIxs (+numIxs)
         IO.putStrLn ("\tIndices:  " <> show numIxs)
 
-  res <- runEitherT $ Stream.mapM_ go blocks
+  Stream.mapM_ go blocks
 
-  numBlocks <- IORef.readIORef totalBlocks
-  numEnts <- IORef.readIORef totalEnts
-  numIxs <- IORef.readIORef totalIxs
+  numBlocks <- lift $ IORef.readIORef totalBlocks
+  numEnts <- lift $ IORef.readIORef totalEnts
+  numIxs <- lift $ IORef.readIORef totalIxs
 
-  IO.putStrLn ""
-  IO.putStrLn "Total:"
+  lift $ IO.putStrLn ""
+  lift $ IO.putStrLn "Total:"
 
-  IO.putStrLn ("\tBlocks:   " <> show numBlocks)
-  IO.putStrLn ("\tEntities: " <> show numEnts)
-  IO.putStrLn ("\tIndices:  " <> show numIxs)
+  lift $ IO.putStrLn ("\tBlocks:   " <> show numBlocks)
+  lift $ IO.putStrLn ("\tEntities: " <> show numEnts)
+  lift $ IO.putStrLn ("\tIndices:  " <> show numIxs)
 
-  case res of
-   Left err -> do
-    IO.putStrLn ("Error: " <> show err)
-   _ -> return ()
+  return ()
 
 streamOfFile :: FilePath -> IO (Stream.Stream IO B.ByteString)
 streamOfFile fp = do
