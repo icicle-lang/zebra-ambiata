@@ -5,6 +5,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternGuards #-}
 {-# OPTIONS_GHC -funbox-strict-fields #-}
 module Zebra.Data.Record.Mutable (
     MRecord(..)
@@ -16,6 +17,10 @@ module Zebra.Data.Record.Mutable (
   , insertDefault
   , withMRecord
   , unsafeFreezeRecord
+
+  , thawRecord
+
+  , appendRecord
 
   , recordsOfFacts
 
@@ -156,6 +161,66 @@ unsafeFreezeField = \case
     record <- unsafeFreezeRecord mrecord
     pure $ ListField ns record
 
+thawRecord :: PrimMonad m => Record -> m (MRecord (PrimState m))
+thawRecord (Record fields) =
+  MRecord <$> Boxed.mapM thawField fields
+
+
+thawField :: PrimMonad m => Field -> m (MField (PrimState m))
+thawField = \case
+  ByteField bs -> do
+    MByteField <$> growOfVector (unsafeFromByteString bs)
+  WordField vs ->
+    MWordField <$> growOfVector vs
+  DoubleField vs ->
+    MDoubleField <$> growOfVector vs
+  ListField vs rec -> do
+    ns <- growOfVector vs
+    record <- thawRecord rec
+    pure $ MListField ns record
+ where
+  growOfVector vv = do
+    g <- Grow.new (Storable.length vv)
+    Grow.append g vv
+    return g
+
+
+------------------------------------------------------------------------
+
+
+appendRecord :: PrimMonad m => MRecord (PrimState m) -> Record -> EitherT MutableError m ()
+appendRecord (MRecord mfs) (Record fs) =
+  Boxed.zipWithM_ appendField mfs fs
+
+appendField :: PrimMonad m => MField (PrimState m) -> Field -> EitherT MutableError m ()
+appendField mf = \case
+  ByteField bs
+   | MByteField g <- mf
+   -> Grow.append g (unsafeFromByteString bs)
+   | otherwise
+   -> left $ MutableExpectedByteField $ describeField mf
+
+  WordField vs
+   | MWordField g <- mf
+   -> Grow.append g vs
+   | otherwise
+   -> left $ MutableExpectedWordField $ describeField mf
+
+  DoubleField vs
+   | MDoubleField g <- mf
+   -> Grow.append g vs
+   | otherwise
+   -> left $ MutableExpectedDoubleField $ describeField mf
+
+  ListField vs rec
+   | MListField g mrec <- mf
+   -> do  Grow.append g vs
+          appendRecord mrec rec
+   | otherwise
+   -> left $ MutableExpectedListField $ describeField mf
+
+
+
 ------------------------------------------------------------------------
 
 newtype MRecordBox s =
@@ -166,13 +231,13 @@ mkMRecordBox encodings = do
   xs <- traverse newMRecord encodings
   pure . MRecordBox $ Boxed.zip encodings xs
 
-insertRecord ::
+insertFact ::
   PrimMonad m =>
   MRecordBox (PrimState m) ->
   AttributeId ->
   Maybe' Value ->
   EitherT MutableError m ()
-insertRecord (MRecordBox records) aid@(AttributeId ix) mvalue = do
+insertFact (MRecordBox records) aid@(AttributeId ix) mvalue = do
   case records Boxed.!? ix of
     Nothing ->
       left $ MutableAttributeNotFound aid
@@ -190,7 +255,7 @@ recordsOfFacts encodings facts =
     box <- lift $ mkMRecordBox encodings
 
     for_ facts $ \fact ->
-      insertRecord box (factAttributeId fact) (factValue fact)
+      insertFact box (factAttributeId fact) (factValue fact)
 
     lift $ unsafeFreezeRecords box
 

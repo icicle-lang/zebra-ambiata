@@ -37,6 +37,8 @@ module Test.Zebra.Jack (
   -- * Zebra.Data.Schema
   , jSchema
   , jFormat
+
+  , jMaybe'
   ) where
 
 import qualified Data.ByteString as B
@@ -240,3 +242,8 @@ jField n =
         ms <- listOfN n n $ chooseInt (0, m `div` 10)
         ListField (Storable.fromList . fmap fromIntegral $ ms) <$> jRecord' (sum ms)
     ]
+
+jMaybe' :: Jack a -> Jack (Maybe' a)
+jMaybe' j =
+  oneOfRec [ pure Nothing' ] [ Just' <$> j ]
+
