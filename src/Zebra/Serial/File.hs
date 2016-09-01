@@ -6,6 +6,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Zebra.Serial.File (
     DecodeError(..)
+  , renderDecodeError
   , getBlocks
   , getFile
   , runStreamOne
@@ -17,6 +18,7 @@ import qualified Data.Binary.Get as Get
 import qualified Data.ByteString as B
 import           Data.Map (Map)
 import qualified Data.Map as Map
+import qualified Data.Text as Text
 
 import           Data.String (String)
 
@@ -37,6 +39,16 @@ data DecodeError
  | DecodeErrorBadParserFailImmediately String
  | DecodeErrorBadParserExpectsMoreAfterEnd
  deriving (Show)
+
+renderDecodeError :: DecodeError -> Text
+renderDecodeError = \case
+  DecodeError s ->
+    Text.pack s
+  DecodeErrorBadParserFailImmediately s ->
+    "Decode error: the parser failed immediately before consuming anything. This means there is a bug in the parser.\n" <>
+    "The parser failed with: " <> Text.pack s
+  DecodeErrorBadParserExpectsMoreAfterEnd ->
+    "Decode error: the parser asked for more input after telling it the stream has ended. This means there is a bug in the parser."
 
 getFile :: Monad m => Stream.Stream m B.ByteString -> EitherT DecodeError m (Map AttributeName Schema, Stream.Stream (EitherT DecodeError m) Block)
 getFile input = EitherT $ do

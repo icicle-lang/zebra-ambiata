@@ -13,6 +13,7 @@ module Zebra.Merge.Base
   , EntityMerged(..)
   , EntityValues(..)
   , MergeError(..)
+  , renderMergeError
   , treeFold
   ) where
 
@@ -20,6 +21,7 @@ import Zebra.Data
 
 import qualified Data.Map as Map
 
+import qualified Data.Text as Text
 import           Data.Vector.Unboxed.Deriving (derivingUnbox)
 import qualified X.Data.Vector as Boxed
 import qualified X.Data.Vector.Unboxed as Unboxed
@@ -48,6 +50,17 @@ data MergeError =
   | MergeBlockDataWithoutRecord !AttributeId !BlockDataId
     deriving (Eq, Show)
 
+-- This could certainly be nicer
+renderMergeError :: MergeError -> Text
+renderMergeError = \case
+  MergeRecordError r ->
+    -- Wouldn't hurt to add a renderRecordError
+    "Merge error when appending records. This might mean the files have different schemas or one of the files is invalid.\n" <>
+    "The error was: " <> Text.pack (show r)
+  MergeAttributeWithoutRecord attr ->
+    "Merge error: attribute " <> Text.pack (show attr) <> " has no values, but is expected to have values. This could be an invalid input file."
+  MergeBlockDataWithoutRecord attr blockid ->
+    "Merge error: the block " <> Text.pack (show blockid) <> " refers to attribute " <> Text.pack (show attr) <> ", but there are no values for this. This could be an invalid input file."
 
 -- | EntityMerged is an entity with all its values, after merging has finished.
 -- These are the real values of the entity.

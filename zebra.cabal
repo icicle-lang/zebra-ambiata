@@ -78,11 +78,13 @@ executable zebra
                     , ambiata-p
                     , ambiata-x-optparse
                     , ambiata-x-vector
+                    , ambiata-x-eithert
                     , optparse-applicative            == 0.12.*
                     , text                            == 1.2.*
                     , binary
                     , containers
                     , bytestring
+                    , transformers
 
 
 test-suite test
