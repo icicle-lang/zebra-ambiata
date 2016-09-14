@@ -33,6 +33,21 @@ prop_roundtrip_ints =
   gamble (Storable.fromList <$> listOf sizedBounded) $ \xs ->
     trippingSerial bIntArray (getIntArray $ Storable.length xs) xs
 
+prop_roundtrip_zigzag :: Property
+prop_roundtrip_zigzag =
+  gamble sizedBounded $ \x ->
+    x == unZigZag64 (zigZag64 x)
+
+prop_mid64 :: Property
+prop_mid64 =
+  gamble sizedBounded $ \x ->
+  gamble sizedBounded $ \y ->
+    fromIntegral (mid64 x y) == midBig (fromIntegral x) (fromIntegral y)
+
+midBig :: Integer -> Integer -> Integer
+midBig x y =
+  x + (y - x) `div` 2
+
 return []
 tests :: IO Bool
 tests =

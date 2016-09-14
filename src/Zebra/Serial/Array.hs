@@ -8,6 +8,11 @@ module Zebra.Serial.Array (
   , getStrings
   , getByteArray
   , getIntArray
+
+  -- ** Exported for tests
+  , mid64
+  , zigZag64
+  , unZigZag64
   ) where
 
 import           Anemone.Foreign.Pack (Packed64(..))
