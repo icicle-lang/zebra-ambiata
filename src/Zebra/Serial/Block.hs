@@ -191,11 +191,10 @@ getAttributes = do
 --   The physical array structure is as follows:
 --
 -- @
---   index_count      : u32
---   index_time_epoch : u64
---   index_time_delta : int_array value_count
---   index_priority   : int_array value_count
---   index_tombstone  : int_array value_count
+--   index_count     : u32
+--   index_time      : int_array value_count
+--   index_priority  : int_array value_count
+--   index_tombstone : int_array value_count
 -- @
 --
 --   /invariant: index_count == sum attr_id_count/
@@ -207,17 +206,9 @@ bIndices xs =
       fromIntegral $
       Unboxed.length xs
 
-    iepoch =
-      if Unboxed.null xs then
-        0
-      else
-        unTime .
-        Unboxed.minimum $
-        Unboxed.map indexTime xs
-
-    deltas =
+    times =
       Unboxed.convert $
-      Unboxed.map (fromIntegral . subtract iepoch . unTime . indexTime) xs
+      Unboxed.map (fromIntegral . unTime . indexTime) xs
 
     priorities =
       Unboxed.convert $
@@ -228,31 +219,29 @@ bIndices xs =
       Unboxed.map (fromIntegral . wordOfTombstone . indexTombstone) xs
   in
     Build.word32LE icount <>
-    Build.int64LE iepoch <>
-    bIntArray deltas <>
+    bIntArray times <>
     bIntArray priorities <>
     bIntArray tombstones
 
 getIndices :: Get (Unboxed.Vector Index)
 getIndices = do
   icount <- fromIntegral <$> Get.getWord32le
-  iepoch <- fromIntegral <$> Get.getWord64le
-  wdeltas <- getIntArray icount
-  wpriorities <- getIntArray icount
-  wtombstones <- getIntArray icount
+  itimes <- getIntArray icount
+  ipriorities <- getIntArray icount
+  itombstones <- getIntArray icount
 
   let
     times =
-      Unboxed.map (Time . (+ iepoch) . fromIntegral) $
-      Unboxed.convert wdeltas
+      Unboxed.map (Time . fromIntegral) $
+      Unboxed.convert itimes
 
     priorities =
       Unboxed.map (Priority . fromIntegral) $
-      Unboxed.convert wpriorities
+      Unboxed.convert ipriorities
 
     tombstones =
       Unboxed.map (tombstoneOfWord . fromIntegral) $
-      Unboxed.convert wtombstones
+      Unboxed.convert itombstones
 
   pure $ Unboxed.zipWith3 Index times priorities tombstones
 
