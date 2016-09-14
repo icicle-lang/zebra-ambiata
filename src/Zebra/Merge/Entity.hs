@@ -10,7 +10,7 @@
 module Zebra.Merge.Entity
   ( entitiesOfBlock
   , mergeEntityValues
-  , mergeEntityRecords
+  , mergeEntityTables
   , entityMergedOfEntityValues
   ) where
 
@@ -29,19 +29,19 @@ import P
 
 
 entitiesOfBlock :: Monad m => BlockDataId -> Block -> Stream.Stream m EntityValues
-entitiesOfBlock blockId (Block entities indices records) =
+entitiesOfBlock blockId (Block entities indices tables) =
   Stream.streamOfVectorM $
-  Boxed.mapAccumulate go (indices,records) entities
+  Boxed.mapAccumulate go (indices,tables) entities
   where
     go (ix,rx) ent
      = let attrs             = entityAttributes ent
-           count_all         = Unboxed.sum $ Unboxed.map attributeRecords attrs
+           count_all         = Unboxed.sum $ Unboxed.map attributeRows attrs
            (ix_here,ix_rest) = Unboxed.splitAt count_all ix
 
            dense_attrs       = denseAttributeCount rx attrs
            ix_attrs          = Generic.unsafeSplits id ix_here dense_attrs
            dense_counts      = Boxed.map Unboxed.length ix_attrs
-           (rx_here,rx_rest) = Boxed.unzip $ Boxed.zipWith splitAtRecords dense_counts rx
+           (rx_here,rx_rest) = Boxed.unzip $ Boxed.zipWith splitAtTables dense_counts rx
 
            acc'              = (ix_rest, rx_rest)
            ix_blockId        = Boxed.map (Unboxed.map (,blockId)) ix_attrs
@@ -53,14 +53,14 @@ entitiesOfBlock blockId (Block entities indices records) =
 
 -- | Convert Attributes for a single entity into an array of counts, indexed by attribute id.
 -- Attributes are sparse in attribute id, and must be sorted and unique.
--- The records is used to know how many attributes there are in total.
+-- The tables is used to know how many attributes there are in total.
 --
 -- > denseAttributeCount
 -- >    (...values for 5 attributes...)
 -- >    [ Attribute (AttributeId 1) 10 , Attribute (AttributeId 3) 20 ]
 -- > = [ 0, 10, 0, 20, 0 ]
 --
-denseAttributeCount :: Boxed.Vector Record -> Unboxed.Vector Attribute -> Unboxed.Vector Int
+denseAttributeCount :: Boxed.Vector Table -> Unboxed.Vector Attribute -> Unboxed.Vector Int
 denseAttributeCount rs attr =
   Unboxed.mapAccumulate go attr $
   Unboxed.enumFromN 0 $ Boxed.length rs
@@ -84,8 +84,8 @@ mergeEntityValues ls rs
   -- id and hash are equal
   joinEV e1 e2
    = let evIxs = Boxed.zipWith mergeIxs (evIndices e1) (evIndices e2)
-         evRcs = Boxed.zipWith Map.union (evRecords e1) (evRecords e2)
-     in  Stream.MergePullBoth e1 { evIndices = evIxs, evRecords = evRcs }
+         evRcs = Boxed.zipWith Map.union (evTables e1) (evTables e2)
+     in  Stream.MergePullBoth e1 { evIndices = evIxs, evTables = evRcs }
 
   mergeIxs
    = Unboxed.merge (Stream.mergePullOrd (\(i,_) -> (indexTime i, indexPriority i)))
@@ -94,51 +94,51 @@ mergeEntityValues ls rs
    = let e = evEntity ev
      in  (entityHash e, entityId e)
 
--- mergeRecords: gather and concatenate all the records from different blocks.
+-- mergeTables: gather and concatenate all the tables from different blocks.
 -- This should be done after all the indices have been merged, so that it only has to
 -- slice and concat the actual data once, instead of for each pair of merges.
-mergeEntityRecords :: EntityValues -> Either MergeError (Boxed.Vector Record)
-mergeEntityRecords (EntityValues _ aixs recs) =
+mergeEntityTables :: EntityValues -> Either MergeError (Boxed.Vector Table)
+mergeEntityTables (EntityValues _ aixs recs) =
   Boxed.mapM go (Boxed.zip (Boxed.indexed aixs) recs)
   where
     go ((aid, aix), rec)
-     = mergeEntityRecord (AttributeId aid) aix rec
+     = mergeEntityTable (AttributeId aid) aix rec
 
-mergeEntityRecord :: AttributeId -> Unboxed.Vector (Index, BlockDataId) -> Map.Map BlockDataId Record -> Either MergeError Record
-mergeEntityRecord aid aixs records = do
+mergeEntityTable :: AttributeId -> Unboxed.Vector (Index, BlockDataId) -> Map.Map BlockDataId Table -> Either MergeError Table
+mergeEntityTable aid aixs tables = do
   i <- init
-  fst <$> Unboxed.foldM go (i, records) aixs
+  fst <$> Unboxed.foldM go (i, tables) aixs
   where
-    -- Get an 'empty' Record for this attribute.
-    -- The shape of this depends on the schema of the attribute, which specifies how many fields,
+    -- Get an 'empty' Table for this attribute.
+    -- The shape of this depends on the schema of the attribute, which specifies how many columns,
     -- their types, and so on.
-    -- We already have at least one non-empty record though, so we can chop it up to make an empty one.
+    -- We already have at least one non-empty table though, so we can chop it up to make an empty one.
     init =
-      case Map.minView records of
+      case Map.minView tables of
         Just (r,_) ->
-          return $ fst $ splitAtRecords 0 r
+          return $ fst $ splitAtTables 0 r
         Nothing ->
-          Left $ MergeAttributeWithoutRecord aid
+          Left $ MergeAttributeWithoutTable aid
 
     go (build,recs) (_,blockid) = do
       (rec,recs') <- splitLookup blockid recs
-      rec' <- appendRecords' build rec
+      rec' <- appendTables' build rec
       return (rec', recs')
 
     splitLookup blockid recs =
       case Map.lookup blockid recs of
         Just r -> do
-          let (this,that) = splitAtRecords 1 r
+          let (this,that) = splitAtTables 1 r
           return (this, Map.insert blockid that recs)
         Nothing ->
-          Left $ MergeBlockDataWithoutRecord aid blockid
+          Left $ MergeBlockDataWithoutTable aid blockid
 
-    appendRecords' a b
-     = first MergeRecordError $ appendRecords a b
+    appendTables' a b
+     = first MergeTableError $ appendTables a b
 
 
 entityMergedOfEntityValues :: EntityValues -> Either MergeError EntityMerged
 entityMergedOfEntityValues ev@(EntityValues e aixs _) = do
-  recs <- mergeEntityRecords ev
+  recs <- mergeEntityTables ev
   return $ EntityMerged (entityHash e) (entityId e) (Boxed.map (Unboxed.map fst) aixs) recs
 

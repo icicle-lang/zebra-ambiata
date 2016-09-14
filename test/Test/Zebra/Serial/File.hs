@@ -65,20 +65,20 @@ prop_runStreamOne_getByteArray_filtered =
     checkRunStreamOne getByteArray (Stream.filter (\b -> B.length b `mod` 2 == 0) $ Stream.streamOfVector bss)
 
 
-prop_runStreamOne_getWordArray_prefix_size :: Property
-prop_runStreamOne_getWordArray_prefix_size =
+prop_runStreamOne_getIntArray_prefix_size :: Property
+prop_runStreamOne_getIntArray_prefix_size =
   gamble jSplits $ \bss ->
     checkRunStreamOne get (Stream.streamOfVector bss)
   where
    get = do
     i <- Get.getWord32be
-    getWordArray (fromIntegral i)
+    getIntArray (fromIntegral i)
 
-prop_runStreamOne_getWordArray_static_size :: Property
-prop_runStreamOne_getWordArray_static_size =
+prop_runStreamOne_getIntArray_static_size :: Property
+prop_runStreamOne_getIntArray_static_size =
   gamble jSplits $ \bss ->
   gamble arbitrary $ \num ->
-    checkRunStreamOne (getWordArray $ abs num) (Stream.streamOfVector bss)
+    checkRunStreamOne (getIntArray $ abs num) (Stream.streamOfVector bss)
 
 -- Adding a filter makes sure there are "Skips" in the stream
 prop_runStreamOne_getStrings_filtered :: Property
@@ -104,20 +104,20 @@ prop_runStreamMany_getByteArray_filtered =
     checkRunStreamMany getByteArray (Stream.filter (\b -> B.length b `mod` 2 == 0) $ Stream.streamOfVector bss)
 
 
-prop_runStreamMany_getWordArray_prefix_size :: Property
-prop_runStreamMany_getWordArray_prefix_size =
+prop_runStreamMany_getIntArray_prefix_size :: Property
+prop_runStreamMany_getIntArray_prefix_size =
   gamble jSplits $ \bss ->
     checkRunStreamMany get (Stream.streamOfVector bss)
   where
    get = do
     i <- Get.getWord32be
-    getWordArray (fromIntegral i)
+    getIntArray (fromIntegral i)
 
-prop_runStreamMany_getWordArray_static_size :: Property
-prop_runStreamMany_getWordArray_static_size =
+prop_runStreamMany_getIntArray_static_size :: Property
+prop_runStreamMany_getIntArray_static_size =
   gamble jSplits $ \bss ->
   gamble arbitrary $ \num ->
-    checkRunStreamMany (getWordArray $ abs num) (Stream.streamOfVector bss)
+    checkRunStreamMany (getIntArray $ abs num) (Stream.streamOfVector bss)
 
 -- Adding a filter makes sure there are "Skips" in the stream
 prop_runStreamMany_getStrings_filtered :: Property

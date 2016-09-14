@@ -28,7 +28,7 @@ import           Zebra.Data.Fact
 data Attribute =
   Attribute {
       attributeId :: !AttributeId
-    , attributeRecords :: !Int
+    , attributeRows :: !Int
     } deriving (Eq, Ord, Show, Generic, Typeable)
 
 -- This deriving Unbox needs to appear before using it in Entity below

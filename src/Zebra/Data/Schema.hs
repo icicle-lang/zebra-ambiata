@@ -49,9 +49,9 @@ instance Show Schema where
 
 data Format =
     ByteFormat
-  | WordFormat
+  | IntFormat
   | DoubleFormat
-  | ListFormat !Schema
+  | ArrayFormat !Schema
     deriving (Eq, Ord, Show)
 
 -- | Render a schema as a string. The schema string is run of characters which
@@ -59,7 +59,7 @@ data Format =
 --
 -- @
 --   b   - byte
---   w   - word
+--   i   - int
 --   d   - double
 --   [?] - array
 -- @
@@ -70,11 +70,11 @@ renderSchema =
     go = \case
       ByteFormat ->
         "b"
-      WordFormat ->
-        "w"
+      IntFormat ->
+        "i"
       DoubleFormat ->
         "d"
-      ListFormat s ->
+      ArrayFormat s ->
         "[" <> renderSchema s <> "]"
   in
     foldMap go . unSchema
@@ -91,9 +91,9 @@ pFormat :: Atto.Parser Format
 pFormat =
   Atto.choice [
       ByteFormat <$ Atto.char 'b'
-    , WordFormat <$ Atto.char 'w'
+    , IntFormat <$ Atto.char 'i'
     , DoubleFormat <$ Atto.char 'd'
-    , ListFormat <$> (Atto.char '[' *> pSchema <* Atto.char ']')
+    , ArrayFormat <$> (Atto.char '[' *> pSchema <* Atto.char ']')
     ]
 
 schemaOfDictionary :: Map AttributeName Encoding -> Map AttributeName Schema
@@ -103,22 +103,22 @@ schemaOfDictionary =
 schemaOfEncoding :: Encoding -> Schema
 schemaOfEncoding = \case
   BoolEncoding ->
-    Schema (pure WordFormat)
+    Schema (pure IntFormat)
   Int64Encoding ->
-    Schema (pure WordFormat)
+    Schema (pure IntFormat)
   DoubleEncoding ->
     Schema (pure DoubleFormat)
   StringEncoding ->
-    Schema (pure . ListFormat $ Schema [ByteFormat])
+    Schema (pure . ArrayFormat $ Schema [ByteFormat])
   DateEncoding ->
-    Schema (pure WordFormat)
+    Schema (pure IntFormat)
   StructEncoding fields ->
     if Boxed.null fields then
-      Schema (pure WordFormat)
+      Schema (pure IntFormat)
     else
       foldMap (schemaOfFieldEncoding . snd) fields
   ListEncoding encoding ->
-    Schema (pure . ListFormat $ schemaOfEncoding encoding)
+    Schema (pure . ArrayFormat $ schemaOfEncoding encoding)
 
 schemaOfFieldEncoding :: FieldEncoding -> Schema
 schemaOfFieldEncoding = \case
@@ -127,4 +127,4 @@ schemaOfFieldEncoding = \case
       RequiredField ->
         schemaOfEncoding encoding
       OptionalField ->
-        Schema (pure WordFormat) <> schemaOfEncoding encoding
+        Schema (pure IntFormat) <> schemaOfEncoding encoding

@@ -8,6 +8,6 @@ import           Zebra.Data.Encoding as X
 import           Zebra.Data.Entity as X
 import           Zebra.Data.Fact as X
 import           Zebra.Data.Index as X
-import           Zebra.Data.Record as X
-import           Zebra.Data.Record.Mutable as X
 import           Zebra.Data.Schema as X
+import           Zebra.Data.Table as X
+import           Zebra.Data.Table.Mutable as X

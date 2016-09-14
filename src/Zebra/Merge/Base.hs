@@ -31,7 +31,7 @@ import GHC.Generics (Generic(..))
 
 import P
 
--- | A BlockDataId roughly corresponds to the id of the file, where a Record came from.
+-- | A BlockDataId roughly corresponds to the id of the file, where a Table came from.
 newtype BlockDataId
  = BlockDataId
  { unDataChunkId :: Int
@@ -45,21 +45,21 @@ derivingUnbox "BlockDataId"
   [| \x -> BlockDataId x |]
 
 data MergeError =
-    MergeRecordError !RecordError
-  | MergeAttributeWithoutRecord !AttributeId
-  | MergeBlockDataWithoutRecord !AttributeId !BlockDataId
+    MergeTableError !TableError
+  | MergeAttributeWithoutTable !AttributeId
+  | MergeBlockDataWithoutTable !AttributeId !BlockDataId
     deriving (Eq, Show)
 
 -- This could certainly be nicer
 renderMergeError :: MergeError -> Text
 renderMergeError = \case
-  MergeRecordError r ->
-    -- Wouldn't hurt to add a renderRecordError
-    "Merge error when appending records. This might mean the files have different schemas or one of the files is invalid.\n" <>
+  MergeTableError r ->
+    -- Wouldn't hurt to add a renderTableError
+    "Merge error when appending tables. This might mean the files have different schemas or one of the files is invalid.\n" <>
     "The error was: " <> Text.pack (show r)
-  MergeAttributeWithoutRecord attr ->
+  MergeAttributeWithoutTable attr ->
     "Merge error: attribute " <> Text.pack (show attr) <> " has no values, but is expected to have values. This could be an invalid input file."
-  MergeBlockDataWithoutRecord attr blockid ->
+  MergeBlockDataWithoutTable attr blockid ->
     "Merge error: the block " <> Text.pack (show blockid) <> " refers to attribute " <> Text.pack (show attr) <> ", but there are no values for this. This could be an invalid input file."
 
 -- | EntityMerged is an entity with all its values, after merging has finished.
@@ -70,8 +70,8 @@ data EntityMerged
  , emEntityId   :: !EntityId
  , emIndices    :: !(Boxed.Vector (Unboxed.Vector Index))
    -- ^ Indices for current entity, indexed by attribute id
- , emRecords    :: !(Boxed.Vector Record)
-   -- ^ Record values for current entity, indexed by attribute id
+ , emTables    :: !(Boxed.Vector Table)
+   -- ^ Table values for current entity, indexed by attribute id
  }
  deriving (Eq, Generic)
 instance Show EntityMerged where
@@ -81,30 +81,30 @@ instance Show EntityMerged where
 
 -- | EntityValues is an intermediate type used during merging.
 -- It contains a single entity and all its values.
--- It has multiple chunks of Records, one for each input file and attribute.
+-- It has multiple chunks of Tables, one for each input file and attribute.
 -- When merging entities from many files we don't want to chop the data up
 -- and cat it back together multiple times.
--- So it's better to just store the raw, unchopped records from each input file,
+-- So it's better to just store the raw, unchopped tables from each input file,
 -- and each index also stores which file it came from.
 -- Then after all files have been merged, we can chop all input files once, merge them
 -- according to the indices, then concatenate.
 --
 -- Invariants: 
---   * length evIndicies == length evRecords
---      (evIndices and evRecords are same length)
---   * forall i, length (evRecords ! i) > 0
---      (each attribute has at least one Record)
---   * forall i j, snd (evIndicies ! i ! j) `Map.member` evRecords ! i
---      (each BlockDataId in evIndices refers to a BlockDataId in evRecords)
---      (the converse isn't true: there can be Records that have no indices)
+--   * length evIndicies == length evTables
+--      (evIndices and evTables are same length)
+--   * forall i, length (evTables ! i) > 0
+--      (each attribute has at least one Table)
+--   * forall i j, snd (evIndicies ! i ! j) `Map.member` evTables ! i
+--      (each BlockDataId in evIndices refers to a BlockDataId in evTables)
+--      (the converse isn't true: there can be Tables that have no indices)
 --
 data EntityValues
  = EntityValues
  { evEntity    :: !Entity
  , evIndices   :: !(Boxed.Vector (Unboxed.Vector (Index, BlockDataId)))
    -- ^ Indices for current entity, indexed by attribute id
- , evRecords   :: !(Boxed.Vector (Map.Map BlockDataId Record))
-   -- ^ Record values for current entity, indexed by attribute id
+ , evTables   :: !(Boxed.Vector (Map.Map BlockDataId Table))
+   -- ^ Table values for current entity, indexed by attribute id
  }
  deriving (Eq, Generic)
 instance Show EntityValues where

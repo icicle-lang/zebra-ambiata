@@ -1,6 +1,6 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE TemplateHaskell #-}
-module Test.Zebra.Data.Record.Mutable where
+module Test.Zebra.Data.Table.Mutable where
 
 import           Control.Monad.ST (runST)
 
@@ -23,56 +23,56 @@ import           X.Control.Monad.Trans.Either (runEitherT)
 import           Zebra.Data
 
 
-prop_default_record_vs_mrecord :: Property
-prop_default_record_vs_mrecord =
+prop_default_table_vs_mtable :: Property
+prop_default_table_vs_mtable =
   gamble jEncoding $ \encoding ->
-    recordOfMaybeValue encoding Nothing' ===
+    tableOfMaybeValue encoding Nothing' ===
     Right (fromMaybeValue encoding [Nothing'])
 
-prop_roundtrip_value_mrecord :: Property
-prop_roundtrip_value_mrecord =
+prop_roundtrip_value_mtable :: Property
+prop_roundtrip_value_mtable =
   gamble jEncoding $ \encoding ->
   gamble (listOf $ jValue encoding) $
     tripping (fromMaybeValue encoding . fmap Just') (toValue encoding)
 
-prop_roundtrip_record_mrecord :: Property
-prop_roundtrip_record_mrecord =
-  gamble jRecord $ \record -> runST $ do
-    mrecord <- thawRecord record
-    record' <- unsafeFreezeRecord mrecord
-    return (record === record')
+prop_roundtrip_table_mtable :: Property
+prop_roundtrip_table_mtable =
+  gamble jTable $ \table -> runST $ do
+    mtable <- thawTable table
+    table' <- unsafeFreezeTable mtable
+    return (table === table')
 
-prop_appendRecord_commutes :: Property
-prop_appendRecord_commutes =
+prop_appendTable_commutes :: Property
+prop_appendTable_commutes =
   gamble jEncoding $ \encoding ->
   gamble (listOf $ jMaybe' $ jValue encoding) $ \values1 ->
   gamble (listOf $ jMaybe' $ jValue encoding) $ \values2 -> runST $ do
     let rec1 = fromMaybeValue encoding values1
     let rec2 = fromMaybeValue encoding values2
     let rec3 = fromMaybeValue encoding (values1 <> values2)
-    mrecord <- thawRecord rec1
-    Right () <- runEitherT $ appendRecord mrecord rec2
-    rec3' <- unsafeFreezeRecord mrecord
+    mtable <- thawTable rec1
+    Right () <- runEitherT $ appendTable mtable rec2
+    rec3' <- unsafeFreezeTable mtable
     return (rec3 === rec3')
 
 
 
-fromMaybeValue :: Encoding -> [Maybe' Value] -> Record
+fromMaybeValue :: Encoding -> [Maybe' Value] -> Table
 fromMaybeValue encoding mvalues =
   runST $ do
-    record <- newMRecord encoding
+    table <- newMTable encoding
     result <- runEitherT $
-      traverse_ (insertMaybeValue encoding record) mvalues
+      traverse_ (insertMaybeValue encoding table) mvalues
     case result of
       Left err ->
         Savage.error $ show err
       Right () ->
-        unsafeFreezeRecord record
+        unsafeFreezeTable table
 
-toValue :: Encoding -> Record -> Either ValueError [Value]
-toValue encoding record =
+toValue :: Encoding -> Table -> Either ValueError [Value]
+toValue encoding table =
   fmap Boxed.toList $
-  valuesOfRecord encoding record
+  valuesOfTable encoding table
 
 return []
 tests :: IO Bool

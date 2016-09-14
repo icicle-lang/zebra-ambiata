@@ -36,9 +36,9 @@ import           Zebra.Serial.Array
 --   header {
 --     "||ZEBRA||00000||" : 16 x u8
 --     attr_count         : u32
---     attr_name_length   : word_array schema_count
+--     attr_name_length   : int_array schema_count
 --     attr_name_string   : byte_array
---     attr_schema_length : word_array schema_count
+--     attr_schema_length : int_array schema_count
 --     attr_schema_string : byte_array
 --   }
 -- @

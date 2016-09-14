@@ -1,6 +1,6 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE TemplateHaskell #-}
-module Test.Zebra.Data.Record where
+module Test.Zebra.Data.Table where
 
 import           Disorder.Jack (Property, quickCheckAll)
 import           Disorder.Jack (gamble, tripping, arbitrary)
@@ -11,14 +11,14 @@ import           System.IO (IO)
 
 import           Test.Zebra.Jack
 
-import           Zebra.Data.Record
+import           Zebra.Data.Table
 
 
 prop_roundtrip_splitAt :: Property
 prop_roundtrip_splitAt =
   gamble arbitrary $ \ix ->
-  gamble jRecord $
-    tripping (splitAtRecords ix) (uncurry appendRecords)
+  gamble jTable $
+    tripping (splitAtTables ix) (uncurry appendTables)
 
 return []
 tests :: IO Bool
