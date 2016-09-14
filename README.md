@@ -23,7 +23,7 @@ header {
   -- layout/format of the arrays, and the dimensionality:
   --
   --   b   - byte
-  --   w   - word
+  --   i   - int
   --   d   - double
   --   [?] - array
   --
@@ -33,12 +33,12 @@ header {
   --
   -- Would be described as:
   --
-  --   ww
+  --   ii
   --
   -- Which means it is represented as:
   --
-  --   is_some : word_array
-  --   value   : word_array
+  --   is_some : int_array
+  --   value   : int_array
   --
   -- Example:
   --
@@ -55,23 +55,23 @@ header {
   --
   -- Would be described as:
   --
-  --   ww[b][www]
+  --   ii[b][iii]
   --
   -- Which means it is represented as:
   --
-  --   foo0_is_some      : word_array
-  --   foo0_value        : word_array
-  --   foo1_length       : word_array
+  --   foo0_is_some      : int_array
+  --   foo0_value        : int_array
+  --   foo1_length       : int_array
   --   foo1_bytes        : byte_array
-  --   foo2_length       : word_array
-  --   foo2_bar0         : word_array
-  --   foo2_bar1_is_some : word_array
-  --   foo2_bar1_value   : word_array
+  --   foo2_length       : int_array
+  --   foo2_bar0         : int_array
+  --   foo2_bar1_is_some : int_array
+  --   foo2_bar1_value   : int_array
   --
   attr_count         : u32
-  attr_name_length   : word_array attr_count
+  attr_name_length   : int_array attr_count
   attr_name_string   : byte_array
-  attr_schema_length : word_array attr_count
+  attr_schema_length : int_array attr_count
   attr_schema_string : byte_array
 }
 
@@ -82,48 +82,48 @@ block {
 
   --
   -- entity {
-  --   hash    : word
+  --   hash    : int
   --   id      : string
-  --   n_attrs : word
+  --   n_attrs : int
   -- }
   --
   entity_count      : u32
-  entity_id_hash    : word_array entity_count
-  entity_id_length  : word_array entity_count
+  entity_id_hash    : int_array entity_count
+  entity_id_length  : int_array entity_count
   entity_id_string  : byte_array
-  entity_attr_count : word_array entity_count
+  entity_attr_count : int_array entity_count
 
   --
   -- attr {
-  --   id    : word
-  --   count : word
+  --   id    : int
+  --   count : int
   -- }
   --
   -- invariant: attr_count == sum entity_attr_count
   -- invariant: attr_ids are sorted for each entity
   --
   attr_count    : u32
-  attr_id       : word_array attr_count
-  attr_id_count : word_array attr_count
+  attr_id       : int_array attr_count
+  attr_id_count : int_array attr_count
 
   --
   -- value {
-  --   time         : word
-  --   is_tombstone : word
+  --   time         : int
+  --   is_tombstone : int
   -- }
   --
   -- invariant: value_count == sum attr_id_count
   --
   value_count      : u32
   value_time_epoch : u64
-  value_time_delta : word_array value_count
-  value_tombstone  : word_array value_count
+  value_time_delta : int_array value_count
+  value_tombstone  : int_array value_count
 
   --
   -- data {
-  --   attr_id : word
-  --   count   : word
-  --   size    : word
+  --   attr_id : int
+  --   count   : int
+  --   size    : int
   --   value   : array of ?
   -- }
   --
@@ -134,9 +134,9 @@ block {
   -- invariant: data_id contains all ids referenced by attr_ids
   --
   data_count    : u32
-  data_id       : word_array data_count
-  data_id_count : word_array data_count
-  data_size     : word_array data_count
+  data_id       : int_array data_count
+  data_id_count : int_array data_count
+  data_size     : int_array data_count
   data_value    : ?
 }
 
@@ -151,11 +151,11 @@ byte_array {
 }
 
 --
--- Word arrays pack sets of 64 integers in to BP64 encoded chunks. If
+-- Int arrays pack sets of 64 integers in to BP64 encoded chunks. If
 -- there isn't an exact multiple of 64 then the overflow integers are
 -- stored after the chunks and encoded using VByte.
 --
-word_array n {
+int_array n {
   size    : u32
   nbits   : (n `div` 64) x u8
   parts   : map bp64 nbits
@@ -220,15 +220,15 @@ struct Goat {
 ### Schema - Encoded
 
 ```
-ape   : w
-bat   : w
+ape   : i
+bat   : i
 cobra : d
 dog   : [b]
-eagle : [w]
+eagle : [i]
 fish  : [[b]]
-goat  : [b]ww
-hawk  : [[b]w[[b]ww]]
-ibis  : [[w]]
+goat  : [b]ii
+hawk  : [[b]i[[b]ii]]
+ibis  : [[i]]
 ```
 
 ### Facts
@@ -342,7 +342,7 @@ E2|dog|NA|2016-03-01
   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
   ~               | attr_schema_string.bytes : 37 x u8 =          ~ 100
   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-  ~                   "wwd[b][w][[b]][b]ww[[b]w[[b]ww]][[w]]"     ~ 104
+  ~                   "iid[b][i][[b]][b]ii[[b]i[[b]ii]][[i]]"     ~ 104
   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
   ~                                                               ~ 108
   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
@@ -498,19 +498,19 @@ E2|dog|NA|2016-03-01
 
   Which is described as:
 
-    [[b]w[[b]ww]]
+    [[b]i[[b]ii]]
 
   And encoded as:
 
-    h_len        : word_array
-    h_name_len   : word_array
+    h_len        : int_array
+    h_name_len   : int_array
     h_name_bs    : byte_array
-    h_height     : word_array
-    hg_len       : word_array
-    hg_name_len  : word_array
+    h_height     : int_array
+    hg_len       : int_array
+    hg_name_len  : int_array
     hg_name_bs   : byte_array
-    hg_legs_some : word_array
-    hg_legs_val  : word_array
+    hg_legs_some : int_array
+    hg_legs_val  : int_array
 
   So, given the following data:
 

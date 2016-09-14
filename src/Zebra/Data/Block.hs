@@ -30,15 +30,15 @@ import           Zebra.Data.Encoding
 import           Zebra.Data.Entity
 import           Zebra.Data.Fact
 import           Zebra.Data.Index
-import           Zebra.Data.Record
-import           Zebra.Data.Record.Mutable
+import           Zebra.Data.Table
+import           Zebra.Data.Table.Mutable
 
 
 data Block =
   Block {
       blockEntities :: !(Boxed.Vector Entity)
     , blockIndices :: !(Unboxed.Vector Index)
-    , blockRecords :: !(Boxed.Vector Record)
+    , blockTables :: !(Boxed.Vector Table)
     } deriving (Eq, Ord, Show, Generic, Typeable)
 
 data FactError =
@@ -52,7 +52,7 @@ data FactError =
 
 blockOfFacts :: Boxed.Vector Encoding -> Boxed.Vector Fact -> Either MutableError Block
 blockOfFacts encodings facts =
-  Block (entitiesOfFacts facts) (indicesOfFacts facts) <$> recordsOfFacts encodings facts
+  Block (entitiesOfFacts facts) (indicesOfFacts facts) <$> tablesOfFacts encodings facts
 
 factsOfBlock :: Boxed.Vector Encoding -> Block -> Either FactError (Boxed.Vector Fact)
 factsOfBlock encodings block = do
@@ -61,10 +61,10 @@ factsOfBlock encodings block = do
       blockEntities block
     indices =
       blockIndices block
-    records =
-      blockRecords block
+    tables =
+      blockTables block
 
-  values <- first FactValueError $ Boxed.zipWithM valuesOfRecord encodings records
+  values <- first FactValueError $ Boxed.zipWithM valuesOfTable encodings tables
 
   let
     (result, ValueState indices' values') =

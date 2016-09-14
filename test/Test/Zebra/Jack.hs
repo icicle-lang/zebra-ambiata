@@ -29,10 +29,10 @@ module Test.Zebra.Jack (
   , jIndex
   , jTombstone
 
-  -- * Zebra.Data.Record
-  , jRecord
-  , jRecord'
-  , jField
+  -- * Zebra.Data.Table
+  , jTable
+  , jTable'
+  , jColumn
 
   -- * Zebra.Data.Schema
   , jSchema
@@ -65,8 +65,8 @@ import           Zebra.Data.Encoding
 import           Zebra.Data.Entity
 import           Zebra.Data.Fact
 import           Zebra.Data.Index
-import           Zebra.Data.Record
 import           Zebra.Data.Schema
+import           Zebra.Data.Table
 
 
 jSchema :: Jack Schema
@@ -76,11 +76,11 @@ jSchema =
 jFormat :: Jack Format
 jFormat =
   oneOfRec [
-      pure WordFormat
+      pure IntFormat
     , pure ByteFormat
     , pure DoubleFormat
     ] [
-      ListFormat <$> jSchema
+      ArrayFormat <$> jSchema
     ]
 
 jEncoding :: Jack Encoding
@@ -184,7 +184,7 @@ jBlock =
   Block
     <$> (Boxed.fromList <$> listOf jEntity)
     <*> (Unboxed.fromList <$> listOf jIndex)
-    <*> (Boxed.fromList <$> listOf jRecord)
+    <*> (Boxed.fromList <$> listOf jTable)
 
 jEntityHashId :: Jack (EntityHash, EntityId)
 jEntityHashId =
@@ -220,27 +220,27 @@ jTombstone =
     , Tombstone
     ]
 
-jRecord :: Jack Record
-jRecord =
+jTable :: Jack Table
+jTable =
   sized $ \size -> do
     n <- chooseInt (0, size)
-    jRecord' n
+    jTable' n
 
-jRecord' :: Int -> Jack Record
-jRecord' n =
+jTable' :: Int -> Jack Table
+jTable' n =
   sized $ \size ->
-    Record . Boxed.fromList <$> listOfN 0 (size `div` 10) (jField n)
+    Table . Boxed.fromList <$> listOfN 0 (size `div` 10) (jColumn n)
 
-jField :: Int -> Jack Field
-jField n =
+jColumn :: Int -> Jack Column
+jColumn n =
   oneOfRec [
-      ByteField . B.pack <$> listOfN n n arbitrary
-    , WordField . Storable.fromList <$> listOfN n n arbitrary
-    , DoubleField . Storable.fromList <$> listOfN n n arbitrary
+      ByteColumn . B.pack <$> listOfN n n arbitrary
+    , IntColumn . Storable.fromList <$> listOfN n n arbitrary
+    , DoubleColumn . Storable.fromList <$> listOfN n n arbitrary
     ] [
       sized $ \m -> do
         ms <- listOfN n n $ chooseInt (0, m `div` 10)
-        ListField (Storable.fromList . fmap fromIntegral $ ms) <$> jRecord' (sum ms)
+        ArrayColumn (Storable.fromList . fmap fromIntegral $ ms) <$> jTable' (sum ms)
     ]
 
 jMaybe' :: Jack a -> Jack (Maybe' a)

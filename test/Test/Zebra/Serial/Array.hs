@@ -28,10 +28,10 @@ prop_roundtrip_bytes =
   gamble arbitrary $
     trippingSerial bByteArray getByteArray
 
-prop_roundtrip_words :: Property
-prop_roundtrip_words =
+prop_roundtrip_ints :: Property
+prop_roundtrip_ints =
   gamble (Storable.fromList <$> listOf sizedBounded) $ \xs ->
-    trippingSerial bWordArray (getWordArray $ Storable.length xs) xs
+    trippingSerial bIntArray (getIntArray $ Storable.length xs) xs
 
 return []
 tests :: IO Bool

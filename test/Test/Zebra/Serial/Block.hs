@@ -21,8 +21,8 @@ import           Text.Show.Pretty (ppShow)
 
 import           Zebra.Data.Block
 import           Zebra.Data.Fact
-import           Zebra.Data.Record
 import           Zebra.Data.Schema
+import           Zebra.Data.Table
 import           Zebra.Serial.Block
 
 
@@ -48,7 +48,7 @@ prop_roundtrip_from_facts =
 prop_roundtrip_block :: Property
 prop_roundtrip_block =
   gamble jBlock $ \block ->
-    trippingSerial bBlock (getBlock . fmap schemaOfRecord $ blockRecords block) block
+    trippingSerial bBlock (getBlock . fmap schemaOfTable $ blockTables block) block
 
 prop_roundtrip_entities :: Property
 prop_roundtrip_entities =
@@ -65,20 +65,20 @@ prop_roundtrip_indices =
   gamble (Unboxed.fromList <$> listOf jIndex) $
     trippingSerial bIndices getIndices
 
-prop_roundtrip_records :: Property
-prop_roundtrip_records =
-  gamble (Boxed.fromList <$> listOf jRecord) $ \xs ->
-    trippingSerial bRecords (getRecords $ fmap schemaOfRecord xs) xs
+prop_roundtrip_tables :: Property
+prop_roundtrip_tables =
+  gamble (Boxed.fromList <$> listOf jTable) $ \xs ->
+    trippingSerial bTables (getTables $ fmap schemaOfTable xs) xs
 
-prop_roundtrip_record :: Property
-prop_roundtrip_record =
-  gamble (jRecord' 1) $ \record ->
-    trippingSerial bRecord (getRecord 1 $ schemaOfRecord record) record
+prop_roundtrip_table :: Property
+prop_roundtrip_table =
+  gamble (jTable' 1) $ \table ->
+    trippingSerial bTable (getTable 1 $ schemaOfTable table) table
 
-prop_roundtrip_field :: Property
-prop_roundtrip_field =
-  gamble (jField 1) $ \field ->
-    trippingSerial bField (getField 1 $ schemaOfField field) field
+prop_roundtrip_column :: Property
+prop_roundtrip_column =
+  gamble (jColumn 1) $ \column ->
+    trippingSerial bColumn (getColumn 1 $ schemaOfColumn column) column
 
 return []
 tests :: IO Bool

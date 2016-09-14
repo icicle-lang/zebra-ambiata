@@ -79,8 +79,8 @@ prop_entitiesOfBlock_indices =
    = Boxed.convert
    $ blockIndices block
 
-prop_entitiesOfBlock_records_1_entity :: Property
-prop_entitiesOfBlock_records_1_entity =
+prop_entitiesOfBlock_tables_1_entity :: Property
+prop_entitiesOfBlock_tables_1_entity =
   gamble jEncodings $ \encs ->
   gamble (jFactsFor encs) $ \facts ->
   gamble jEntityHashId $ \(ehash,eid) ->
@@ -91,23 +91,23 @@ prop_entitiesOfBlock_records_1_entity =
   in  ppCounter "Block" block
     $ ppCounter "Entities" es
     ( length facts > 0
-    ==> Boxed.concatMap id (getFakeRecordValues es) === blockRecords block )
+    ==> Boxed.concatMap id (getFakeTableValues es) === blockTables block )
 
-getFakeRecordValues :: Boxed.Vector EntityValues -> Boxed.Vector (Boxed.Vector Record)
-getFakeRecordValues = fmap (fmap (Map.! fakeBlockId) . evRecords)
+getFakeTableValues :: Boxed.Vector EntityValues -> Boxed.Vector (Boxed.Vector Table)
+getFakeTableValues = fmap (fmap (Map.! fakeBlockId) . evTables)
 
-prop_mergeEntityRecords_1_block :: Property
-prop_mergeEntityRecords_1_block =
+prop_mergeEntityTables_1_block :: Property
+prop_mergeEntityTables_1_block =
   gamble jBlockValid $ \block ->
   let es = entitiesOfBlock' fakeBlockId block
-      recs_l = mapM mergeEntityRecords es
+      recs_l = mapM mergeEntityTables es
 
-      recs_r = getFakeRecordValues es
+      recs_r = getFakeTableValues es
   in  ppCounter "Entities" es (recs_l === Right recs_r)
 
 
-prop_mergeEntityRecords_2_blocks :: Property
-prop_mergeEntityRecords_2_blocks =
+prop_mergeEntityTables_2_blocks :: Property
+prop_mergeEntityTables_2_blocks =
   gamble jEncodings $ \encs ->
   gamble (jFactsFor encs) $ \f1 ->
   gamble (jFactsFor encs) $ \f2 ->

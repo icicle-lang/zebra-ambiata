@@ -17,7 +17,8 @@ import           Text.Show.Pretty (ppShow)
 
 import           Zebra.Data.Block
 import           Zebra.Data.Fact
-import           Zebra.Data.Record.Mutable
+import           Zebra.Data.Table.Mutable
+
 
 prop_roundtrip_facts :: Property
 prop_roundtrip_facts =
@@ -31,12 +32,12 @@ prop_roundtrip_facts =
         Boxed.fromList facts
     in
       trippingBoth
-        (first RecordError . blockOfFacts encodings)
+        (first TableError . blockOfFacts encodings)
         (first FactError . factsOfBlock encodings)
         input
 
 data SomeError =
-    RecordError !MutableError
+    TableError !MutableError
   | FactError !FactError
     deriving (Eq, Show)
 

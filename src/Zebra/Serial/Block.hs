@@ -16,12 +16,12 @@ module Zebra.Serial.Block (
   , bIndices
   , getIndices
 
-  , bRecords
-  , bRecord
-  , bField
-  , getRecords
-  , getRecord
-  , getField
+  , bTables
+  , bTable
+  , bColumn
+  , getTables
+  , getTable
+  , getColumn
   ) where
 
 import           Data.Binary.Get (Get)
@@ -42,7 +42,7 @@ import           Zebra.Data.Block
 import           Zebra.Data.Entity
 import           Zebra.Data.Fact
 import           Zebra.Data.Index
-import           Zebra.Data.Record
+import           Zebra.Data.Table
 import           Zebra.Data.Schema
 import           Zebra.Serial.Array
 
@@ -53,15 +53,15 @@ bBlock :: Block -> Builder
 bBlock block =
   bEntities (blockEntities block) <>
   bIndices (blockIndices block) <>
-  bRecords (blockRecords block)
+  bTables (blockTables block)
 
 getBlock :: Boxed.Vector Schema -> Get Block
 getBlock schemas = do
   entities <- getEntities
   indices <- getIndices
-  records <- getRecords schemas
+  tables <- getTables schemas
   pure $
-    Block entities indices records
+    Block entities indices tables
 
 -- | Encode the entities for a zebra block.
 --
@@ -70,9 +70,9 @@ getBlock schemas = do
 --
 -- @
 --   entity {
---     hash    : word
+--     hash    : int
 --     id      : string
---     n_attrs : word
+--     n_attrs : int
 --   }
 -- @
 --
@@ -80,10 +80,10 @@ getBlock schemas = do
 --
 -- @
 --   entity_count      : u32
---   entity_id_hash    : word_array entity_count
---   entity_id_length  : word_array entity_count
+--   entity_id_hash    : int_array entity_count
+--   entity_id_length  : int_array entity_count
 --   entity_id_string  : byte_array
---   entity_attr_count : word_array entity_count
+--   entity_attr_count : int_array entity_count
 -- @
 --
 --   Entities are then followed by the attributes for the block, see
@@ -110,17 +110,17 @@ bEntities xs =
       Stream.streamOfVector xs
   in
     Build.word32LE ecount <>
-    bWordArray hashes <>
+    bIntArray hashes <>
     bStrings ids <>
-    bWordArray acounts <>
+    bIntArray acounts <>
     bAttributes attributes
 
 getEntities :: Get (Boxed.Vector Entity)
 getEntities = do
   ecount <- fromIntegral <$> Get.getWord32le
-  hashes <- fmap (EntityHash . fromIntegral) . Boxed.convert <$> getWordArray ecount
+  hashes <- fmap (EntityHash . fromIntegral) . Boxed.convert <$> getIntArray ecount
   ids <- fmap EntityId <$> getStrings ecount
-  acounts <- Unboxed.map fromIntegral . Unboxed.convert <$> getWordArray ecount
+  acounts <- Unboxed.map fromIntegral . Unboxed.convert <$> getIntArray ecount
   attributes <- Generic.unsafeSplits id <$> getAttributes <*> pure acounts
   pure $
     Boxed.zipWith3 Entity hashes ids attributes
@@ -132,8 +132,8 @@ getEntities = do
 --
 -- @
 --   attr {
---     id    : word
---     count : word
+--     id    : int
+--     count : int
 --   }
 -- @
 --
@@ -141,8 +141,8 @@ getEntities = do
 --
 -- @
 --   attr_count    : u32
---   attr_id       : word_array attr_count
---   attr_id_count : word_array attr_count
+--   attr_id       : int_array attr_count
+--   attr_id_count : int_array attr_count
 -- @
 --
 --   /invariant: attr_count == sum entity_attr_count/
@@ -161,30 +161,30 @@ bAttributes xs =
 
     counts =
       Unboxed.convert $
-      Unboxed.map (fromIntegral . attributeRecords) xs
+      Unboxed.map (fromIntegral . attributeRows) xs
   in
     Build.word32LE acount <>
-    bWordArray ids <>
-    bWordArray counts
+    bIntArray ids <>
+    bIntArray counts
 
 getAttributes :: Get (Unboxed.Vector Attribute)
 getAttributes = do
   acount <- fromIntegral <$> Get.getWord32le
-  ids <- Unboxed.map (AttributeId . fromIntegral) . Unboxed.convert <$> getWordArray acount
-  counts <- Unboxed.map fromIntegral . Unboxed.convert <$> getWordArray acount
+  ids <- Unboxed.map (AttributeId . fromIntegral) . Unboxed.convert <$> getIntArray acount
+  counts <- Unboxed.map fromIntegral . Unboxed.convert <$> getIntArray acount
   pure $
     Unboxed.zipWith Attribute ids counts
 
--- | Encode the record index for a zebra block.
+-- | Encode the table index for a zebra block.
 --
 --   Indices are encoded as a data flattened version of the following logical
 --   structure:
 --
 -- @
 --   index {
---     time         : word
---     priority     : word
---     is_tombstone : word
+--     time         : int
+--     priority     : int
+--     is_tombstone : int
 --   }
 -- @
 --
@@ -193,9 +193,9 @@ getAttributes = do
 -- @
 --   index_count      : u32
 --   index_time_epoch : u64
---   index_time_delta : word_array value_count
---   index_priority   : word_array value_count
---   index_tombstone  : word_array value_count
+--   index_time_delta : int_array value_count
+--   index_priority   : int_array value_count
+--   index_tombstone  : int_array value_count
 -- @
 --
 --   /invariant: index_count == sum attr_id_count/
@@ -229,17 +229,17 @@ bIndices xs =
   in
     Build.word32LE icount <>
     Build.int64LE iepoch <>
-    bWordArray deltas <>
-    bWordArray priorities <>
-    bWordArray tombstones
+    bIntArray deltas <>
+    bIntArray priorities <>
+    bIntArray tombstones
 
 getIndices :: Get (Unboxed.Vector Index)
 getIndices = do
   icount <- fromIntegral <$> Get.getWord32le
   iepoch <- fromIntegral <$> Get.getWord64le
-  wdeltas <- getWordArray icount
-  wpriorities <- getWordArray icount
-  wtombstones <- getWordArray icount
+  wdeltas <- getIntArray icount
+  wpriorities <- getIntArray icount
+  wtombstones <- getIntArray icount
 
   let
     times =
@@ -256,40 +256,39 @@ getIndices = do
 
   pure $ Unboxed.zipWith3 Index times priorities tombstones
 
--- | Encode the record data for a zebra block.
+-- | Encode the table data for a zebra block.
 --
---   Records are encoded as a data flattened version of the following logical
+--   Tables are encoded as a data flattened version of the following logical
 --   structure:
 --
 -- @
---   record {
---     attr_id : word
---     count   : word
---     size    : word
---     data    : array of ?
+--   table {
+--     attr_id   : int
+--     row_count : int
+--     data      : array of ?
 --   }
 -- @
 --
---   'record_data' contains flattened arrays of values, exactly how many arrays
+--   'table_data' contains flattened arrays of values, exactly how many arrays
 --   and what format is described by the schema in the header.
 --
 -- @
---   record_count    : u32
---   record_id       : word_array record_count
---   record_id_count : word_array record_count
---   record_data     : ?
+--   table_count     : u32
+--   table_id        : int_array table_count
+--   table_row_count : int_array table_count
+--   table_data      : ?
 -- @
 --
---   /invariant: record_count == count of unique attr_ids/
---   /invariant: record_id contains all ids referenced by attr_ids/
+--   /invariant: table_count == count of unique attr_ids/
+--   /invariant: table_id contains all ids referenced by attr_ids/
 --
-bRecords :: Boxed.Vector Record -> Builder
-bRecords xs =
+bTables :: Boxed.Vector Table -> Builder
+bTables xs =
   let
     n =
       Boxed.length xs
 
-    rcount =
+    tcount =
       fromIntegral n
 
     ids =
@@ -298,61 +297,61 @@ bRecords xs =
 
     counts =
       Storable.convert $
-      fmap (fromIntegral . lengthOfRecord) xs
+      fmap (fromIntegral . rowsOfTable) xs
   in
-    Build.word32LE rcount <>
-    bWordArray ids <>
-    bWordArray counts <>
-    foldMap bRecord xs
+    Build.word32LE tcount <>
+    bIntArray ids <>
+    bIntArray counts <>
+    foldMap bTable xs
 
-getRecords :: Boxed.Vector Schema -> Get (Boxed.Vector Record)
-getRecords schemas = do
-  rcount <- fromIntegral <$> Get.getWord32le
-  ids <- fmap fromIntegral . Boxed.convert <$> getWordArray rcount
-  counts <- fmap fromIntegral . Boxed.convert <$> getWordArray rcount
+getTables :: Boxed.Vector Schema -> Get (Boxed.Vector Table)
+getTables schemas = do
+  tcount <- fromIntegral <$> Get.getWord32le
+  ids <- fmap fromIntegral . Boxed.convert <$> getIntArray tcount
+  counts <- fmap fromIntegral . Boxed.convert <$> getIntArray tcount
 
   let
     get aid n =
       case schemas Boxed.!? aid of
         Nothing ->
-          fail $ "Cannot read record, unknown attribute-id: " <> show aid
+          fail $ "Cannot read table, unknown attribute-id: " <> show aid
         Just schema ->
-          getRecord n schema
+          getTable n schema
 
   Boxed.zipWithM get ids counts
 
-bRecord :: Record -> Builder
-bRecord =
-  foldMap bField . recordFields
+bTable :: Table -> Builder
+bTable =
+  foldMap bColumn . tableColumns
 
-getRecord :: Int -> Schema -> Get Record
-getRecord n (Schema fmts) = do
-  Record . Boxed.fromList <$> traverse (getField n) fmts
+getTable :: Int -> Schema -> Get Table
+getTable n (Schema fmts) = do
+  Table . Boxed.fromList <$> traverse (getColumn n) fmts
 
-bField :: Field -> Builder
-bField = \case
-  ByteField bs ->
+bColumn :: Column -> Builder
+bColumn = \case
+  ByteColumn bs ->
     bByteArray bs
-  WordField xs ->
-    bWordArray xs
-  DoubleField xs ->
-    bWordArray $ coerce xs
-  ListField ns rec ->
-    bWordArray ns <>
-    Build.word32LE (fromIntegral $ lengthOfRecord rec) <>
-    bRecord rec
+  IntColumn xs ->
+    bIntArray xs
+  DoubleColumn xs ->
+    bIntArray $ coerce xs
+  ArrayColumn ns rec ->
+    bIntArray ns <>
+    Build.word32LE (fromIntegral $ rowsOfTable rec) <>
+    bTable rec
 
-getField :: Int -> Format -> Get Field
-getField n = \case
+getColumn :: Int -> Format -> Get Column
+getColumn n = \case
   ByteFormat ->
-    ByteField <$> getByteArray
-  WordFormat ->
-    WordField <$> getWordArray n
+    ByteColumn <$> getByteArray
+  IntFormat ->
+    IntColumn <$> getIntArray n
   DoubleFormat ->
-    DoubleField . coerce <$> getWordArray n
-  ListFormat schema -> do
-    ns <- getWordArray n
-    m <- Get.getWord32le
-    rec <- getRecord (fromIntegral m) schema
+    DoubleColumn . coerce <$> getIntArray n
+  ArrayFormat schema -> do
+    ns <- getIntArray n
+    rows <- Get.getWord32le
+    rec <- getTable (fromIntegral rows) schema
     pure $
-      ListField ns rec
+      ArrayColumn ns rec

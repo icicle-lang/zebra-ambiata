@@ -50,8 +50,8 @@ library
                     Zebra.Data.Entity
                     Zebra.Data.Fact
                     Zebra.Data.Index
-                    Zebra.Data.Record
-                    Zebra.Data.Record.Mutable
+                    Zebra.Data.Table
+                    Zebra.Data.Table.Mutable
                     Zebra.Data.Schema
                     Zebra.Merge.Base
                     Zebra.Merge.Block

@@ -2,11 +2,11 @@
 module Zebra.Serial.Array (
     bStrings
   , bByteArray
-  , bWordArray
+  , bIntArray
 
   , getStrings
   , getByteArray
-  , getWordArray
+  , getIntArray
   ) where
 
 import           Anemone.Foreign.Pack (Packed64(..))
@@ -18,8 +18,8 @@ import           Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import           Data.ByteString.Builder (Builder)
 import qualified Data.ByteString.Builder as Build
+import           Data.Coerce (coerce)
 import qualified Data.List as List
-import           Data.Word (Word64)
 
 import           P
 
@@ -38,7 +38,7 @@ bStrings :: Boxed.Vector ByteString -> Builder
 bStrings bss =
   let
     lengths =
-      bWordArray .
+      bIntArray .
       Storable.convert $
       fmap (fromIntegral . B.length) bss
 
@@ -52,7 +52,7 @@ bStrings bss =
 
 getStrings :: Int -> Get (Boxed.Vector ByteString)
 getStrings n = do
-  lengths <- getWordArray n
+  lengths <- getIntArray n
   bytes <- getByteArray
   pure .
     unsafeSplits id bytes $
@@ -101,7 +101,7 @@ getByteArray = do
 --   the chunks and encoded using VByte.
 --
 -- @
---   word_array n {
+--   int_array n {
 --     size    : u32
 --     nbits   : (n `div` 64) x u8
 --     parts   : map bp64 nbits
@@ -109,32 +109,37 @@ getByteArray = do
 --   }
 -- @
 --
-bWordArray :: Storable.Vector Word64 -> Builder
-bWordArray xs =
+bIntArray :: Storable.Vector Int64 -> Builder
+bIntArray xs0 =
   let
+    -- TODO zig-zag encoding
+    -- TODO offset/delta encoding
+    xs =
+      coerce xs0
+
     n =
       Storable.length xs
 
     (n_parts, n_remains) =
-      n `quotRem` wordPartSize
+      n `quotRem` intPartSize
 
     impossible :: Packed64
     impossible =
       Savage.error $
-        "Blizzard.Zebra.Header.bWordArray: " <>
+        "Blizzard.Zebra.Header.bIntArray: " <>
         "internal error, can only pack multiples " <>
         "of 64, tried to pack <" <> show n <> ">"
 
     pack :: Int -> Maybe Packed64
     pack ix =
       Anemone.pack64 $
-      Storable.slice ix wordPartSize xs
+      Storable.slice ix intPartSize xs
 
     packs :: [Packed64]
     packs =
       fmap (maybe impossible id . pack) .
       List.take n_parts $
-      List.iterate (+ wordPartSize) 0
+      List.iterate (+ intPartSize) 0
 
     nbits :: Builder
     nbits =
@@ -154,7 +159,7 @@ bWordArray xs =
     size =
       Build.word32LE . fromIntegral $
         length packs +
-        wordSize * sum (fmap packedBits packs) +
+        intSize * sum (fmap packedBits packs) +
         (8 * n_remains) -- TODO should be vint, not u64
   in
     size <>
@@ -162,13 +167,13 @@ bWordArray xs =
     parts <>
     remains
 
-getWordArray :: Int -> Get (Storable.Vector Word64)
-getWordArray n = do
+getIntArray :: Int -> Get (Storable.Vector Int64)
+getIntArray n = do
   size <- fromIntegral <$> Get.getWord32le
   Get.isolate size $ do
     let
       (n_parts, n_remains) =
-        n `quotRem` wordPartSize
+        n `quotRem` intPartSize
 
       unpack nbits bs =
         case Anemone.unpack64 $ Packed64 1 nbits bs of
@@ -178,17 +183,17 @@ getWordArray n = do
             pure xs
 
     nbits <- replicateM n_parts $ fmap fromIntegral Get.getWord8
-    parts <- traverse (Get.getByteString . (* wordSize)) nbits
+    parts <- traverse (Get.getByteString . (* intSize)) nbits
     remains <- Storable.replicateM n_remains Get.getWord64le
     words <- zipWithM unpack nbits parts
 
-    pure .
+    pure . coerce .
       Storable.concat $ words <> [remains]
 
-wordPartSize :: Int
-wordPartSize =
+intPartSize :: Int
+intPartSize =
   64
 
-wordSize :: Int
-wordSize =
+intSize :: Int
+intSize =
   8
