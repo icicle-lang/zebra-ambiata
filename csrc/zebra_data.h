@@ -73,4 +73,16 @@ error_t add_row (
   , zebra_column_t **out_columns
   , int64_t *out_index );
 
+
+error_t grow_column (
+    zebra_column_t *column
+  , int64_t old_capacity
+  , int64_t new_capacity );
+
+error_t grow_table (
+    zebra_table_t *table );
+
+error_t grow_attribute (
+    zebra_attribute_t *attribute );
+
 #endif//__ZEBRA_DATA_H

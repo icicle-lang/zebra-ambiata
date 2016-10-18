@@ -2,7 +2,7 @@
 
 error_t merge_append_table (zebra_table_t *in, int64_t ix, zebra_table_t *out, int64_t out_ix);
 
-error_t merge_append_column (zebra_column_t *in, int64_t ix, zebra_column_t *out, int64_t out_ix)
+error_t merge_append_column (zebra_column_t *in, int64_t in_ix, zebra_column_t *out, int64_t out_ix)
 {
     error_t err;
 
@@ -11,56 +11,58 @@ error_t merge_append_column (zebra_column_t *in, int64_t ix, zebra_column_t *out
 
     switch (in->type) {
         case ZEBRA_BYTE:
-            out->b[out_ix] = in->b[in_ix];
+            out->data.b[out_ix] = in->data.b[in_ix];
             return ZEBRA_SUCCESS;
 
         case ZEBRA_INT:
-            out->i[out_ix] = in->i[in_ix];
+            out->data.i[out_ix] = in->data.i[in_ix];
             return ZEBRA_SUCCESS;
 
         case ZEBRA_DOUBLE:
-            out->d[out_ix] = in->d[in_ix];
+            out->data.d[out_ix] = in->data.d[in_ix];
             return ZEBRA_SUCCESS;
 
         case ZEBRA_ARRAY:
+            {
+                // find value start indices by summing array lengths
+                // this could be better if we stored this somewhere rather than recomputing each time
+                int64_t value_count = in->data.a.n[in_ix];
+                int64_t value_in_ix = 0;
+                int64_t value_out_ix = 0;
+                for (int64_t i = 0; i < in_ix; ++i) {
+                    value_in_ix += in->data.a.n[i];
+                }
+                for (int64_t o = 0; o < out_ix; ++o) {
+                    value_out_ix += out->data.a.n[o];
+                }
 
-            // find value start indices by summing array lengths
-            // this could be better if we stored this somewhere rather than recomputing each time
-            int64_t value_count = in->a.n[in_ix];
-            int64_t value_in_ix = 0;
-            int64_t value_out_ix = 0;
-            for (int64_t i = 0; i < in_ix; ++i) {
-                value_in_ix += in->a.n[i];
-            }
-            for (int64_t o = 0; o < out_ix; ++o) {
-                value_out_ix += out->a.n[o];
-            }
+                out->data.a.n[out_ix] = value_count;
+                // copy each value separately. this could be a lot better.
+                // merge_append_* should copy multiple values & grow once at start.
+                for (int64_t v = 0; v < value_count; ++v) {
+                    out->data.a.table.row_count++;
+                    grow_table (&out->data.a.table);
 
-            out->a.n[out_ix] = value_count;
-            // copy each value separately. this could be a lot better.
-            // merge_append_* should copy multiple values & grow once at start.
-            for (int64_t v = 0; v < value_count; ++v) {
-                out->a.table.row_count++;
-                grow_table (out->a.table);
+                    err = merge_append_table (&in->data.a.table, value_in_ix, &out->data.a.table, value_out_ix);
+                    if (err) return err;
+                    value_in_ix++;
+                    value_out_ix++;
+                }
 
-                merge_append_table (in->a.table, value_in_ix, out->a.table, value_out_ix);
-                value_in_ix++;
-                value_out_ix++;
+                return ZEBRA_SUCCESS;
             }
-            
-            return ZEBRA_SUCCESS;
 
         default:
             return ZEBRA_INVALID_COLUMN_TYPE;
     }
 }
 
-error_t merge_append_table (zebra_table_t *in, int64_t ix, zebra_table_t *out, int64_t out_ix)
+error_t merge_append_table (zebra_table_t *in, int64_t in_ix, zebra_table_t *out, int64_t out_ix)
 {
     error_t err;
 
     for (int64_t c = 0; c < in->column_count; ++c) {
-        err = merge_append_column (in->columns + c, ix, out->columns + c, out_ix);
+        err = merge_append_column (in->columns + c, in_ix, out->columns + c, out_ix);
         if (err) return err;
     }
     return ZEBRA_SUCCESS;
@@ -146,7 +148,7 @@ error_t empty_table (zebra_table_t *in, zebra_table_t *out)
         zebra_type_t type = in->columns[c].type;
         out->columns[c].type = type;
         if (type == ZEBRA_ARRAY) {
-            empty_table (&in->columns[c].data.table, &out->columns[c].data.table);
+            empty_table (&in->columns[c].data.a.table, &out->columns[c].data.a.table);
         }
     }
     return ZEBRA_SUCCESS;

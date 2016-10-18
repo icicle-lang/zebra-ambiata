@@ -92,7 +92,7 @@ static void* grow_array (void *old, size_t size, int64_t old_capacity, int64_t n
     return new;
 }
 
-static error_t grow_column (zebra_column_t *column, int64_t old_capacity, int64_t new_capacity)
+error_t grow_column (zebra_column_t *column, int64_t old_capacity, int64_t new_capacity)
 {
     zebra_type_t type = column->type;
     zebra_data_t *data = &column->data;
@@ -119,7 +119,7 @@ static error_t grow_column (zebra_column_t *column, int64_t old_capacity, int64_
     }
 }
 
-static error_t grow_table (zebra_table_t *table)
+error_t grow_table (zebra_table_t *table)
 {
     int64_t row_count = table->row_count;
     int64_t row_capacity = table->row_capacity;
@@ -154,7 +154,7 @@ static error_t grow_table (zebra_table_t *table)
     return ZEBRA_SUCCESS;
 }
 
-static error_t grow_attribute (zebra_attribute_t *attribute)
+error_t grow_attribute (zebra_attribute_t *attribute)
 {
     zebra_table_t *table = &attribute->table;
     int64_t old_capacity = table->row_capacity;
