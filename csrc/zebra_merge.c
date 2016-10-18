@@ -85,13 +85,13 @@ error_t merge_append_attribute (zebra_attribute_t *in, int64_t ix, zebra_attribu
     return merge_append_table (&in->table, ix, &out->table, out_ix);
 }
 
-error_t empty_attribute (zebra_attribute_t *in, zebra_attribute_t **out);
+error_t empty_attribute (anemone_mempool_t *pool, zebra_attribute_t *in, zebra_attribute_t **out);
 
-error_t merge_attribute (zebra_attribute_t *in1, zebra_attribute_t *in2, zebra_attribute_t **out)
+error_t merge_attribute (anemone_mempool_t *pool, zebra_attribute_t *in1, zebra_attribute_t *in2, zebra_attribute_t **out)
 {
     error_t err;
 
-    err = empty_attribute (in1, out);
+    err = empty_attribute (pool, in1, out);
     if (err) return err;
 
     zebra_attribute_t *attr = *out;
@@ -139,11 +139,11 @@ error_t merge_attribute (zebra_attribute_t *in1, zebra_attribute_t *in2, zebra_a
     return ZEBRA_SUCCESS;
 }
 
-error_t empty_table (zebra_table_t *in, zebra_table_t *out)
+error_t empty_table (anemone_mempool_t *pool, zebra_table_t *in, zebra_table_t *out)
 {
     int64_t count = in->column_count;
     out->column_count = count;
-    out->columns = calloc (count, sizeof(zebra_column_t));
+    out->columns = anemone_mempool_calloc (pool, count, sizeof(zebra_column_t));
     for (int64_t c = 0; c < count; ++c) {
         zebra_type_t type = in->columns[c].type;
         out->columns[c].type = type;
@@ -154,11 +154,11 @@ error_t empty_table (zebra_table_t *in, zebra_table_t *out)
     return ZEBRA_SUCCESS;
 }
 
-error_t empty_attribute (zebra_attribute_t *in, zebra_attribute_t **out)
+error_t empty_attribute (anemone_mempool_t *pool, zebra_attribute_t *in, zebra_attribute_t **out)
 {
     error_t err;
 
-    zebra_attribute_t *attr = calloc (1, sizeof(zebra_attribute_t));
+    zebra_attribute_t *attr = anemone_mempool_calloc (pool, 1, sizeof(zebra_attribute_t));
 
     err = empty_table (&in->table, &attr->table);
     if (err) return err;
