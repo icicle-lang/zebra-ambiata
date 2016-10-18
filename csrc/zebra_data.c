@@ -27,7 +27,8 @@ static error_t read_uint8 (const uint8_t **pp, const uint8_t *pe, uint8_t *out)
 }
 
 error_t alloc_table (
-    zebra_table_t *table
+    anemone_mempool_t *pool
+  , zebra_table_t *table
   , const uint8_t **pp_schema
   , const uint8_t *pe_schema )
 {
@@ -37,7 +38,7 @@ error_t alloc_table (
     err = read_int32 (pp_schema, pe_schema, &column_count);
     if (err) return err;
 
-    zebra_column_t *columns = calloc (column_count, sizeof (zebra_column_t));
+    zebra_column_t *columns = anemone_mempool_calloc (pool, column_count, sizeof (zebra_column_t));
 
     for (int32_t i = 0; i < column_count; i++) {
         uint8_t type_code;
@@ -59,7 +60,7 @@ error_t alloc_table (
 
             case 'a':
                 columns[i].type = ZEBRA_ARRAY;
-                err = alloc_table (&columns[i].data.a.table, pp_schema, pe_schema);
+                err = alloc_table (pool, &columns[i].data.a.table, pp_schema, pe_schema);
                 if (err) return err;
                 break;
 
@@ -75,9 +76,12 @@ error_t alloc_table (
     return ZEBRA_SUCCESS;
 }
 
-static void* grow_array (void *old, size_t size, int64_t old_capacity, int64_t new_capacity)
+static void* grow_array (anemone_mempool_t *pool, void *old, size_t size, int64_t old_capacity, int64_t new_capacity)
 {
-    void *new = calloc (new_capacity, size);
+    // XXX: This was calloc before, have changed to alloc.
+    // I don't think it needs to be zeroed since the part which is used will be initialised by memcpy,
+    // and the rest is past the end.
+    void *new = anemone_mempool_alloc (pool, new_capacity * size);
 
     //
     // Allow grow_array to do the initial allocation when there is no previous
@@ -86,32 +90,31 @@ static void* grow_array (void *old, size_t size, int64_t old_capacity, int64_t n
     //
     if (old) {
         memcpy (new, old, old_capacity * size);
-        free (old);
     }
 
     return new;
 }
 
-static error_t grow_column (zebra_column_t *column, int64_t old_capacity, int64_t new_capacity)
+error_t grow_column (anemone_mempool_t *pool, zebra_column_t *column, int64_t old_capacity, int64_t new_capacity)
 {
     zebra_type_t type = column->type;
     zebra_data_t *data = &column->data;
 
     switch (type) {
         case ZEBRA_BYTE:
-            data->b = grow_array (data->b, sizeof (data->b[0]), old_capacity, new_capacity);
+            data->b = grow_array (pool, data->b, sizeof (data->b[0]), old_capacity, new_capacity);
             return ZEBRA_SUCCESS;
 
         case ZEBRA_INT:
-            data->i = grow_array (data->i, sizeof (data->i[0]), old_capacity, new_capacity);
+            data->i = grow_array (pool, data->i, sizeof (data->i[0]), old_capacity, new_capacity);
             return ZEBRA_SUCCESS;
 
         case ZEBRA_DOUBLE:
-            data->d = grow_array (data->d, sizeof (data->d[0]), old_capacity, new_capacity);
+            data->d = grow_array (pool, data->d, sizeof (data->d[0]), old_capacity, new_capacity);
             return ZEBRA_SUCCESS;
 
         case ZEBRA_ARRAY:
-            data->a.n = grow_array (data->a.n, sizeof (data->a.n[0]), old_capacity, new_capacity);
+            data->a.n = grow_array (pool, data->a.n, sizeof (data->a.n[0]), old_capacity, new_capacity);
             return ZEBRA_SUCCESS;
 
         default:
@@ -119,7 +122,7 @@ static error_t grow_column (zebra_column_t *column, int64_t old_capacity, int64_
     }
 }
 
-static error_t grow_table (zebra_table_t *table)
+error_t grow_table (anemone_mempool_t *pool, zebra_table_t *table)
 {
     int64_t row_count = table->row_count;
     int64_t row_capacity = table->row_capacity;
@@ -147,19 +150,19 @@ static error_t grow_table (zebra_table_t *table)
     error_t err;
 
     for (int64_t i = 0; i < column_count; i++) {
-        err = grow_column (columns + i, row_capacity, new_row_capacity);
+        err = grow_column (pool, columns + i, row_capacity, new_row_capacity);
         if (err) return err;
     }
 
     return ZEBRA_SUCCESS;
 }
 
-static error_t grow_attribute (zebra_attribute_t *attribute)
+error_t grow_attribute (anemone_mempool_t *pool, zebra_attribute_t *attribute)
 {
     zebra_table_t *table = &attribute->table;
     int64_t old_capacity = table->row_capacity;
 
-    error_t err = grow_table (table);
+    error_t err = grow_table (pool, table);
     if (err) return err;
 
     int64_t new_capacity = table->row_capacity;
@@ -167,7 +170,8 @@ static error_t grow_attribute (zebra_attribute_t *attribute)
     if (old_capacity != new_capacity) {
         attribute->times =
           grow_array (
-              attribute->times
+              pool
+            , attribute->times
             , sizeof (attribute->times[0])
             , old_capacity
             , new_capacity
@@ -175,7 +179,8 @@ static error_t grow_attribute (zebra_attribute_t *attribute)
 
         attribute->priorities =
           grow_array (
-              attribute->priorities
+              pool
+            , attribute->priorities
             , sizeof (attribute->priorities[0])
             , old_capacity
             , new_capacity
@@ -183,7 +188,8 @@ static error_t grow_attribute (zebra_attribute_t *attribute)
 
         attribute->tombstones =
           grow_array (
-              attribute->tombstones
+              pool
+            , attribute->tombstones
             , sizeof (attribute->tombstones[0])
             , old_capacity
             , new_capacity
@@ -195,7 +201,8 @@ static error_t grow_attribute (zebra_attribute_t *attribute)
 
 
 error_t add_row (
-    zebra_entity_t *entity
+    anemone_mempool_t *pool
+  , zebra_entity_t *entity
   , int32_t attribute_id
   , int64_t time
   , int16_t priority
@@ -208,7 +215,7 @@ error_t add_row (
 
     zebra_attribute_t *attribute = entity->attributes + attribute_id;
 
-    error_t err = grow_attribute (attribute);
+    error_t err = grow_attribute (pool, attribute);
     if (err) return err;
 
     zebra_table_t *table = &attribute->table;

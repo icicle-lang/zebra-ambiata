@@ -3,8 +3,10 @@
 
 #if CABAL
 #include "anemone_base.h"
+#include "anemone_mempool.h"
 #else
 #include "../lib/anemone/csrc/anemone_base.h"
+#include "../lib/anemone/csrc/anemone_mempool.h"
 #endif
 
 #define ZEBRA_SUCCESS 0
@@ -62,15 +64,35 @@ typedef struct zebra_entity {
     zebra_attribute_t *attributes;
 } zebra_entity_t;
 
-error_t alloc_table (zebra_table_t *table, const uint8_t **pp_schema, const uint8_t *pe_schema);
+error_t alloc_table (
+    anemone_mempool_t *pool
+  , zebra_table_t *table
+  , const uint8_t **pp_schema
+  , const uint8_t *pe_schema );
 
 error_t add_row (
-    zebra_entity_t *entity
+    anemone_mempool_t *pool
+  , zebra_entity_t *entity
   , int32_t attribute_id
   , int64_t time
   , int16_t priority
   , bool64_t tombstone
   , zebra_column_t **out_columns
   , int64_t *out_index );
+
+
+error_t grow_column (
+    anemone_mempool_t *pool
+  , zebra_column_t *column
+  , int64_t old_capacity
+  , int64_t new_capacity );
+
+error_t grow_table (
+    anemone_mempool_t *pool
+  , zebra_table_t *table );
+
+error_t grow_attribute (
+    anemone_mempool_t *pool
+  , zebra_attribute_t *attribute );
 
 #endif//__ZEBRA_DATA_H
