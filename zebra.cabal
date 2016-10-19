@@ -47,10 +47,11 @@ library
                     Zebra
                     Zebra.Data
                     Zebra.Data.Block
+                    Zebra.Data.Block.Block
+                    Zebra.Data.Block.Entity
+                    Zebra.Data.Block.Index
                     Zebra.Data.Encoding
-                    Zebra.Data.Entity
                     Zebra.Data.Fact
-                    Zebra.Data.Index
                     Zebra.Data.Table
                     Zebra.Data.Table.Mutable
                     Zebra.Data.Schema

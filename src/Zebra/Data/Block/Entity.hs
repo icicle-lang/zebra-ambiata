@@ -6,9 +6,9 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# OPTIONS_GHC -funbox-strict-fields #-}
-module Zebra.Data.Entity (
-    Entity(..)
-  , Attribute(..)
+module Zebra.Data.Block.Entity (
+    BlockEntity(..)
+  , BlockAttribute(..)
   , entitiesOfFacts
   ) where
 
@@ -25,43 +25,42 @@ import qualified X.Data.Vector.Unboxed as Unboxed
 import           Zebra.Data.Fact
 
 
-data Attribute =
-  Attribute {
+data BlockAttribute =
+  BlockAttribute {
       attributeId :: !AttributeId
     , attributeRows :: !Int
     } deriving (Eq, Ord, Show, Generic, Typeable)
 
--- This deriving Unbox needs to appear before using it in Entity below
-derivingUnbox "Attribute"
-  [t| Attribute -> (AttributeId, Int) |]
-  [| \(Attribute x y) -> (x, y) |]
-  [| \(x, y) -> Attribute x y |]
+-- This deriving Unbox needs to appear before using it in BlockEntity below
+derivingUnbox "BlockAttribute"
+  [t| BlockAttribute -> (AttributeId, Int) |]
+  [| \(BlockAttribute x y) -> (x, y) |]
+  [| \(x, y) -> BlockAttribute x y |]
 
-
-data Entity =
-  Entity {
+data BlockEntity =
+  BlockEntity {
       entityHash :: !EntityHash
     , entityId :: !EntityId
-    , entityAttributes :: !(Unboxed.Vector Attribute)
+    , entityAttributes :: !(Unboxed.Vector BlockAttribute)
     } deriving (Eq, Ord, Show, Generic, Typeable)
 
 data EntityAcc =
-  EntityAcc !EntityHash !EntityId !AttributeAcc !(Boxed.Vector Entity)
+  EntityAcc !EntityHash !EntityId !AttributeAcc !(Boxed.Vector BlockEntity)
 
 data AttributeAcc =
-  AttributeAcc !AttributeId !Int !(Unboxed.Vector Attribute)
+  AttributeAcc !AttributeId !Int !(Unboxed.Vector BlockAttribute)
 
--- | Convert facts to hierarchical entity representation.
+-- | Convert facts to hierarchical BlockEntity representation.
 --
 --   The input fact vector must be sorted by:
 --
---     1. Entity Hash
---     2. Entity Id
---     3. Attribute
+--     1. BlockEntity Hash
+--     2. BlockEntity Id
+--     3. BlockAttribute
 --     4. Time
 --     5. Priority
 --
-entitiesOfFacts :: Boxed.Vector Fact -> Boxed.Vector Entity
+entitiesOfFacts :: Boxed.Vector Fact -> Boxed.Vector BlockEntity
 entitiesOfFacts =
   let
     loop macc fact =
@@ -81,13 +80,13 @@ mkEntityAcc :: Fact -> EntityAcc
 mkEntityAcc (Fact ehash eid aid _ _ _) =
   EntityAcc ehash eid (mkAttributeAcc aid) Boxed.empty
 
-takeEntities :: EntityAcc -> Boxed.Vector Entity
+takeEntities :: EntityAcc -> Boxed.Vector BlockEntity
 takeEntities (EntityAcc ehash eid attrs ents) =
-  ents `Boxed.snoc` Entity ehash eid (takeAttributes attrs)
+  ents `Boxed.snoc` BlockEntity ehash eid (takeAttributes attrs)
 
-takeAttributes :: AttributeAcc -> Unboxed.Vector Attribute
+takeAttributes :: AttributeAcc -> Unboxed.Vector BlockAttribute
 takeAttributes (AttributeAcc aid nrecs attrs) =
-  attrs `Unboxed.snoc` Attribute aid nrecs
+  attrs `Unboxed.snoc` BlockAttribute aid nrecs
 
 appendEntity :: EntityAcc -> Fact -> EntityAcc
 appendEntity acc0@(EntityAcc ehash0 eid0 attrs0 ents0) (Fact ehash1 eid1 aid1 _ _ _) =

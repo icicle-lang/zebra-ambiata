@@ -39,9 +39,7 @@ import qualified X.Data.Vector.Generic as Generic
 import qualified X.Data.Vector.Stream as Stream
 
 import           Zebra.Data.Block
-import           Zebra.Data.Entity
 import           Zebra.Data.Fact
-import           Zebra.Data.Index
 import           Zebra.Data.Table
 import           Zebra.Data.Schema
 import           Zebra.Serial.Array
@@ -89,7 +87,7 @@ getBlock schemas = do
 --   Entities are then followed by the attributes for the block, see
 --   'bAttributes' for the format.
 --
-bEntities :: Boxed.Vector Entity -> Builder
+bEntities :: Boxed.Vector BlockEntity -> Builder
 bEntities xs =
   let
     ecount =
@@ -115,7 +113,7 @@ bEntities xs =
     bIntArray acounts <>
     bAttributes attributes
 
-getEntities :: Get (Boxed.Vector Entity)
+getEntities :: Get (Boxed.Vector BlockEntity)
 getEntities = do
   ecount <- fromIntegral <$> Get.getWord32le
   hashes <- fmap (EntityHash . fromIntegral) . Boxed.convert <$> getIntArray ecount
@@ -123,7 +121,7 @@ getEntities = do
   acounts <- Unboxed.map fromIntegral . Unboxed.convert <$> getIntArray ecount
   attributes <- Generic.unsafeSplits id <$> getAttributes <*> pure acounts
   pure $
-    Boxed.zipWith3 Entity hashes ids attributes
+    Boxed.zipWith3 BlockEntity hashes ids attributes
 
 -- | Encode the attributes for a zebra block.
 --
@@ -148,7 +146,7 @@ getEntities = do
 --   /invariant: attr_count == sum entity_attr_count/
 --   /invariant: attr_ids are sorted for each entity/
 --
-bAttributes :: Unboxed.Vector Attribute -> Builder
+bAttributes :: Unboxed.Vector BlockAttribute -> Builder
 bAttributes xs =
   let
     acount =
@@ -167,13 +165,13 @@ bAttributes xs =
     bIntArray ids <>
     bIntArray counts
 
-getAttributes :: Get (Unboxed.Vector Attribute)
+getAttributes :: Get (Unboxed.Vector BlockAttribute)
 getAttributes = do
   acount <- fromIntegral <$> Get.getWord32le
   ids <- Unboxed.map (AttributeId . fromIntegral) . Unboxed.convert <$> getIntArray acount
   counts <- Unboxed.map fromIntegral . Unboxed.convert <$> getIntArray acount
   pure $
-    Unboxed.zipWith Attribute ids counts
+    Unboxed.zipWith BlockAttribute ids counts
 
 -- | Encode the table index for a zebra block.
 --
@@ -199,7 +197,7 @@ getAttributes = do
 --
 --   /invariant: index_count == sum attr_id_count/
 --
-bIndices :: Unboxed.Vector Index -> Builder
+bIndices :: Unboxed.Vector BlockIndex -> Builder
 bIndices xs =
   let
     icount =
@@ -223,7 +221,7 @@ bIndices xs =
     bIntArray priorities <>
     bIntArray tombstones
 
-getIndices :: Get (Unboxed.Vector Index)
+getIndices :: Get (Unboxed.Vector BlockIndex)
 getIndices = do
   icount <- fromIntegral <$> Get.getWord32le
   itimes <- getIntArray icount
@@ -243,7 +241,7 @@ getIndices = do
       Unboxed.map (tombstoneOfWord . fromIntegral) $
       Unboxed.convert itombstones
 
-  pure $ Unboxed.zipWith3 Index times priorities tombstones
+  pure $ Unboxed.zipWith3 BlockIndex times priorities tombstones
 
 -- | Encode the table data for a zebra block.
 --
