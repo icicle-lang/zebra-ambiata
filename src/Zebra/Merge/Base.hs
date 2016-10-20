@@ -68,7 +68,7 @@ data EntityMerged
  = EntityMerged
  { emEntityHash :: !EntityHash
  , emEntityId   :: !EntityId
- , emIndices    :: !(Boxed.Vector (Unboxed.Vector Index))
+ , emIndices    :: !(Boxed.Vector (Unboxed.Vector BlockIndex))
    -- ^ Indices for current entity, indexed by attribute id
  , emTables    :: !(Boxed.Vector Table)
    -- ^ Table values for current entity, indexed by attribute id
@@ -100,8 +100,8 @@ instance Show EntityMerged where
 --
 data EntityValues
  = EntityValues
- { evEntity    :: !Entity
- , evIndices   :: !(Boxed.Vector (Unboxed.Vector (Index, BlockDataId)))
+ { evEntity    :: !BlockEntity
+ , evIndices   :: !(Boxed.Vector (Unboxed.Vector (BlockIndex, BlockDataId)))
    -- ^ Indices for current entity, indexed by attribute id
  , evTables   :: !(Boxed.Vector (Map.Map BlockDataId Table))
    -- ^ Table values for current entity, indexed by attribute id

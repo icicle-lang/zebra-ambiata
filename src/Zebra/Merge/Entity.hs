@@ -57,10 +57,10 @@ entitiesOfBlock blockId (Block entities indices tables) =
 --
 -- > denseAttributeCount
 -- >    (...values for 5 attributes...)
--- >    [ Attribute (AttributeId 1) 10 , Attribute (AttributeId 3) 20 ]
+-- >    [ BlockAttribute (AttributeId 1) 10 , BlockAttribute (AttributeId 3) 20 ]
 -- > = [ 0, 10, 0, 20, 0 ]
 --
-denseAttributeCount :: Boxed.Vector Table -> Unboxed.Vector Attribute -> Unboxed.Vector Int
+denseAttributeCount :: Boxed.Vector Table -> Unboxed.Vector BlockAttribute -> Unboxed.Vector Int
 denseAttributeCount rs attr =
   Unboxed.mapAccumulate go attr $
   Unboxed.enumFromN 0 $ Boxed.length rs
@@ -70,7 +70,7 @@ denseAttributeCount rs attr =
      -- We only need to check the head. If ids are equal, use it.
      -- If not equal, the attribute id *must* be higher than the index:
      -- otherwise we would have seen it and removed it already.
-     | Just (Attribute aid acount, rest) <- Unboxed.uncons attrs
+     | Just (BlockAttribute aid acount, rest) <- Unboxed.uncons attrs
      , aid == AttributeId ix
      = (rest, acount)
      | otherwise
@@ -104,7 +104,7 @@ mergeEntityTables (EntityValues _ aixs recs) =
     go ((aid, aix), rec)
      = mergeEntityTable (AttributeId aid) aix rec
 
-mergeEntityTable :: AttributeId -> Unboxed.Vector (Index, BlockDataId) -> Map.Map BlockDataId Table -> Either MergeError Table
+mergeEntityTable :: AttributeId -> Unboxed.Vector (BlockIndex, BlockDataId) -> Map.Map BlockDataId Table -> Either MergeError Table
 mergeEntityTable aid aixs tables = do
   i <- init
   fst <$> Unboxed.foldM go (i, tables) aixs

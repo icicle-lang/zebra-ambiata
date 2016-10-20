@@ -3,6 +3,10 @@
 module Test.Zebra.Jack (
   -- * Zebra.Data.Block
     jBlock
+  , jEntity
+  , jAttribute
+  , jIndex
+  , jTombstone
 
   -- * Zebra.Data.Encoding
   , jEncoding
@@ -20,14 +24,6 @@ module Test.Zebra.Jack (
   , jDay
   , jPriority
   , jValue
-
-  -- * Zebra.Data.Entity
-  , jEntity
-  , jAttribute
-
-  -- * Zebra.Data.Index
-  , jIndex
-  , jTombstone
 
   -- * Zebra.Data.Table
   , jTable
@@ -62,9 +58,7 @@ import           Text.Printf (printf)
 
 import           Zebra.Data.Block
 import           Zebra.Data.Encoding
-import           Zebra.Data.Entity
 import           Zebra.Data.Fact
-import           Zebra.Data.Index
 import           Zebra.Data.Schema
 import           Zebra.Data.Table
 
@@ -194,21 +188,21 @@ jEntityHashId =
   in
     (\eid -> (hash eid, eid)) <$> jEntityId
 
-jEntity :: Jack Entity
+jEntity :: Jack BlockEntity
 jEntity =
-  uncurry Entity
+  uncurry BlockEntity
     <$> jEntityHashId
     <*> (Unboxed.fromList <$> listOf jAttribute)
 
-jAttribute :: Jack Attribute
+jAttribute :: Jack BlockAttribute
 jAttribute =
-  Attribute
+  BlockAttribute
     <$> jAttributeId
     <*> chooseInt (0, 1000000)
 
-jIndex :: Jack Index
+jIndex :: Jack BlockIndex
 jIndex =
-  Index
+  BlockIndex
     <$> jTime
     <*> jPriority
     <*> jTombstone

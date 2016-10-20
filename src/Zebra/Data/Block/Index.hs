@@ -6,8 +6,8 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# OPTIONS_GHC -funbox-strict-fields #-}
-module Zebra.Data.Index (
-    Index(..)
+module Zebra.Data.Block.Index (
+    BlockIndex(..)
   , Tombstone(..)
   , indicesOfFacts
   , wordOfTombstone
@@ -28,8 +28,8 @@ import qualified X.Data.Vector.Unboxed as Unboxed
 import           Zebra.Data.Fact
 
 
-data Index =
-  Index {
+data BlockIndex =
+  BlockIndex {
       indexTime :: !Time
     , indexPriority :: !Priority
     , indexTombstone :: !Tombstone
@@ -40,11 +40,11 @@ data Tombstone =
   | Tombstone
     deriving (Eq, Ord, Show, Generic, Typeable)
 
-indicesOfFacts :: Boxed.Vector Fact -> Unboxed.Vector Index
+indicesOfFacts :: Boxed.Vector Fact -> Unboxed.Vector BlockIndex
 indicesOfFacts =
   let
     fromFact fact =
-      Index
+      BlockIndex
         (factTime fact)
         (factPriority fact)
         (maybe' Tombstone (const NotTombstone) $ factValue fact)
@@ -71,7 +71,7 @@ derivingUnbox "Tombstone"
   [| wordOfTombstone |]
   [| tombstoneOfWord |]
 
-derivingUnbox "Index"
-  [t| Index -> (Time, Priority, Tombstone) |]
-  [| \(Index x y z) -> (x, y, z) |]
-  [| \(x, y, z) -> Index x y z |]
+derivingUnbox "BlockIndex"
+  [t| BlockIndex -> (Time, Priority, Tombstone) |]
+  [| \(BlockIndex x y z) -> (x, y, z) |]
+  [| \(x, y, z) -> BlockIndex x y z |]
