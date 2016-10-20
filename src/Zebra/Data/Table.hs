@@ -50,6 +50,7 @@ import qualified X.Data.Vector.Generic as Generic
 import qualified X.Data.Vector.Storable as Storable
 import           X.Text.Show (gshowsPrec)
 
+import           Zebra.Data.Core
 import           Zebra.Data.Encoding
 import           Zebra.Data.Fact
 import           Zebra.Data.Schema

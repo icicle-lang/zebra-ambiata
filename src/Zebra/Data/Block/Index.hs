@@ -10,13 +10,10 @@ module Zebra.Data.Block.Index (
     BlockIndex(..)
   , Tombstone(..)
   , indicesOfFacts
-  , wordOfTombstone
-  , tombstoneOfWord
   ) where
 
 import           Data.Typeable (Typeable)
 import           Data.Vector.Unboxed.Deriving (derivingUnbox)
-import           Data.Word (Word8)
 
 import           GHC.Generics (Generic)
 
@@ -25,20 +22,18 @@ import           P
 import qualified X.Data.Vector as Boxed
 import qualified X.Data.Vector.Unboxed as Unboxed
 
+import           Zebra.Data.Core
 import           Zebra.Data.Fact
 
 
+-- FIXME Might be good if this were using 3x Storable.Vector instead of a
+-- FIXME single Unboxed.Vector, as it would make translation to C smoother.
 data BlockIndex =
   BlockIndex {
       indexTime :: !Time
     , indexPriority :: !Priority
     , indexTombstone :: !Tombstone
     } deriving (Eq, Ord, Show, Generic, Typeable)
-
-data Tombstone =
-    NotTombstone
-  | Tombstone
-    deriving (Eq, Ord, Show, Generic, Typeable)
 
 indicesOfFacts :: Boxed.Vector Fact -> Unboxed.Vector BlockIndex
 indicesOfFacts =
@@ -50,26 +45,6 @@ indicesOfFacts =
         (maybe' Tombstone (const NotTombstone) $ factValue fact)
   in
     Unboxed.convert . fmap fromFact
-
-wordOfTombstone :: Tombstone -> Word8
-wordOfTombstone = \case
-  NotTombstone ->
-    0
-  Tombstone ->
-    1
-
-tombstoneOfWord :: Word8 -> Tombstone
-tombstoneOfWord w =
-  case w of
-    0 ->
-      NotTombstone
-    _ ->
-      Tombstone
-
-derivingUnbox "Tombstone"
-  [t| Tombstone -> Word8 |]
-  [| wordOfTombstone |]
-  [| tombstoneOfWord |]
 
 derivingUnbox "BlockIndex"
   [t| BlockIndex -> (Time, Priority, Tombstone) |]

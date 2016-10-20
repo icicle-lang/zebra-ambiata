@@ -102,8 +102,8 @@ error_t merge_attribute (anemone_mempool_t *pool, zebra_attribute_t *in1, zebra_
     while (in1_ix < in1->table.row_count && in2_ix < in2->table.row_count) {
         int64_t time1 = in1->times[in1_ix];
         int64_t time2 = in2->times[in2_ix];
-        int16_t prio1 = in1->priorities[in1_ix];
-        int16_t prio2 = in2->priorities[in2_ix];
+        int64_t prio1 = in1->priorities[in1_ix];
+        int64_t prio2 = in2->priorities[in2_ix];
 
         // ordered by time, priority. lowest priority first
         bool64_t copy_from_1 = (time1 < time2)

@@ -51,6 +51,7 @@ import           X.Control.Monad.Trans.Either (EitherT, runEitherT, left)
 import           X.Data.Vector.Grow (Grow)
 import qualified X.Data.Vector.Grow as Grow
 
+import           Zebra.Data.Core
 import           Zebra.Data.Encoding
 import           Zebra.Data.Fact
 import           Zebra.Data.Table (Table(..), Column(..))

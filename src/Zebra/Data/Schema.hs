@@ -34,8 +34,8 @@ import           P
 
 import           X.Text.Show (gshowsPrec)
 
+import           Zebra.Data.Core
 import           Zebra.Data.Encoding
-import           Zebra.Data.Fact
 
 
 newtype Schema =

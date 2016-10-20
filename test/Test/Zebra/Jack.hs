@@ -46,7 +46,7 @@ import qualified Data.Vector.Unboxed as Unboxed
 
 import           Disorder.Corpus (muppets, southpark, boats)
 import           Disorder.Jack (Jack, mkJack, shrinkTowards, sized)
-import           Disorder.Jack (elements, arbitrary, chooseInt, sizedBounded)
+import           Disorder.Jack (elements, arbitrary, choose, chooseInt, sizedBounded)
 import           Disorder.Jack (oneOf, oneOfRec, listOf, listOfN, justOf, maybeOf)
 
 import           P
@@ -57,6 +57,7 @@ import           Test.QuickCheck.Instances ()
 import           Text.Printf (printf)
 
 import           Zebra.Data.Block
+import           Zebra.Data.Core
 import           Zebra.Data.Encoding
 import           Zebra.Data.Fact
 import           Zebra.Data.Schema
@@ -171,7 +172,7 @@ jYear =
 
 jPriority :: Jack Priority
 jPriority =
-  Priority <$> chooseInt (0, 100000)
+  Priority <$> choose (0, 100000)
 
 jBlock :: Jack Block
 jBlock =

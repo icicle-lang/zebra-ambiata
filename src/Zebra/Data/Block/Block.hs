@@ -26,8 +26,9 @@ import           X.Control.Monad.Trans.Either (EitherT, runEitherT, left)
 import qualified X.Data.Vector as Boxed
 import qualified X.Data.Vector.Unboxed as Unboxed
 
-import           Zebra.Data.Block.Index
 import           Zebra.Data.Block.Entity
+import           Zebra.Data.Block.Index
+import           Zebra.Data.Core
 import           Zebra.Data.Encoding
 import           Zebra.Data.Fact
 import           Zebra.Data.Table

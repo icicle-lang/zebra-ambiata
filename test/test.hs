@@ -1,7 +1,7 @@
 import           Disorder.Core.Main
 
 import qualified Test.Zebra.Data.Block
-import qualified Test.Zebra.Data.Fact
+import qualified Test.Zebra.Data.Core
 import qualified Test.Zebra.Data.Schema
 import qualified Test.Zebra.Data.Table
 import qualified Test.Zebra.Data.Table.Mutable
@@ -15,7 +15,7 @@ main :: IO ()
 main =
   disorderMain [
       Test.Zebra.Data.Block.tests
-    , Test.Zebra.Data.Fact.tests
+    , Test.Zebra.Data.Core.tests
     , Test.Zebra.Data.Schema.tests
     , Test.Zebra.Data.Table.tests
     , Test.Zebra.Data.Table.Mutable.tests

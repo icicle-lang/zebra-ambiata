@@ -39,9 +39,9 @@ import qualified X.Data.Vector.Generic as Generic
 import qualified X.Data.Vector.Stream as Stream
 
 import           Zebra.Data.Block
-import           Zebra.Data.Fact
-import           Zebra.Data.Table
+import           Zebra.Data.Core
 import           Zebra.Data.Schema
+import           Zebra.Data.Table
 import           Zebra.Serial.Array
 
 
@@ -206,15 +206,15 @@ bIndices xs =
 
     times =
       Unboxed.convert $
-      Unboxed.map (fromIntegral . unTime . indexTime) xs
+      Unboxed.map (unTime . indexTime) xs
 
     priorities =
       Unboxed.convert $
-      Unboxed.map (fromIntegral . unPriority . indexPriority) xs
+      Unboxed.map (unPriority . indexPriority) xs
 
     tombstones =
       Unboxed.convert $
-      Unboxed.map (fromIntegral . wordOfTombstone . indexTombstone) xs
+      Unboxed.map (int64OfTombstone . indexTombstone) xs
   in
     Build.word32LE icount <>
     bIntArray times <>
@@ -230,15 +230,15 @@ getIndices = do
 
   let
     times =
-      Unboxed.map (Time . fromIntegral) $
+      Unboxed.map Time $
       Unboxed.convert itimes
 
     priorities =
-      Unboxed.map (Priority . fromIntegral) $
+      Unboxed.map Priority $
       Unboxed.convert ipriorities
 
     tombstones =
-      Unboxed.map (tombstoneOfWord . fromIntegral) $
+      Unboxed.map tombstoneOfInt64 $
       Unboxed.convert itombstones
 
   pure $ Unboxed.zipWith3 BlockIndex times priorities tombstones

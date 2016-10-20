@@ -50,7 +50,7 @@ struct zebra_column {
 
 typedef struct zebra_attribute {
     int64_t *times;
-    int16_t *priorities;
+    int64_t *priorities;
     bool64_t *tombstones;
     zebra_table_t table;
 } zebra_attribute_t;
@@ -75,11 +75,10 @@ error_t add_row (
   , zebra_entity_t *entity
   , int32_t attribute_id
   , int64_t time
-  , int16_t priority
+  , int64_t priority
   , bool64_t tombstone
   , zebra_column_t **out_columns
   , int64_t *out_index );
-
 
 error_t grow_column (
     anemone_mempool_t *pool
