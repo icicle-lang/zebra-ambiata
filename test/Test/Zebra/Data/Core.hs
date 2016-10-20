@@ -1,6 +1,6 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE TemplateHaskell #-}
-module Test.Zebra.Data.Fact where
+module Test.Zebra.Data.Core where
 
 import           Disorder.Jack (Property, quickCheckAll)
 import           Disorder.Jack (gamble, tripping)
@@ -11,7 +11,7 @@ import           System.IO (IO)
 
 import           Test.Zebra.Jack
 
-import           Zebra.Data.Fact
+import           Zebra.Data.Core
 
 
 prop_roundtrip_day :: Property

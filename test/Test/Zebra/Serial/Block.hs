@@ -20,7 +20,7 @@ import           Test.Zebra.Util
 import           Text.Show.Pretty (ppShow)
 
 import           Zebra.Data.Block
-import           Zebra.Data.Fact
+import           Zebra.Data.Core
 import           Zebra.Data.Schema
 import           Zebra.Data.Table
 import           Zebra.Serial.Block

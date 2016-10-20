@@ -25,7 +25,7 @@ import qualified Data.Vector as Boxed
 
 import           P
 
-import           Zebra.Data.Fact
+import           Zebra.Data.Core
 import           Zebra.Data.Schema
 import           Zebra.Serial.Array
 

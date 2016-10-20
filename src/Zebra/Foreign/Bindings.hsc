@@ -2,9 +2,15 @@
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# OPTIONS_GHC -fno-warn-unused-imports #-}
-module Zebra.Foreign where
+module Zebra.Foreign.Bindings where
 
 import Anemone.Foreign.Data (CError(..))
+
+--
+-- This module contains 1:1 bindings for all the zebra header files, in the
+-- style of bindings-DSL, for "nice" wrappers, see the other Zebra.Foreign.*
+-- modules.
+--
 
 #include <bindings.dsl.h>
 #include "zebra_bindings.h"
@@ -40,7 +46,7 @@ import Anemone.Foreign.Data (CError(..))
 
 #starttype struct zebra_attribute
 #field times , Ptr Int64
-#field priorities , Ptr Int16
+#field priorities , Ptr Int64
 #field tombstones , Ptr Int64
 #field table , <zebra_table>
 #stoptype

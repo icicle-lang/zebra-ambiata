@@ -25,7 +25,6 @@ library
                     , bindings-DSL                    >= 1.0.0      && <= 1.0.23
                     , bytestring                      == 0.10.*
                     , containers                      == 0.5.*
-                    , hashable                        == 1.2.*
                     , lens                            >= 4.7        && < 4.15
                     , mtl                             == 2.2.*
                     , pretty-show                     == 1.6.*
@@ -45,25 +44,31 @@ library
 
   exposed-modules:
                     Zebra
+
                     Zebra.Data
                     Zebra.Data.Block
                     Zebra.Data.Block.Block
                     Zebra.Data.Block.Entity
                     Zebra.Data.Block.Index
+                    Zebra.Data.Core
                     Zebra.Data.Encoding
                     Zebra.Data.Fact
+                    Zebra.Data.Schema
                     Zebra.Data.Table
                     Zebra.Data.Table.Mutable
-                    Zebra.Data.Schema
-                    Zebra.Foreign
+
+                    Zebra.Foreign.Bindings
+                    Zebra.Foreign.Entity
+
                     Zebra.Merge.Base
                     Zebra.Merge.Block
                     Zebra.Merge.Entity
+
                     Zebra.Serial
                     Zebra.Serial.Array
                     Zebra.Serial.Block
-                    Zebra.Serial.Header
                     Zebra.Serial.File
+                    Zebra.Serial.Header
 
   include-dirs:
                        csrc

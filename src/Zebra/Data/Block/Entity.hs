@@ -22,6 +22,7 @@ import           P
 import qualified X.Data.Vector as Boxed
 import qualified X.Data.Vector.Unboxed as Unboxed
 
+import           Zebra.Data.Core
 import           Zebra.Data.Fact
 
 
