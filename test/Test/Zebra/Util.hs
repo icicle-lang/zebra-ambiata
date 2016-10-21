@@ -1,6 +1,7 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 module Test.Zebra.Util (
-    trippingSerial
+    trippingIO
+  , trippingSerial
   , runGetEither
   , runGetEitherConsumeAll
   ) where
@@ -12,10 +13,36 @@ import qualified Data.ByteString.Builder as Build
 import qualified Data.ByteString.Lazy as Lazy
 import           Data.String (String)
 
-import           Disorder.Jack (Property, tripping)
+import           Disorder.Jack (Property, tripping, property, counterexample)
 
 import           P
 
+import           System.IO (IO)
+
+import           Text.Show.Pretty (ppShow)
+
+import           X.Control.Monad.Trans.Either (EitherT, runEitherT)
+
+
+trippingIO :: (Eq a, Eq x, Show a, Show x) => (a -> IO b) -> (b -> EitherT x IO a) -> a -> IO Property
+trippingIO to from a = do
+  b <- to a
+  roundtrip <- runEitherT $ from b
+
+  let
+    original =
+      pure a
+
+  pure .
+    counterexample "" .
+    counterexample "Roundtrip failed." .
+    counterexample "" .
+    counterexample "=== Original ===" .
+    counterexample (ppShow original) .
+    counterexample "" .
+    counterexample "=== Roundtrip ===" .
+    counterexample (ppShow roundtrip) $
+      property (roundtrip == original)
 
 trippingSerial :: (Eq a, Show a) => (a -> Builder) -> Get a -> a -> Property
 trippingSerial build get =

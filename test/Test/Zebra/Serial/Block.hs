@@ -52,17 +52,17 @@ prop_roundtrip_block =
 
 prop_roundtrip_entities :: Property
 prop_roundtrip_entities =
-  gamble (Boxed.fromList <$> listOf jEntity) $
+  gamble (Boxed.fromList <$> listOf jBlockEntity) $
     trippingSerial bEntities getEntities
 
 prop_roundtrip_attributes :: Property
 prop_roundtrip_attributes =
-  gamble (Unboxed.fromList <$> listOf jAttribute) $
+  gamble (Unboxed.fromList <$> listOf jBlockAttribute) $
     trippingSerial bAttributes getAttributes
 
 prop_roundtrip_indices :: Property
 prop_roundtrip_indices =
-  gamble (Unboxed.fromList <$> listOf jIndex) $
+  gamble (Unboxed.fromList <$> listOf jBlockIndex) $
     trippingSerial bIndices getIndices
 
 prop_roundtrip_tables :: Property
