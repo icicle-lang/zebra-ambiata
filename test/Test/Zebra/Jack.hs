@@ -3,19 +3,12 @@
 module Test.Zebra.Jack (
   -- * Zebra.Data.Block
     jBlock
-  , jEntity
-  , jAttribute
-  , jIndex
+  , jBlockEntity
+  , jBlockAttribute
+  , jBlockIndex
   , jTombstone
 
-  -- * Zebra.Data.Encoding
-  , jEncoding
-  , jFieldEncoding
-  , jFieldName
-  , jFieldObligation
-
-  -- * Zebra.Data.Fact
-  , jFact
+  -- * Zebra.Data.Core
   , jEntityId
   , jEntityHashId
   , jAttributeId
@@ -23,6 +16,19 @@ module Test.Zebra.Jack (
   , jTime
   , jDay
   , jPriority
+
+  -- * Zebra.Data.Encoding
+  , jEncoding
+  , jFieldEncoding
+  , jFieldName
+  , jFieldObligation
+
+  -- * Zebra.Data.Entity
+  , jEntity
+  , jAttribute
+
+  -- * Zebra.Data.Fact
+  , jFact
   , jValue
 
   -- * Zebra.Data.Table
@@ -39,6 +45,7 @@ module Test.Zebra.Jack (
 
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as Char8
+import qualified Data.List as List
 import           Data.Thyme.Calendar (Year, Day, YearMonthDay(..), gregorianValid)
 import qualified Data.Vector as Boxed
 import qualified Data.Vector.Storable as Storable
@@ -47,7 +54,7 @@ import qualified Data.Vector.Unboxed as Unboxed
 import           Disorder.Corpus (muppets, southpark, boats)
 import           Disorder.Jack (Jack, mkJack, shrinkTowards, sized)
 import           Disorder.Jack (elements, arbitrary, choose, chooseInt, sizedBounded)
-import           Disorder.Jack (oneOf, oneOfRec, listOf, listOfN, justOf, maybeOf)
+import           Disorder.Jack (oneOf, oneOfRec, listOf, listOfN, vectorOf, justOf, maybeOf)
 
 import           P
 
@@ -59,6 +66,7 @@ import           Text.Printf (printf)
 import           Zebra.Data.Block
 import           Zebra.Data.Core
 import           Zebra.Data.Encoding
+import           Zebra.Data.Entity
 import           Zebra.Data.Fact
 import           Zebra.Data.Schema
 import           Zebra.Data.Table
@@ -177,8 +185,8 @@ jPriority =
 jBlock :: Jack Block
 jBlock =
   Block
-    <$> (Boxed.fromList <$> listOf jEntity)
-    <*> (Unboxed.fromList <$> listOf jIndex)
+    <$> (Boxed.fromList <$> listOf jBlockEntity)
+    <*> (Unboxed.fromList <$> listOf jBlockIndex)
     <*> (Boxed.fromList <$> listOf jTable)
 
 jEntityHashId :: Jack (EntityHash, EntityId)
@@ -189,24 +197,39 @@ jEntityHashId =
   in
     (\eid -> (hash eid, eid)) <$> jEntityId
 
-jEntity :: Jack BlockEntity
-jEntity =
+jBlockEntity :: Jack BlockEntity
+jBlockEntity =
   uncurry BlockEntity
     <$> jEntityHashId
-    <*> (Unboxed.fromList <$> listOf jAttribute)
+    <*> (Unboxed.fromList <$> listOf jBlockAttribute)
 
-jAttribute :: Jack BlockAttribute
-jAttribute =
+jBlockAttribute :: Jack BlockAttribute
+jBlockAttribute =
   BlockAttribute
     <$> jAttributeId
     <*> chooseInt (0, 1000000)
 
-jIndex :: Jack BlockIndex
-jIndex =
+jBlockIndex :: Jack BlockIndex
+jBlockIndex =
   BlockIndex
     <$> jTime
     <*> jPriority
     <*> jTombstone
+
+jEntity :: Jack Entity
+jEntity =
+  uncurry Entity
+    <$> jEntityHashId
+    <*> (Boxed.fromList <$> listOf jAttribute)
+
+jAttribute :: Jack Attribute
+jAttribute = do
+  (ts, ps, bs) <- List.unzip3 <$> listOf ((,,) <$> jTime <*> jPriority <*> jTombstone)
+  Attribute
+    <$> pure (Storable.fromList ts)
+    <*> pure (Storable.fromList ps)
+    <*> pure (Storable.fromList bs)
+    <*> jTable' (List.length ts)
 
 jTombstone :: Jack Tombstone
 jTombstone =
@@ -224,17 +247,17 @@ jTable =
 jTable' :: Int -> Jack Table
 jTable' n =
   sized $ \size ->
-    Table . Boxed.fromList <$> listOfN 0 (size `div` 10) (jColumn n)
+    Table . Boxed.fromList <$> listOfN 1 (max 1 (size `div` 10)) (jColumn n)
 
 jColumn :: Int -> Jack Column
 jColumn n =
   oneOfRec [
-      ByteColumn . B.pack <$> listOfN n n arbitrary
-    , IntColumn . Storable.fromList <$> listOfN n n arbitrary
-    , DoubleColumn . Storable.fromList <$> listOfN n n arbitrary
+      ByteColumn . B.pack <$> vectorOf n arbitrary
+    , IntColumn . Storable.fromList <$> vectorOf n arbitrary
+    , DoubleColumn . Storable.fromList <$> vectorOf n arbitrary
     ] [
       sized $ \m -> do
-        ms <- listOfN n n $ chooseInt (0, m `div` 10)
+        ms <- vectorOf n $ chooseInt (0, m `div` 10)
         ArrayColumn (Storable.fromList . fmap fromIntegral $ ms) <$> jTable' (sum ms)
     ]
 
