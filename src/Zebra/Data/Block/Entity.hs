@@ -29,12 +29,12 @@ import           Zebra.Data.Fact
 data BlockAttribute =
   BlockAttribute {
       attributeId :: !AttributeId
-    , attributeRows :: !Int
+    , attributeRows :: !Int64
     } deriving (Eq, Ord, Show, Generic, Typeable)
 
 -- This deriving Unbox needs to appear before using it in BlockEntity below
 derivingUnbox "BlockAttribute"
-  [t| BlockAttribute -> (AttributeId, Int) |]
+  [t| BlockAttribute -> (AttributeId, Int64) |]
   [| \(BlockAttribute x y) -> (x, y) |]
   [| \(x, y) -> BlockAttribute x y |]
 
@@ -49,7 +49,7 @@ data EntityAcc =
   EntityAcc !EntityHash !EntityId !AttributeAcc !(Boxed.Vector BlockEntity)
 
 data AttributeAcc =
-  AttributeAcc !AttributeId !Int !(Unboxed.Vector BlockAttribute)
+  AttributeAcc !AttributeId !Int64 !(Unboxed.Vector BlockAttribute)
 
 -- | Convert facts to hierarchical BlockEntity representation.
 --

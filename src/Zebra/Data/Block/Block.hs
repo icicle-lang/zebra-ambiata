@@ -91,7 +91,7 @@ takeEntityFacts entities =
     -- function is more for testing than actual execution:
     -- the performance hit does not matter.
     concatFor (Boxed.convert attrs) $ \(BlockAttribute aid nfacts) ->
-      takeFacts ehash eid aid nfacts
+      takeFacts ehash eid aid (fromIntegral nfacts)
 
 concatFor :: Applicative m => Boxed.Vector a -> (a -> m (Boxed.Vector b)) -> m (Boxed.Vector b)
 concatFor xs body =
@@ -136,7 +136,7 @@ takeValues :: AttributeId -> Int -> EitherT FactError (State ValueState) (Boxed.
 takeValues aid@(AttributeId aix) n = do
   ValueState is0 vss0 <- get
 
-  case vss0 Boxed.!? aix of
+  case vss0 Boxed.!? fromIntegral aix of
     Nothing ->
       left $ FactNoValues aid
 
@@ -146,7 +146,7 @@ takeValues aid@(AttributeId aix) n = do
           Boxed.splitAt n vs0
 
         vss =
-          vss0 Boxed.// [(aix, vs)]
+          vss0 Boxed.// [(fromIntegral aix, vs)]
 
       when (Boxed.length us /= n) $
         left $ FactValuesExhausted aid

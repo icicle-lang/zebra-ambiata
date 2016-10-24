@@ -59,7 +59,10 @@ library
                     Zebra.Data.Table.Mutable
 
                     Zebra.Foreign.Bindings
+                    Zebra.Foreign.Block
                     Zebra.Foreign.Entity
+                    Zebra.Foreign.Table
+                    Zebra.Foreign.Util
 
                     Zebra.Merge.Base
                     Zebra.Merge.Block

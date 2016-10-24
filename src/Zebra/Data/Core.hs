@@ -18,8 +18,18 @@ module Zebra.Data.Core (
   , hashEntityId
   , fromDay
   , toDay
-  , int64OfTombstone
-  , tombstoneOfInt64
+
+  , foreignOfAttributeIds
+  , foreignOfTimes
+  , foreignOfPriorities
+  , foreignOfTombstone
+  , foreignOfTombstones
+
+  , attributeIdsOfForeign
+  , timesOfForeign
+  , prioritiesOfForeign
+  , tombstoneOfForeign
+  , tombstonesOfForeign
   ) where
 
 import           Anemone.Foreign.Hash (fasthash32)
@@ -30,6 +40,7 @@ import           Data.AffineSpace ((.-.), (.+^))
 import           Data.ByteString (ByteString)
 import           Data.Thyme.Calendar (Day, YearMonthDay(..), gregorian)
 import           Data.Typeable (Typeable)
+import qualified Data.Vector.Storable as Storable
 import           Data.Vector.Unboxed.Deriving (derivingUnbox)
 import           Data.Word (Word32)
 
@@ -55,8 +66,8 @@ newtype EntityHash =
 
 newtype AttributeId =
   AttributeId {
-      unAttributeId :: Int
-    } deriving (Eq, Ord, Generic, Typeable)
+      unAttributeId :: Int64
+    } deriving (Eq, Ord, Generic, Typeable, Storable)
 
 newtype AttributeName =
   AttributeName {
@@ -86,12 +97,12 @@ instance Storable Tombstone where
     alignment (0 :: Int64)
 
   peekElemOff p i =
-    fmap tombstoneOfInt64 $
+    fmap tombstoneOfForeign $
     peekElemOff (castPtr p) i
 
   pokeElemOff p i x =
     pokeElemOff (castPtr p) i $
-    int64OfTombstone x
+    foreignOfTombstone x
 
 instance Show EntityId where
   showsPrec =
@@ -137,22 +148,67 @@ ivoryEpoch =
   YearMonthDay 1600 3 1 ^. re gregorian
 {-# INLINE ivoryEpoch #-}
 
-int64OfTombstone :: Tombstone -> Int64
-int64OfTombstone = \case
+--
+-- We do these conversions here so that we can ensure the 'Storable' instances
+-- line up with the conversions.
+--
+
+foreignOfAttributeIds :: Storable.Vector AttributeId -> Storable.Vector Int64
+foreignOfAttributeIds =
+  Storable.unsafeCast
+{-# INLINE foreignOfAttributeIds #-}
+
+attributeIdsOfForeign :: Storable.Vector Int64 -> Storable.Vector AttributeId
+attributeIdsOfForeign =
+  Storable.unsafeCast
+{-# INLINE attributeIdsOfForeign #-}
+
+foreignOfTimes :: Storable.Vector Time -> Storable.Vector Int64
+foreignOfTimes =
+  Storable.unsafeCast
+{-# INLINE foreignOfTimes #-}
+
+timesOfForeign :: Storable.Vector Int64 -> Storable.Vector Time
+timesOfForeign =
+  Storable.unsafeCast
+{-# INLINE timesOfForeign #-}
+
+foreignOfPriorities :: Storable.Vector Priority -> Storable.Vector Int64
+foreignOfPriorities =
+  Storable.unsafeCast
+{-# INLINE foreignOfPriorities #-}
+
+prioritiesOfForeign :: Storable.Vector Int64 -> Storable.Vector Priority
+prioritiesOfForeign =
+  Storable.unsafeCast
+{-# INLINE prioritiesOfForeign #-}
+
+foreignOfTombstone :: Tombstone -> Int64
+foreignOfTombstone = \case
   NotTombstone ->
     0
   Tombstone ->
     1
-{-# INLINE int64OfTombstone #-}
+{-# INLINE foreignOfTombstone #-}
 
-tombstoneOfInt64 :: Int64 -> Tombstone
-tombstoneOfInt64 w =
+tombstoneOfForeign :: Int64 -> Tombstone
+tombstoneOfForeign w =
   case w of
     0 ->
       NotTombstone
     _ ->
       Tombstone
-{-# INLINE tombstoneOfInt64 #-}
+{-# INLINE tombstoneOfForeign #-}
+
+foreignOfTombstones :: Storable.Vector Tombstone -> Storable.Vector Int64
+foreignOfTombstones =
+  Storable.unsafeCast
+{-# INLINE foreignOfTombstones #-}
+
+tombstonesOfForeign :: Storable.Vector Int64 -> Storable.Vector Tombstone
+tombstonesOfForeign =
+  Storable.unsafeCast
+{-# INLINE tombstonesOfForeign #-}
 
 derivingUnbox "EntityHash"
   [t| EntityHash -> Word32 |]
@@ -160,7 +216,7 @@ derivingUnbox "EntityHash"
   [| EntityHash |]
 
 derivingUnbox "AttributeId"
-  [t| AttributeId -> Int |]
+  [t| AttributeId -> Int64 |]
   [| unAttributeId |]
   [| AttributeId |]
 
@@ -176,5 +232,5 @@ derivingUnbox "Priority"
 
 derivingUnbox "Tombstone"
   [t| Tombstone -> Int64 |]
-  [| int64OfTombstone |]
-  [| tombstoneOfInt64 |]
+  [| foreignOfTombstone |]
+  [| tombstoneOfForeign |]

@@ -64,6 +64,29 @@ typedef struct zebra_entity {
     zebra_attribute_t *attributes;
 } zebra_entity_t;
 
+typedef struct zebra_block_entity {
+    uint32_t hash;
+    int64_t id_length;
+    uint8_t *id_bytes;
+
+    int64_t attribute_count;
+    int64_t *attribute_ids;
+    int64_t *attribute_row_counts;
+} zebra_block_entity_t;
+
+typedef struct zebra_block {
+    int64_t entity_count;
+    zebra_block_entity_t *entities;
+
+    int64_t row_count;
+    int64_t *times;
+    int64_t *priorities;
+    bool64_t *tombstones;
+
+    int64_t table_count;
+    zebra_table_t *tables;
+} zebra_block_t;
+
 error_t alloc_table (
     anemone_mempool_t *pool
   , zebra_table_t *table

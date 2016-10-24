@@ -1,6 +1,6 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE TemplateHaskell #-}
-module Test.Zebra.Foreign.Entity where
+module Test.Zebra.Foreign.Block where
 
 import qualified Anemone.Foreign.Mempool as Mempool
 
@@ -17,14 +17,14 @@ import           System.IO (IO)
 import           Test.Zebra.Jack
 import           Test.Zebra.Util
 
-import           Zebra.Foreign.Entity
+import           Zebra.Foreign.Block
 
 
-prop_roundtrip_entities :: Property
-prop_roundtrip_entities =
-  gamble jEntity $ \entity ->
+prop_roundtrip_blocks :: Property
+prop_roundtrip_blocks =
+  gamble jBlock $ \block ->
   testIO . bracket Mempool.create Mempool.free $ \pool ->
-    trippingIO (foreignOfEntity pool) entityOfForeign entity
+    trippingIO (foreignOfBlock pool) blockOfForeign block
 
 return []
 tests :: IO Bool

@@ -1,0 +1,95 @@
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+module Zebra.Foreign.Table (
+    peekTable
+  , pokeTable
+  , peekColumn
+  , pokeColumn
+  ) where
+
+import           Anemone.Foreign.Mempool (Mempool, calloc)
+
+import           Control.Monad.IO.Class (MonadIO(..))
+
+import qualified Data.Vector as Boxed
+
+import           Foreign.Ptr (Ptr)
+
+import           P
+
+import           X.Control.Monad.Trans.Either (EitherT, left)
+
+import           Zebra.Data.Table
+import           Zebra.Foreign.Bindings
+import           Zebra.Foreign.Util
+
+
+peekTable :: MonadIO m => Ptr C'zebra_table -> EitherT ForeignError m Table
+peekTable c_table = do
+  n_rows <- fromIntegral <$> peekIO (p'zebra_table'row_count c_table)
+  n_cols <- fromIntegral <$> peekIO (p'zebra_table'column_count c_table)
+  c_columns <- peekIO (p'zebra_table'columns c_table)
+
+  fmap Table . peekMany c_columns n_cols $ peekColumn n_rows
+
+pokeTable :: MonadIO m => Mempool -> Ptr C'zebra_table -> Table -> m ()
+pokeTable pool c_table table@(Table columns) = do
+  let
+    n_rows =
+      rowsOfTable table
+
+    n_cols =
+      Boxed.length columns
+
+  c_columns <- liftIO . calloc pool $ fromIntegral n_cols
+
+  pokeIO (p'zebra_table'row_count c_table) $ fromIntegral n_rows
+  pokeIO (p'zebra_table'row_capacity c_table) $ fromIntegral n_rows
+  pokeIO (p'zebra_table'column_count c_table) $ fromIntegral n_cols
+  pokeIO (p'zebra_table'columns c_table) c_columns
+
+  pokeMany c_columns columns $ pokeColumn pool
+
+peekColumn :: MonadIO m => Int -> Ptr C'zebra_column -> EitherT ForeignError m Column
+peekColumn n_rows c_column = do
+  typ <- peekIO (p'zebra_column'type c_column)
+  case typ of
+    C'ZEBRA_BYTE ->
+      ByteColumn
+        <$> peekByteString n_rows (p'zebra_data'b $ p'zebra_column'data c_column)
+
+    C'ZEBRA_INT ->
+      IntColumn
+        <$> peekVector n_rows (p'zebra_data'i $ p'zebra_column'data c_column)
+
+    C'ZEBRA_DOUBLE ->
+      DoubleColumn
+        <$> peekVector n_rows (p'zebra_data'd $ p'zebra_column'data c_column)
+
+    C'ZEBRA_ARRAY ->
+      ArrayColumn
+        <$> peekVector n_rows (p'zebra_data'a'n $ p'zebra_column'data c_column)
+        <*> peekTable (p'zebra_data'a'table $ p'zebra_column'data c_column)
+
+    _ ->
+      left $ UnknownColumnType typ
+
+pokeColumn :: MonadIO m => Mempool -> Ptr C'zebra_column -> Column -> m ()
+pokeColumn pool c_column = \case
+  ByteColumn bs -> do
+    pokeIO (p'zebra_column'type c_column) C'ZEBRA_BYTE
+    pokeByteString pool (p'zebra_data'b $ p'zebra_column'data c_column) bs
+
+  IntColumn xs -> do
+    pokeIO (p'zebra_column'type c_column) C'ZEBRA_INT
+    pokeVector pool (p'zebra_data'i $ p'zebra_column'data c_column) xs
+
+  DoubleColumn xs -> do
+    pokeIO (p'zebra_column'type c_column) C'ZEBRA_DOUBLE
+    pokeVector pool (p'zebra_data'd $ p'zebra_column'data c_column) xs
+
+  ArrayColumn ns table -> do
+    pokeIO (p'zebra_column'type c_column) C'ZEBRA_ARRAY
+    pokeVector pool (p'zebra_data'a'n $ p'zebra_column'data c_column) ns
+    pokeTable pool (p'zebra_data'a'table $ p'zebra_column'data c_column) table
