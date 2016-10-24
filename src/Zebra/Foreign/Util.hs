@@ -36,7 +36,8 @@ import qualified Prelude as Savage
 
 
 data ForeignError =
-    UnknownColumnType !CUInt
+    ForeignUnknownColumnType !CUInt
+  | ForeignInvalidAttributeCount !Int !Int
     deriving (Eq, Ord, Show)
 
 allocCopy :: MonadIO m => Mempool -> ForeignPtr a -> Int -> Int -> m (Ptr a)

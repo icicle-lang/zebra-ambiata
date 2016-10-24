@@ -26,8 +26,8 @@ module Zebra.Data.Table (
   , concatColumns
   , appendTables
   , appendColumns
-  , splitAtTables
-  , splitAtColumns
+  , splitAtTable
+  , splitAtColumn
   ) where
 
 import           Control.Monad.State.Strict (MonadState(..))
@@ -407,13 +407,13 @@ appendColumns x y =
     (_, _) ->
       Left $ TableAppendColumnsMismatch x y
 
-splitAtTables :: Int -> Table -> (Table, Table)
-splitAtTables i (Table fs) =
-  let (as,bs) = Boxed.unzip $ Boxed.map (splitAtColumns i) fs
+splitAtTable :: Int -> Table -> (Table, Table)
+splitAtTable i (Table fs) =
+  let (as,bs) = Boxed.unzip $ Boxed.map (splitAtColumn i) fs
   in  (Table as, Table bs)
 
-splitAtColumns :: Int -> Column -> (Column, Column)
-splitAtColumns i =
+splitAtColumn :: Int -> Column -> (Column, Column)
+splitAtColumn i =
   \case
     ByteColumn vs
      -> bye ByteColumn $ B.splitAt i vs
@@ -424,7 +424,7 @@ splitAtColumns i =
     ArrayColumn len rec
      -> let (len1, len2) = Storable.splitAt i len
             nested_count = fromIntegral $ Storable.sum len1
-            (rec1, rec2) = splitAtTables nested_count rec
+            (rec1, rec2) = splitAtTable nested_count rec
         in  (ArrayColumn len1 rec1, ArrayColumn len2 rec2)
   where
    bye f = bimap f f

@@ -63,21 +63,17 @@ import Anemone.Foreign.Data (CError(..))
 #field hash , Word32
 #field id_length , Int64
 #field id_bytes , Ptr Word8
-#field attribute_count , Int64
 #field attribute_ids , Ptr Int64
 #field attribute_row_counts , Ptr Int64
 #stoptype
 
 #starttype struct zebra_block
+#field attribute_count , Int64
 #field entity_count , Int64
 #field entities , Ptr <zebra_block_entity>
 #field row_count , Int64
 #field times , Ptr Int64
 #field priorities , Ptr Int64
 #field tombstones , Ptr Int64
-#field table_count , Int64
 #field tables , Ptr <zebra_table>
 #stoptype
-
-#ccall alloc_table , Ptr <zebra_table> -> Ptr (Ptr Word8) -> Ptr Word8 -> IO CError
-#ccall add_row , Ptr <zebra_entity> -> Int32 -> Int64 -> Int16 -> Int64 -> Ptr (Ptr <zebra_column>) -> Ptr Int64 -> IO CError

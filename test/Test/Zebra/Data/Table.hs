@@ -18,7 +18,7 @@ prop_roundtrip_splitAt :: Property
 prop_roundtrip_splitAt =
   gamble arbitrary $ \ix ->
   gamble jTable $
-    tripping (splitAtTables ix) (uncurry appendTables)
+    tripping (splitAtTable ix) (uncurry appendTables)
 
 return []
 tests :: IO Bool

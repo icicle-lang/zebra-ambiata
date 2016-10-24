@@ -147,6 +147,7 @@ test-suite test
                     , quickcheck-instances            == 0.3.*
                     , text                            == 1.2.*
                     , thyme                           == 0.3.*
+                    , transformers                    == 0.5.*
                     , vector                          >= 0.10       && < 0.12
 
 test-suite test-io

@@ -1,10 +1,13 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 module Test.Zebra.Util (
-    trippingIO
+    liftE
+  , trippingIO
   , trippingSerial
   , runGetEither
   , runGetEitherConsumeAll
   ) where
+
+import           Control.Monad.Trans.Class (lift)
 
 import           Data.Binary.Get (Get, ByteOffset)
 import qualified Data.Binary.Get as Get
@@ -12,6 +15,7 @@ import           Data.ByteString.Builder (Builder)
 import qualified Data.ByteString.Builder as Build
 import qualified Data.ByteString.Lazy as Lazy
 import           Data.String (String)
+import           Data.Void (Void)
 
 import           Disorder.Jack (Property, tripping, property, counterexample)
 
@@ -24,10 +28,31 @@ import           Text.Show.Pretty (ppShow)
 import           X.Control.Monad.Trans.Either (EitherT, runEitherT)
 
 
-trippingIO :: (Eq a, Eq x, Show a, Show x) => (a -> IO b) -> (b -> EitherT x IO a) -> a -> IO Property
+data TrippingError x y =
+    EncodeError x
+  | DecodeError y
+    deriving (Eq, Ord, Show)
+
+liftE :: IO a -> EitherT Void IO a
+liftE =
+  lift
+
+trippingIO ::
+  Eq a =>
+  Eq x =>
+  Eq y =>
+  Show a =>
+  Show x =>
+  Show y =>
+  (a -> EitherT x IO b) ->
+  (b -> EitherT y IO a) ->
+  a ->
+  IO Property
 trippingIO to from a = do
-  b <- to a
-  roundtrip <- runEitherT $ from b
+  roundtrip <-
+    runEitherT $ do
+      b <- firstT EncodeError $ to a
+      firstT DecodeError $ from b
 
   let
     original =

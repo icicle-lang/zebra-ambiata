@@ -25,7 +25,7 @@ import           Foreign.Ptr (Ptr)
 
 import           P
 
-import           X.Control.Monad.Trans.Either (EitherT)
+import           X.Control.Monad.Trans.Either (EitherT, left)
 
 import           Zebra.Data.Block
 import           Zebra.Data.Core
@@ -43,7 +43,7 @@ blockOfForeign :: MonadIO m => CBlock -> EitherT ForeignError m Block
 blockOfForeign (CBlock c_block) =
   peekBlock c_block
 
-foreignOfBlock :: MonadIO m => Mempool -> Block -> m CBlock
+foreignOfBlock :: MonadIO m => Mempool -> Block -> EitherT ForeignError m CBlock
 foreignOfBlock pool block = do
   c_block <- liftIO $ alloc pool
   pokeBlock pool c_block block
@@ -51,9 +51,11 @@ foreignOfBlock pool block = do
 
 peekBlock :: MonadIO m => Ptr C'zebra_block -> EitherT ForeignError m Block
 peekBlock c_block = do
+  n_attrs <- peekIO $ p'zebra_block'attribute_count c_block
+
   n_entities <- fmap fromIntegral . peekIO $ p'zebra_block'entity_count c_block
   c_entities <- peekIO $ p'zebra_block'entities c_block
-  entities <- peekMany c_entities n_entities peekBlockEntity
+  entities <- peekMany c_entities n_entities . peekBlockEntity $ fromIntegral n_attrs
 
   n_rows <- fmap fromIntegral . peekIO $ p'zebra_block'row_count c_block
   times <- peekVector n_rows $ p'zebra_block'times c_block
@@ -67,24 +69,26 @@ peekBlock c_block = do
         (Storable.convert $ prioritiesOfForeign priorities)
         (Storable.convert $ tombstonesOfForeign tombstones)
 
-  n_tables <- fmap fromIntegral . peekIO $ p'zebra_block'table_count c_block
   c_tables <- peekIO $ p'zebra_block'tables c_block
-
-  tables <- peekMany c_tables n_tables peekTable
+  tables <- peekMany c_tables n_attrs peekTable
 
   pure $ Block entities indices tables
 
-pokeBlock :: MonadIO m => Mempool -> Ptr C'zebra_block -> Block -> m ()
+pokeBlock :: MonadIO m => Mempool -> Ptr C'zebra_block -> Block -> EitherT ForeignError m ()
 pokeBlock pool c_block (Block entities indices tables) = do
   let
+    n_attrs =
+      Boxed.length tables
+
     n_entities =
       Boxed.length entities
 
   c_entities <- liftIO . calloc pool $ fromIntegral n_entities
 
+  pokeIO (p'zebra_block'attribute_count c_block) $ fromIntegral n_attrs
   pokeIO (p'zebra_block'entity_count c_block) $ fromIntegral n_entities
   pokeIO (p'zebra_block'entities c_block) c_entities
-  pokeMany c_entities entities $ pokeBlockEntity pool
+  pokeMany c_entities entities $ pokeBlockEntity pool n_attrs
 
   let
     n_rows =
@@ -110,23 +114,17 @@ pokeBlock pool c_block (Block entities indices tables) = do
   pokeVector pool (p'zebra_block'priorities c_block) priorities
   pokeVector pool (p'zebra_block'tombstones c_block) tombstones
 
-  let
-    n_tables =
-      Boxed.length tables
+  c_tables <- liftIO . calloc pool $ fromIntegral n_attrs
 
-  c_tables <- liftIO . calloc pool $ fromIntegral n_tables
-
-  pokeIO (p'zebra_block'table_count c_block) $ fromIntegral n_tables
   pokeIO (p'zebra_block'tables c_block) c_tables
   pokeMany c_tables tables $ pokeTable pool
 
-peekBlockEntity :: MonadIO m => Ptr C'zebra_block_entity -> m BlockEntity
-peekBlockEntity c_entity = do
+peekBlockEntity :: MonadIO m => Int -> Ptr C'zebra_block_entity -> m BlockEntity
+peekBlockEntity n_attrs c_entity = do
   hash <- fmap EntityHash . peekIO $ p'zebra_block_entity'hash c_entity
   eid_len <- fmap fromIntegral . peekIO $ p'zebra_block_entity'id_length c_entity
   eid <- fmap EntityId . peekByteString eid_len $ p'zebra_block_entity'id_bytes c_entity
 
-  n_attrs <- fmap fromIntegral . peekIO $ p'zebra_block_entity'attribute_count c_entity
   attr_ids <- fmap attributeIdsOfForeign . peekVector n_attrs $ p'zebra_block_entity'attribute_ids c_entity
   attr_counts <- peekVector n_attrs $ p'zebra_block_entity'attribute_row_counts c_entity
 
@@ -138,8 +136,15 @@ peekBlockEntity c_entity = do
 
   pure $ BlockEntity hash eid attrs
 
-pokeBlockEntity :: MonadIO m => Mempool -> Ptr C'zebra_block_entity -> BlockEntity -> m ()
-pokeBlockEntity pool c_entity (BlockEntity hash eid attrs) = do
+pokeBlockEntity :: MonadIO m => Mempool -> Int -> Ptr C'zebra_block_entity -> BlockEntity -> EitherT ForeignError m ()
+pokeBlockEntity pool n_attrs0 c_entity (BlockEntity hash eid attrs) = do
+  let
+    n_attrs =
+      Unboxed.length attrs
+
+  when (n_attrs0 /= n_attrs) .
+    left $ ForeignInvalidAttributeCount n_attrs0 n_attrs
+
   let
     eid_len =
       B.length $ unEntityId eid
@@ -149,10 +154,6 @@ pokeBlockEntity pool c_entity (BlockEntity hash eid attrs) = do
   pokeByteString pool (p'zebra_block_entity'id_bytes c_entity) $ unEntityId eid
 
   let
-    n_attrs =
-      fromIntegral $
-      Unboxed.length attrs
-
     attr_ids =
       foreignOfAttributeIds .
       Storable.convert $
@@ -162,6 +163,5 @@ pokeBlockEntity pool c_entity (BlockEntity hash eid attrs) = do
       Storable.convert $
       Unboxed.map attributeRows attrs
 
-  pokeIO (p'zebra_block_entity'attribute_count c_entity) n_attrs
   pokeVector pool (p'zebra_block_entity'attribute_ids c_entity) attr_ids
   pokeVector pool (p'zebra_block_entity'attribute_row_counts c_entity) attr_counts
