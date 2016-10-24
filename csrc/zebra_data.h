@@ -69,12 +69,13 @@ typedef struct zebra_block_entity {
     int64_t id_length;
     uint8_t *id_bytes;
 
-    int64_t attribute_count;
+    /* length = attribute_count from parent zebra_block */
     int64_t *attribute_ids;
     int64_t *attribute_row_counts;
 } zebra_block_entity_t;
 
 typedef struct zebra_block {
+    int64_t attribute_count;
     int64_t entity_count;
     zebra_block_entity_t *entities;
 
@@ -83,17 +84,18 @@ typedef struct zebra_block {
     int64_t *priorities;
     bool64_t *tombstones;
 
-    int64_t table_count;
+    /* length = attribute_count */
     zebra_table_t *tables;
 } zebra_block_t;
 
-error_t alloc_table (
+error_t zebra_alloc_table (
     anemone_mempool_t *pool
   , zebra_table_t *table
   , const uint8_t **pp_schema
-  , const uint8_t *pe_schema );
+  , const uint8_t *pe_schema
+  );
 
-error_t add_row (
+error_t zebra_add_row (
     anemone_mempool_t *pool
   , zebra_entity_t *entity
   , int32_t attribute_id
@@ -101,20 +103,24 @@ error_t add_row (
   , int64_t priority
   , bool64_t tombstone
   , zebra_column_t **out_columns
-  , int64_t *out_index );
+  , int64_t *out_index
+  );
 
-error_t grow_column (
+error_t zebra_grow_column (
     anemone_mempool_t *pool
   , zebra_column_t *column
   , int64_t old_capacity
-  , int64_t new_capacity );
+  , int64_t new_capacity
+  );
 
-error_t grow_table (
+error_t zebra_grow_table (
     anemone_mempool_t *pool
-  , zebra_table_t *table );
+  , zebra_table_t *table
+  );
 
-error_t grow_attribute (
+error_t zebra_grow_attribute (
     anemone_mempool_t *pool
-  , zebra_attribute_t *attribute );
+  , zebra_attribute_t *attribute
+  );
 
 #endif//__ZEBRA_DATA_H

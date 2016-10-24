@@ -41,7 +41,7 @@ entitiesOfBlock blockId (Block entities indices tables) =
            dense_attrs       = denseAttributeCount rx attrs
            ix_attrs          = Generic.unsafeSplits id ix_here dense_attrs
            dense_counts      = Boxed.map Unboxed.length ix_attrs
-           (rx_here,rx_rest) = Boxed.unzip $ Boxed.zipWith splitAtTables dense_counts rx
+           (rx_here,rx_rest) = Boxed.unzip $ Boxed.zipWith splitAtTable dense_counts rx
 
            acc'              = (ix_rest, rx_rest)
            ix_blockId        = Boxed.map (Unboxed.map (,blockId)) ix_attrs
@@ -116,7 +116,7 @@ mergeEntityTable aid aixs tables = do
     init =
       case Map.minView tables of
         Just (r,_) ->
-          return $ fst $ splitAtTables 0 r
+          return $ fst $ splitAtTable 0 r
         Nothing ->
           Left $ MergeAttributeWithoutTable aid
 
@@ -128,7 +128,7 @@ mergeEntityTable aid aixs tables = do
     splitLookup blockid recs =
       case Map.lookup blockid recs of
         Just r -> do
-          let (this,that) = splitAtTables 1 r
+          let (this,that) = splitAtTable 1 r
           return (this, Map.insert blockid that recs)
         Nothing ->
           Left $ MergeBlockDataWithoutTable aid blockid

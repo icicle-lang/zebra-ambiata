@@ -182,12 +182,23 @@ jPriority :: Jack Priority
 jPriority =
   Priority <$> choose (0, 100000)
 
+-- FIXME Another generator for invalid blocks might be useful to check we don't
+-- FIXME segfault in unexpected situations.
 jBlock :: Jack Block
-jBlock =
+jBlock = do
+  tables <- Boxed.fromList <$> listOf jTable
+
+  let
+    n_attrs =
+      Boxed.length tables
+
+    n_rows =
+      sum $ fmap rowsOfTable tables
+
   Block
-    <$> (Boxed.fromList <$> listOf jBlockEntity)
-    <*> (Unboxed.fromList <$> listOf jBlockIndex)
-    <*> (Boxed.fromList <$> listOf jTable)
+    <$> (Boxed.fromList <$> listOf (jBlockEntity n_attrs))
+    <*> (Unboxed.fromList <$> vectorOf n_rows jBlockIndex)
+    <*> pure tables
 
 jEntityHashId :: Jack (EntityHash, EntityId)
 jEntityHashId =
@@ -197,11 +208,11 @@ jEntityHashId =
   in
     (\eid -> (hash eid, eid)) <$> jEntityId
 
-jBlockEntity :: Jack BlockEntity
-jBlockEntity =
+jBlockEntity :: Int -> Jack BlockEntity
+jBlockEntity n =
   uncurry BlockEntity
     <$> jEntityHashId
-    <*> (Unboxed.fromList <$> listOf jBlockAttribute)
+    <*> (Unboxed.fromList <$> vectorOf n jBlockAttribute)
 
 jBlockAttribute :: Jack BlockAttribute
 jBlockAttribute =

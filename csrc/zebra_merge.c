@@ -41,7 +41,7 @@ error_t merge_append_column (anemone_mempool_t *pool, zebra_column_t *in, int64_
                 // merge_append_* should copy multiple values & grow once at start.
                 for (int64_t v = 0; v < value_count; ++v) {
                     out->data.a.table.row_count++;
-                    grow_table (pool, &out->data.a.table);
+                    zebra_grow_table (pool, &out->data.a.table);
 
                     err = merge_append_table (pool, &in->data.a.table, value_in_ix, &out->data.a.table, value_out_ix);
                     if (err) return err;
@@ -75,7 +75,7 @@ error_t merge_append_attribute (anemone_mempool_t *pool, zebra_attribute_t *in, 
     int64_t out_ix = out->table.row_count;
 
     out->table.row_count++;
-    err = grow_attribute (pool, out);
+    err = zebra_grow_attribute (pool, out);
     if (err) return err;
 
     out->times[out_ix] = in->times[ix];

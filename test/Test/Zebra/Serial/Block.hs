@@ -6,7 +6,7 @@ import qualified Data.Vector as Boxed
 import qualified Data.Vector.Unboxed as Unboxed
 
 import           Disorder.Jack (Property)
-import           Disorder.Jack (quickCheckAll, gamble, listOf, counterexample)
+import           Disorder.Jack (quickCheckAll, gamble, listOf, choose, counterexample)
 
 import           P
 
@@ -52,7 +52,8 @@ prop_roundtrip_block =
 
 prop_roundtrip_entities :: Property
 prop_roundtrip_entities =
-  gamble (Boxed.fromList <$> listOf jBlockEntity) $
+  gamble (choose (0, 10)) $ \n ->
+  gamble (Boxed.fromList <$> listOf (jBlockEntity n)) $
     trippingSerial bEntities getEntities
 
 prop_roundtrip_attributes :: Property

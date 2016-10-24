@@ -24,7 +24,7 @@ prop_roundtrip_entities :: Property
 prop_roundtrip_entities =
   gamble jEntity $ \entity ->
   testIO . bracket Mempool.create Mempool.free $ \pool ->
-    trippingIO (foreignOfEntity pool) entityOfForeign entity
+    trippingIO (liftE . foreignOfEntity pool) entityOfForeign entity
 
 return []
 tests :: IO Bool

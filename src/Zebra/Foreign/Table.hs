@@ -73,7 +73,7 @@ peekColumn n_rows c_column = do
         <*> peekTable (p'zebra_data'a'table $ p'zebra_column'data c_column)
 
     _ ->
-      left $ UnknownColumnType typ
+      left $ ForeignUnknownColumnType typ
 
 pokeColumn :: MonadIO m => Mempool -> Ptr C'zebra_column -> Column -> m ()
 pokeColumn pool c_column = \case
