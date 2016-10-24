@@ -36,7 +36,7 @@ entitiesOfBlock blockId (Block entities indices tables) =
     go (ix,rx) ent
      = let attrs             = entityAttributes ent
            count_all         = Unboxed.sum $ Unboxed.map attributeRows attrs
-           (ix_here,ix_rest) = Unboxed.splitAt count_all ix
+           (ix_here,ix_rest) = Unboxed.splitAt (fromIntegral count_all) ix
 
            dense_attrs       = denseAttributeCount rx attrs
            ix_attrs          = Generic.unsafeSplits id ix_here dense_attrs
@@ -72,7 +72,7 @@ denseAttributeCount rs attr =
      -- otherwise we would have seen it and removed it already.
      | Just (BlockAttribute aid acount, rest) <- Unboxed.uncons attrs
      , aid == AttributeId ix
-     = (rest, acount)
+     = (rest, fromIntegral acount)
      | otherwise
      = (attrs, 0)
 
@@ -102,7 +102,7 @@ mergeEntityTables (EntityValues _ aixs recs) =
   Boxed.mapM go (Boxed.zip (Boxed.indexed aixs) recs)
   where
     go ((aid, aix), rec)
-     = mergeEntityTable (AttributeId aid) aix rec
+     = mergeEntityTable (AttributeId $ fromIntegral aid) aix rec
 
 mergeEntityTable :: AttributeId -> Unboxed.Vector (BlockIndex, BlockDataId) -> Map.Map BlockDataId Table -> Either MergeError Table
 mergeEntityTable aid aixs tables = do

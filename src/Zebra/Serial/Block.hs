@@ -214,7 +214,7 @@ bIndices xs =
 
     tombstones =
       Unboxed.convert $
-      Unboxed.map (int64OfTombstone . indexTombstone) xs
+      Unboxed.map (foreignOfTombstone . indexTombstone) xs
   in
     Build.word32LE icount <>
     bIntArray times <>
@@ -238,7 +238,7 @@ getIndices = do
       Unboxed.convert ipriorities
 
     tombstones =
-      Unboxed.map tombstoneOfInt64 $
+      Unboxed.map tombstoneOfForeign $
       Unboxed.convert itombstones
 
   pure $ Unboxed.zipWith3 BlockIndex times priorities tombstones

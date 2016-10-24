@@ -239,7 +239,7 @@ insertFact ::
   Maybe' Value ->
   EitherT MutableError m ()
 insertFact (MTableBox tables) aid@(AttributeId ix) mvalue = do
-  case tables Boxed.!? ix of
+  case tables Boxed.!? fromIntegral ix of
     Nothing ->
       left $ MutableAttributeNotFound aid
     Just (encoding, table) ->

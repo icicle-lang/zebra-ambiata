@@ -156,7 +156,7 @@ jEntityId =
 
 jAttributeId :: Jack AttributeId
 jAttributeId =
-  AttributeId <$> chooseInt (0, 10000)
+  AttributeId <$> choose (0, 10000)
 
 jAttributeName :: Jack AttributeName
 jAttributeName =
@@ -207,7 +207,7 @@ jBlockAttribute :: Jack BlockAttribute
 jBlockAttribute =
   BlockAttribute
     <$> jAttributeId
-    <*> chooseInt (0, 1000000)
+    <*> choose (0, 1000000)
 
 jBlockIndex :: Jack BlockIndex
 jBlockIndex =
