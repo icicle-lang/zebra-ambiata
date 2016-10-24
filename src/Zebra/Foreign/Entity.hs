@@ -7,7 +7,7 @@ module Zebra.Foreign.Entity (
   , foreignOfEntity
   ) where
 
-import           Anemone.Foreign.Mempool
+import           Anemone.Foreign.Mempool (Mempool, alloc, allocBytes, calloc)
 
 import           Control.Monad.IO.Class (MonadIO(..))
 
@@ -18,11 +18,11 @@ import qualified Data.Vector as Boxed
 import qualified Data.Vector.Storable as Storable
 import           Data.Word (Word8)
 
-import           Foreign.C.Types
-import           Foreign.ForeignPtr
-import           Foreign.Marshal.Utils
-import           Foreign.Ptr
-import           Foreign.Storable
+import           Foreign.C.Types (CUInt)
+import           Foreign.ForeignPtr (ForeignPtr, mallocForeignPtrBytes, withForeignPtr)
+import           Foreign.Marshal.Utils (copyBytes)
+import           Foreign.Ptr (Ptr, plusPtr, castPtr)
+import           Foreign.Storable (Storable(..))
 
 import           P
 
@@ -33,12 +33,11 @@ import           X.Control.Monad.Trans.Either (EitherT, left)
 import           Zebra.Data.Core
 import           Zebra.Data.Entity
 import           Zebra.Data.Table
-
 import           Zebra.Foreign.Bindings
 
 
 data ForeignError =
-    UnknownColumnType CUInt
+    UnknownColumnType !CUInt
     deriving (Eq, Ord, Show)
 
 newtype CEntity =
