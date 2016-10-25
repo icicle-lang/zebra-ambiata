@@ -1,7 +1,9 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 module Zebra.Foreign.Util (
     ForeignError(..)
+  , fromCError
 
   , allocCopy
   , peekIO
@@ -14,6 +16,7 @@ module Zebra.Foreign.Util (
   , pokeMany
   ) where
 
+import           Anemone.Foreign.Data (CError)
 import           Anemone.Foreign.Mempool (Mempool, allocBytes)
 
 import           Control.Monad.IO.Class (MonadIO(..))
@@ -24,7 +27,6 @@ import qualified Data.Vector.Generic as Generic
 import qualified Data.Vector.Storable as Storable
 import           Data.Word (Word8)
 
-import           Foreign.C.Types (CUInt)
 import           Foreign.ForeignPtr (ForeignPtr, mallocForeignPtrBytes, withForeignPtr)
 import           Foreign.Marshal.Utils (copyBytes)
 import           Foreign.Ptr (Ptr, plusPtr)
@@ -34,11 +36,32 @@ import           P
 
 import qualified Prelude as Savage
 
+import           Zebra.Foreign.Bindings
+
 
 data ForeignError =
-    ForeignUnknownColumnType !CUInt
-  | ForeignInvalidAttributeCount !Int !Int
+    ForeignInvalidAttributeCount !Int !Int
+  | ForeignInvalidColumnType
+  | ForeignAttributeNotFound
+  | ForeignNotEnoughBytes
+  | ForeignNotEnoughRows
+  | ForeignUnknownError !CError
     deriving (Eq, Ord, Show)
+
+fromCError :: CError -> Either ForeignError ()
+fromCError = \case
+  C'ZEBRA_SUCCESS ->
+    Right ()
+  C'ZEBRA_INVALID_COLUMN_TYPE ->
+    Left ForeignInvalidColumnType
+  C'ZEBRA_ATTRIBUTE_NOT_FOUND ->
+    Left ForeignAttributeNotFound
+  C'ZEBRA_NOT_ENOUGH_BYTES ->
+    Left ForeignNotEnoughBytes
+  C'ZEBRA_NOT_ENOUGH_ROWS ->
+    Left ForeignNotEnoughRows
+  err ->
+    Left $ ForeignUnknownError err
 
 allocCopy :: MonadIO m => Mempool -> ForeignPtr a -> Int -> Int -> m (Ptr a)
 allocCopy pool fp off len =

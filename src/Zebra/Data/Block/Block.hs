@@ -7,29 +7,38 @@
 {-# OPTIONS_GHC -funbox-strict-fields #-}
 module Zebra.Data.Block.Block (
     Block(..)
-  , FactError(..)
 
+  , FactError(..)
   , blockOfFacts
   , factsOfBlock
+
+  , EntityError(..)
+  , entitiesOfBlock
   ) where
 
+import           Control.Monad.Primitive (PrimMonad(..))
+import           Control.Monad.ST (runST)
 import           Control.Monad.State.Strict (MonadState(..))
 import           Control.Monad.Trans.State.Strict (State, runState)
 
 import           Data.Typeable (Typeable)
+import qualified Data.Vector.Mutable as MBoxed
 
 import           GHC.Generics (Generic)
 
 import           P
 
-import           X.Control.Monad.Trans.Either (EitherT, runEitherT, left)
+import           X.Control.Monad.Trans.Either (EitherT, runEitherT, left, hoistEither)
 import qualified X.Data.Vector as Boxed
+import           X.Data.Vector.Ref (Ref, newRef, readRef, writeRef)
+import qualified X.Data.Vector.Storable as Storable
 import qualified X.Data.Vector.Unboxed as Unboxed
 
 import           Zebra.Data.Block.Entity
 import           Zebra.Data.Block.Index
 import           Zebra.Data.Core
 import           Zebra.Data.Encoding
+import           Zebra.Data.Entity
 import           Zebra.Data.Fact
 import           Zebra.Data.Table
 import           Zebra.Data.Table.Mutable
@@ -41,6 +50,9 @@ data Block =
     , blockIndices :: !(Unboxed.Vector BlockIndex)
     , blockTables :: !(Boxed.Vector Table)
     } deriving (Eq, Ord, Show, Generic, Typeable)
+
+------------------------------------------------------------------------
+-- Conversion to/from facts
 
 data FactError =
     FactValueError !ValueError
@@ -153,3 +165,111 @@ takeValues aid@(AttributeId aix) n = do
 
       put $ ValueState is0 vss
       pure us
+
+------------------------------------------------------------------------
+-- Conversion to/from individual entities
+
+data IndexedEntity =
+    IndexedEntity !BlockEntity !(Unboxed.Vector BlockIndex)
+
+data EntityError =
+    EntityAttributeNotFound !AttributeId
+  | EntityNotEnoughRows
+    deriving (Eq, Ord, Show, Generic, Typeable)
+
+entitiesOfBlock :: Block -> Either EntityError (Boxed.Vector Entity)
+entitiesOfBlock (Block entities indices tables) =
+  runST $ runEitherT $ do
+    mtables <- Boxed.thaw tables
+    ientities <- hoistEither $ takeIndexedEntities entities indices
+    Boxed.mapM (fromBlockEntity mtables) ientities
+
+takeIndexedEntities :: Boxed.Vector BlockEntity -> Unboxed.Vector BlockIndex -> Either EntityError (Boxed.Vector IndexedEntity)
+takeIndexedEntities entities indices = do
+  let
+    ecounts :: Boxed.Vector Int
+    ecounts =
+      fmap rowsOfEntity entities
+
+    eoffsets :: Boxed.Vector Int
+    eoffsets =
+      Boxed.prescanl' (+) 0 ecounts
+
+    takeIndex :: Int -> Int -> Either EntityError (Unboxed.Vector BlockIndex)
+    takeIndex off len =
+      if off + len <= Unboxed.length indices then
+        pure $ Unboxed.slice off len indices
+      else
+        Left EntityNotEnoughRows
+
+  eindices <- Boxed.zipWithM takeIndex eoffsets ecounts
+  pure $ Boxed.zipWith IndexedEntity entities eindices
+
+rowsOfEntity :: BlockEntity -> Int
+rowsOfEntity (BlockEntity _ _ attrs) =
+  fromIntegral . Unboxed.sum $ Unboxed.map attributeRows attrs
+
+fromBlockEntity ::
+  PrimMonad m =>
+  MBoxed.MVector (PrimState m) Table ->
+  IndexedEntity ->
+  EitherT EntityError m Entity
+fromBlockEntity mtables (IndexedEntity (BlockEntity hash eid battrs) indices) = do
+  mindices <- newRef indices
+  attrs <- Boxed.mapM (fromBlockAttribute mindices mtables) $ Unboxed.convert battrs
+  pure $ Entity hash eid attrs
+
+fromBlockAttribute ::
+  PrimMonad m =>
+  Ref MBoxed.MVector (PrimState m) (Unboxed.Vector BlockIndex) ->
+  MBoxed.MVector (PrimState m) Table ->
+  BlockAttribute ->
+  EitherT EntityError m Attribute
+fromBlockAttribute mindices mtables (BlockAttribute aid n) = do
+  indices <- takeIndexRows mindices $ fromIntegral n
+  table <- takeTableRows mtables aid $ fromIntegral n
+
+  pure $ Attribute
+    (Storable.convert $ Unboxed.map indexTime indices)
+    (Storable.convert $ Unboxed.map indexPriority indices)
+    (Storable.convert $ Unboxed.map indexTombstone indices)
+    table
+
+takeIndexRows ::
+  PrimMonad m =>
+  Ref MBoxed.MVector (PrimState m) (Unboxed.Vector BlockIndex) ->
+  Int ->
+  m (Unboxed.Vector BlockIndex)
+takeIndexRows ref n = do
+  indices <- readRef ref
+
+  let
+    (indices1, indices2) =
+      Unboxed.splitAt (fromIntegral n) indices
+
+  writeRef ref indices2
+  pure indices1
+
+takeTableRows ::
+  PrimMonad m =>
+  MBoxed.MVector (PrimState m) Table ->
+  AttributeId ->
+  Int ->
+  EitherT EntityError m Table
+takeTableRows attrs aid@(AttributeId aix0) n =
+  let
+    aix =
+      fromIntegral aix0
+  in
+    if aix < 0 || aix >= MBoxed.length attrs then
+      left $ EntityAttributeNotFound aid
+    else do
+      table <- MBoxed.unsafeRead attrs aix
+
+      let
+        (table1, table2) =
+          splitAtTable n table
+
+      MBoxed.unsafeWrite attrs aix table2
+
+      pure table1

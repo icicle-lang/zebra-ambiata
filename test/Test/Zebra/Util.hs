@@ -18,12 +18,14 @@ import           Data.String (String)
 import           Data.Void (Void)
 
 import           Disorder.Jack (Property, tripping, property, counterexample)
+import           Disorder.Jack.Property.Diff (renderDiffs)
+
+import           Text.Show.Pretty (ppShow)
+import qualified Text.Show.Pretty as Pretty
 
 import           P
 
 import           System.IO (IO)
-
-import           Text.Show.Pretty (ppShow)
 
 import           X.Control.Monad.Trans.Either (EitherT, runEitherT)
 
@@ -58,15 +60,25 @@ trippingIO to from a = do
     original =
       pure a
 
+    comparison =
+      "=== Original ===" <>
+      "\n" <> ppShow original <>
+      "\n" <>
+      "\n=== Roundtrip ===" <>
+      "\n" <> ppShow roundtrip
+
+    diff = do
+      o <- Pretty.reify original
+      r <- Pretty.reify roundtrip
+      pure $
+        "=== - Original / + Roundtrip ===" <>
+        "\n" <> renderDiffs o r
+
   pure .
     counterexample "" .
     counterexample "Roundtrip failed." .
     counterexample "" .
-    counterexample "=== Original ===" .
-    counterexample (ppShow original) .
-    counterexample "" .
-    counterexample "=== Roundtrip ===" .
-    counterexample (ppShow roundtrip) $
+    counterexample (fromMaybe comparison diff) $
       property (roundtrip == original)
 
 trippingSerial :: (Eq a, Show a) => (a -> Builder) -> Get a -> a -> Property

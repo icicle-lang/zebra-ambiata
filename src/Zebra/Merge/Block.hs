@@ -37,5 +37,5 @@ mergeFiles f_map fs
  $ Boxed.indexed fs
  where
   getEntities (ix,blocks)
-   = Stream.concatMap (entitiesOfBlock $ BlockDataId ix) (f_map blocks)
+   = Stream.concatMap (entityValuesOfBlock $ BlockDataId ix) (f_map blocks)
 

@@ -27,8 +27,8 @@ import           Text.Show.Pretty (ppShow)
 fakeBlockId :: BlockDataId
 fakeBlockId = BlockDataId 0
 
-entitiesOfBlock' :: BlockDataId -> Block -> Boxed.Vector EntityValues
-entitiesOfBlock' blockId block = Stream.vectorOfStream $ entitiesOfBlock blockId block
+entityValuesOfBlock' :: BlockDataId -> Block -> Boxed.Vector EntityValues
+entityValuesOfBlock' blockId block = Stream.vectorOfStream $ entityValuesOfBlock blockId block
 
 ppCounter :: (Show a, Testable p) => Savage.String -> a -> p -> Property
 ppCounter heading thing prop
@@ -39,12 +39,6 @@ ppCounter heading thing prop
 jEncodings :: Jack [Encoding]
 jEncodings = listOfN 0 5 jEncoding
 
-jFactsFor :: [Encoding] -> Jack [Fact]
-jFactsFor encs = sized $ \size -> do
-  let encs' = List.zip encs (fmap AttributeId [0..])
-  let maxFacts = size `div` length encs
-  List.sort . List.concat <$> mapM (\(enc,aid) -> listOfN 0 maxFacts $ jFact enc aid) encs'
-
 blockOfFacts' :: [Encoding] -> [Fact] -> Block
 blockOfFacts' encs facts =
   case blockOfFacts (Boxed.fromList encs) (Boxed.fromList facts) of
@@ -54,21 +48,15 @@ blockOfFacts' encs facts =
               <> "\t" <> show e)
    Right b -> b
 
-jBlockValid :: Jack Block
-jBlockValid = do
-  encs  <- jEncodings
-  blockOfFacts' encs <$> jFactsFor encs
-
-
 prop_entitiesOfBlock_entities :: Property
 prop_entitiesOfBlock_entities =
-  gamble jBlock $ \block ->
-    fmap evEntity (entitiesOfBlock' fakeBlockId block) === blockEntities block
+  gamble jYoloBlock $ \block ->
+    fmap evEntity (entityValuesOfBlock' fakeBlockId block) === blockEntities block
 
 prop_entitiesOfBlock_indices :: Property
 prop_entitiesOfBlock_indices =
-  gamble jBlockValid $ \block ->
-    catIndices (entitiesOfBlock' fakeBlockId block) === takeIndices block
+  gamble jBlock $ \block ->
+    catIndices (entityValuesOfBlock' fakeBlockId block) === takeIndices block
  where
   catIndices evs
    = Boxed.map fst
@@ -82,12 +70,12 @@ prop_entitiesOfBlock_indices =
 prop_entitiesOfBlock_tables_1_entity :: Property
 prop_entitiesOfBlock_tables_1_entity =
   gamble jEncodings $ \encs ->
-  gamble (jFactsFor encs) $ \facts ->
+  gamble (jFacts encs) $ \facts ->
   gamble jEntityHashId $ \(ehash,eid) ->
   let fixFact f = f { factEntityHash = ehash, factEntityId = eid }
       facts'    = List.sort $ fmap fixFact facts
       block     = blockOfFacts' encs facts'
-      es        = entitiesOfBlock' fakeBlockId block
+      es        = entityValuesOfBlock' fakeBlockId block
   in  ppCounter "Block" block
     $ ppCounter "Entities" es
     ( length facts > 0
@@ -98,8 +86,8 @@ getFakeTableValues = fmap (fmap (Map.! fakeBlockId) . evTables)
 
 prop_mergeEntityTables_1_block :: Property
 prop_mergeEntityTables_1_block =
-  gamble jBlockValid $ \block ->
-  let es = entitiesOfBlock' fakeBlockId block
+  gamble jBlock $ \block ->
+  let es = entityValuesOfBlock' fakeBlockId block
       recs_l = mapM mergeEntityTables es
 
       recs_r = getFakeTableValues es
@@ -109,16 +97,16 @@ prop_mergeEntityTables_1_block =
 prop_mergeEntityTables_2_blocks :: Property
 prop_mergeEntityTables_2_blocks =
   gamble jEncodings $ \encs ->
-  gamble (jFactsFor encs) $ \f1 ->
-  gamble (jFactsFor encs) $ \f2 ->
+  gamble (jFacts encs) $ \f1 ->
+  gamble (jFacts encs) $ \f2 ->
   let b1 = blockOfFacts' encs f1
       b2 = blockOfFacts' encs f2
       bMerge = blockOfFacts' encs $ List.sort (f1 <> f2)
 
-      entsOf bid bk = entitiesOfBlock (BlockDataId bid) bk
+      entsOf bid bk = entityValuesOfBlock (BlockDataId bid) bk
       es = Stream.vectorOfStream $ mergeEntityValues (entsOf 1 b1) (entsOf 2 b2)
 
-      expect =  entitiesOfBlock' fakeBlockId bMerge
+      expect =  entityValuesOfBlock' fakeBlockId bMerge
   in  ppCounter "Block 1" b1
     $ ppCounter "Block 2" b2
     $ ppCounter "Block of append" bMerge

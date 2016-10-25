@@ -131,6 +131,7 @@ test-suite test
 
   build-depends:
                       base                            >= 3          && < 5
+                    , ambiata-anemone
                     , ambiata-disorder-core
                     , ambiata-disorder-corpus
                     , ambiata-disorder-jack

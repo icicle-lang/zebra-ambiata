@@ -5,6 +5,7 @@
 module Zebra.Foreign.Bindings where
 
 import Anemone.Foreign.Data (CError(..))
+import Anemone.Foreign.Mempool (Mempool(..))
 
 --
 -- This module contains 1:1 bindings for all the zebra header files, in the
@@ -17,6 +18,12 @@ import Anemone.Foreign.Data (CError(..))
 #include "zebra_data.h"
 
 #strict_import
+
+#znum ZEBRA_SUCCESS
+#znum ZEBRA_INVALID_COLUMN_TYPE
+#znum ZEBRA_ATTRIBUTE_NOT_FOUND
+#znum ZEBRA_NOT_ENOUGH_BYTES
+#znum ZEBRA_NOT_ENOUGH_ROWS
 
 #integral_t enum zebra_type
 #znum ZEBRA_BYTE
@@ -63,17 +70,20 @@ import Anemone.Foreign.Data (CError(..))
 #field hash , Word32
 #field id_length , Int64
 #field id_bytes , Ptr Word8
+#field attribute_count , Int64
 #field attribute_ids , Ptr Int64
 #field attribute_row_counts , Ptr Int64
 #stoptype
 
 #starttype struct zebra_block
-#field attribute_count , Int64
 #field entity_count , Int64
 #field entities , Ptr <zebra_block_entity>
 #field row_count , Int64
 #field times , Ptr Int64
 #field priorities , Ptr Int64
 #field tombstones , Ptr Int64
+#field table_count , Int64
 #field tables , Ptr <zebra_table>
 #stoptype
+
+#ccall zebra_entities_of_block , Mempool -> Ptr <zebra_block> -> Ptr Int64 -> Ptr (Ptr <zebra_entity>) -> IO CError
