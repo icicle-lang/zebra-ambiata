@@ -1,4 +1,5 @@
 #include "zebra_data.h"
+#include "zebra_merge.h"
 
 error_t merge_append_table (anemone_mempool_t *pool, zebra_table_t *in, int64_t ix, zebra_table_t *out, int64_t out_ix);
 
