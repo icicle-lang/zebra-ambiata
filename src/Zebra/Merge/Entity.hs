@@ -8,7 +8,7 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeFamilies #-}
 module Zebra.Merge.Entity
-  ( entitiesOfBlock
+  ( entityValuesOfBlock
   , mergeEntityValues
   , mergeEntityTables
   , entityMergedOfEntityValues
@@ -28,8 +28,8 @@ import P
 
 
 
-entitiesOfBlock :: Monad m => BlockDataId -> Block -> Stream.Stream m EntityValues
-entitiesOfBlock blockId (Block entities indices tables) =
+entityValuesOfBlock :: Monad m => BlockDataId -> Block -> Stream.Stream m EntityValues
+entityValuesOfBlock blockId (Block entities indices tables) =
   Stream.streamOfVectorM $
   Boxed.mapAccumulate go (indices,tables) entities
   where

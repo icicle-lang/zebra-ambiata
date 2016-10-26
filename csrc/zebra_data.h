@@ -11,8 +11,9 @@
 
 #define ZEBRA_SUCCESS 0
 #define ZEBRA_INVALID_COLUMN_TYPE 30
-#define ZEBRA_INVALID_ATTRIBUTE 31
+#define ZEBRA_ATTRIBUTE_NOT_FOUND 31
 #define ZEBRA_NOT_ENOUGH_BYTES 32
+#define ZEBRA_NOT_ENOUGH_ROWS 33
 
 typedef int64_t bool64_t;
 
@@ -69,13 +70,12 @@ typedef struct zebra_block_entity {
     int64_t id_length;
     uint8_t *id_bytes;
 
-    /* length = attribute_count from parent zebra_block */
+    int64_t attribute_count;
     int64_t *attribute_ids;
     int64_t *attribute_row_counts;
 } zebra_block_entity_t;
 
 typedef struct zebra_block {
-    int64_t attribute_count;
     int64_t entity_count;
     zebra_block_entity_t *entities;
 
@@ -84,7 +84,7 @@ typedef struct zebra_block {
     int64_t *priorities;
     bool64_t *tombstones;
 
-    /* length = attribute_count */
+    int64_t table_count;
     zebra_table_t *tables;
 } zebra_block_t;
 
@@ -121,6 +121,13 @@ error_t zebra_grow_table (
 error_t zebra_grow_attribute (
     anemone_mempool_t *pool
   , zebra_attribute_t *attribute
+  );
+
+error_t zebra_entities_of_block (
+    anemone_mempool_t *pool
+  , zebra_block_t *block
+  , int64_t *out_entity_count
+  , zebra_entity_t **out_entities
   );
 
 #endif//__ZEBRA_DATA_H

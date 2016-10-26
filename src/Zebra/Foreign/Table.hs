@@ -2,13 +2,17 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 module Zebra.Foreign.Table (
-    peekTable
+    CTable(..)
+  , tableOfForeign
+  , foreignOfTable
+
+  , peekTable
   , pokeTable
   , peekColumn
   , pokeColumn
   ) where
 
-import           Anemone.Foreign.Mempool (Mempool, calloc)
+import           Anemone.Foreign.Mempool (Mempool, alloc, calloc)
 
 import           Control.Monad.IO.Class (MonadIO(..))
 
@@ -24,6 +28,21 @@ import           Zebra.Data.Table
 import           Zebra.Foreign.Bindings
 import           Zebra.Foreign.Util
 
+
+newtype CTable =
+  CTable {
+      unCTable :: Ptr C'zebra_table
+    }
+
+tableOfForeign :: MonadIO m => CTable -> EitherT ForeignError m Table
+tableOfForeign (CTable c_table) =
+  peekTable c_table
+
+foreignOfTable :: MonadIO m => Mempool -> Table -> m CTable
+foreignOfTable pool table = do
+  c_table <- liftIO $ alloc pool
+  pokeTable pool c_table table
+  pure $ CTable c_table
 
 peekTable :: MonadIO m => Ptr C'zebra_table -> EitherT ForeignError m Table
 peekTable c_table = do
@@ -73,7 +92,7 @@ peekColumn n_rows c_column = do
         <*> peekTable (p'zebra_data'a'table $ p'zebra_column'data c_column)
 
     _ ->
-      left $ ForeignUnknownColumnType typ
+      left ForeignInvalidColumnType
 
 pokeColumn :: MonadIO m => Mempool -> Ptr C'zebra_column -> Column -> m ()
 pokeColumn pool c_column = \case
