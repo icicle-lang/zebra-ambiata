@@ -7,7 +7,10 @@
 #include "../lib/anemone/csrc/anemone_memcmp.h"
 #endif
 
-
+//
+// Agile clone: copy the structure, but throw away the content.
+// This is used for allocating an empty entity with the same schema as an existing entity.
+//
 error_t zebra_agile_clone_attribute (anemone_mempool_t *pool, const zebra_attribute_t *attribute, zebra_attribute_t *into)
 {
     into->times = NULL;
@@ -86,11 +89,12 @@ error_t zebra_merge_append_column (anemone_mempool_t *pool, const zebra_column_t
                 }
 
                 out_into->data.a.n[out_ix] = value_count;
+
+                out_into->data.a.table.row_count += value_count;
+                zebra_grow_table (pool, &out_into->data.a.table);
                 // copy each value separately. this could be a lot better.
                 // zebra_merge_append_* should copy multiple values & grow once at start.
                 for (int64_t v = 0; v < value_count; ++v) {
-                    out_into->data.a.table.row_count++;
-                    zebra_grow_table (pool, &out_into->data.a.table);
 
                     err = zebra_merge_append_table (pool, &in->data.a.table, value_in_ix, &out_into->data.a.table, value_out_ix);
                     if (err) return err;

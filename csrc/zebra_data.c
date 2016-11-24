@@ -122,6 +122,23 @@ error_t zebra_grow_column (anemone_mempool_t *pool, zebra_column_t *column, int6
     }
 }
 
+//
+// Array capacity: compute array capacity for given count.
+// Gets next highest power of two after count, or a minimum of 4.
+// This was stolen from Icicle. Maybe it should go in Anemone.
+//
+ANEMONE_STATIC
+ANEMONE_INLINE
+int64_t zebra_grow_array_capacity(int64_t count)
+{
+    if (count < 4) return 4;
+
+    int64_t bits = 64 - __builtin_clzll (count - 1);
+    int64_t next = 1L << bits;
+
+    return next;
+}
+
 error_t zebra_grow_table (anemone_mempool_t *pool, zebra_table_t *table)
 {
     int64_t row_count = table->row_count;
@@ -136,13 +153,11 @@ error_t zebra_grow_table (anemone_mempool_t *pool, zebra_table_t *table)
     }
 
     //
-    // When the row count and the capacity are the same, it means we have
-    // reached our limit and need to grow the table. If the capacity is
-    // currently zero, then we need to do the initial allocation of the table.
+    // When the row count is larger or equal to the capacity, it means we have
+    // reached our limit and need to grow the table.
     //
 
-    const int64_t initial_capacity = 4;
-    int64_t new_row_capacity = row_capacity == 0 ? initial_capacity : row_capacity * 2;
+    int64_t new_row_capacity = zebra_grow_array_capacity(row_count);
     table->row_capacity = new_row_capacity;
 
     int64_t column_count = table->column_count;
