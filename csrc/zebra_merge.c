@@ -11,6 +11,9 @@
 // Agile clone: copy the structure, but throw away the content.
 // This is used for allocating an empty entity with the same schema as an existing entity.
 //
+// We could probably save time by pre-allocating the contents arrays to hold both input entities,
+// but at the moment we set the initial capacity to zero.
+//
 error_t zebra_agile_clone_attribute (anemone_mempool_t *pool, const zebra_attribute_t *attribute, zebra_attribute_t *into)
 {
     into->times = NULL;
@@ -37,6 +40,10 @@ error_t zebra_agile_clone_table (anemone_mempool_t *pool, const zebra_table_t *t
 }
 
 
+//
+// Append: push a single value onto the end of an attribute.
+// Take the value of attribute "in" at index "ix", and add it to the end of "out_into".
+//
 error_t zebra_merge_append_attribute (anemone_mempool_t *pool, const zebra_attribute_t *in, int64_t ix, zebra_attribute_t *out_into)
 {
     error_t err;
@@ -93,9 +100,8 @@ error_t zebra_merge_append_column (anemone_mempool_t *pool, const zebra_column_t
                 out_into->data.a.table.row_count += value_count;
                 zebra_grow_table (pool, &out_into->data.a.table);
                 // copy each value separately. this could be a lot better.
-                // zebra_merge_append_* should copy multiple values & grow once at start.
+                // zebra_merge_append_* should copy multiple values
                 for (int64_t v = 0; v < value_count; ++v) {
-
                     err = zebra_merge_append_table (pool, &in->data.a.table, value_in_ix, &out_into->data.a.table, value_out_ix);
                     if (err) return err;
                     value_in_ix++;
@@ -155,6 +161,7 @@ error_t zebra_merge_attribute (anemone_mempool_t *pool, const zebra_attribute_t 
         }
     }
 
+    // assert (in1_ix == in1->table.row_count || in2_ix == in2->table.row_count)
     // fixup loops after one of the inputs is finished
     while (in1_ix < in1->table.row_count) {
         err = zebra_merge_append_attribute (pool, in1, in1_ix, out_into);
