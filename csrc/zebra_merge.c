@@ -1,6 +1,12 @@
 #include "zebra_data.h"
 #include "zebra_merge.h"
 
+#if CABAL
+#include "anemone_memcmp.h"
+#else
+#include "../lib/anemone/csrc/anemone_memcmp.h"
+#endif
+
 
 error_t zebra_agile_clone_attribute (anemone_mempool_t *pool, const zebra_attribute_t *attribute, zebra_attribute_t *into)
 {
@@ -50,8 +56,7 @@ error_t zebra_merge_append_column (anemone_mempool_t *pool, const zebra_column_t
 {
     error_t err;
 
-    // todo better error
-    if (in->type != out_into->type) return ZEBRA_INVALID_COLUMN_TYPE;
+    if (in->type != out_into->type) return ZEBRA_MERGE_DIFFERENT_COLUMN_TYPES;
 
     switch (in->type) {
         case ZEBRA_BYTE:
@@ -167,11 +172,22 @@ error_t zebra_merge_entity (anemone_mempool_t *pool, const zebra_entity_t *in1, 
 {
     error_t err;
 
-    // TODO: assert entities are the same hash, id, attribute count
+    if (in1->hash != in2->hash ||
+        in1->id_length != in2->id_length ||
+        in1->attribute_count != in2->attribute_count) {
+        return ZEBRA_MERGE_DIFFERENT_ENTITIES;
+    }
+    // #if PARANOID
+    // assert in1->id_length == in2->id_length
+    if (anemone_memcmp(in1->id_bytes, in2->id_bytes, in1->id_length) != 0) {
+        return ZEBRA_MERGE_DIFFERENT_ENTITIES;
+    }
+    // #endif
+
     out_into->hash            = in1->hash;
     out_into->id_length       = in1->id_length;
     out_into->id_bytes        = in1->id_bytes;
-    out_into->attribute_count = in1->attribute_count < in2->attribute_count ? in1->attribute_count : in2->attribute_count;
+    out_into->attribute_count = in1->attribute_count;
 
     out_into->attributes = anemone_mempool_alloc (pool, sizeof (zebra_attribute_t) * out_into->attribute_count );
     for (int64_t c = 0; c < out_into->attribute_count; ++c) {
