@@ -10,7 +10,7 @@ import           Control.Monad.Catch (bracket)
 
 import           Disorder.Core.IO (testIO)
 import           Disorder.Core.Run (disorderCheckEnvAll, ExpectedTestSpeed(..))
-import           Disorder.Jack (Property)
+import           Disorder.Jack (Property, counterexample)
 import           Disorder.Jack (gamble)
 import           Disorder.Jack (Jack, sized)
 import           Disorder.Jack (listOfN, maybeOf)
@@ -35,7 +35,7 @@ import           Zebra.Data.Fact
 
 
 jEncodings :: Jack [Encoding]
-jEncodings = listOfN 0 5 jEncoding
+jEncodings = listOfN 2 2 jEncoding
 
 jFactForEntity :: (EntityHash, EntityId) -> Encoding -> AttributeId -> Jack Fact
 jFactForEntity eid encoding aid =
@@ -53,11 +53,12 @@ jFactsFor eid encs = sized $ \size -> do
   List.sort . List.concat <$> mapM (\(enc,aid) -> listOfN 0 maxFacts $ jFactForEntity eid enc aid) encs'
 
 
-foreignOfFacts :: Mempool.Mempool -> [Encoding] -> [Fact] -> IO (Boxed.Vector CEntity)
+foreignOfFacts :: Mempool.Mempool -> [Encoding] -> [Fact] -> IO (Block, Boxed.Vector CEntity)
 foreignOfFacts pool encs facts = do
   let Right block    = blockOfFacts (Boxed.fromList encs) (Boxed.fromList facts)
   let Right entities = entitiesOfBlock block
-  mapM (foreignOfEntity pool) entities
+  es' <- mapM (foreignOfEntity pool) entities
+  return (block, es')
 
 
 prop_merge_1_entity_no_segfault :: Property
@@ -67,11 +68,15 @@ prop_merge_1_entity_no_segfault =
   gamble (jFactsFor eid encs) $ \facts1 ->
   gamble (jFactsFor eid encs) $ \facts2 ->
   testIO . bracket Mempool.create Mempool.free $ \pool -> withSegv (ppShow (eid, encs, facts1, facts2)) $ do
-    cs1 <- foreignOfFacts pool encs facts1
-    cs2 <- foreignOfFacts pool encs facts2
+    (b1,cs1) <- foreignOfFacts pool encs facts1
+    (b2,cs2) <- foreignOfFacts pool encs facts2
     let cs' = Boxed.zip cs1 cs2
-    Right _ <- runEitherT $ mapM (uncurry $ mergeEntity pool) cs'
-    return True
+    merged <- runEitherT $ mapM (uncurry $ mergeEntity pool) cs'
+    -- Only checking segfault for now
+    return $ counterexample (ppShow (b1,b2))
+        $ case merged of
+           Right _ -> True
+           Left _ -> True
 
 return []
 tests :: IO Bool

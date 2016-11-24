@@ -127,7 +127,7 @@ error_t zebra_grow_table (anemone_mempool_t *pool, zebra_table_t *table)
     int64_t row_count = table->row_count;
     int64_t row_capacity = table->row_capacity;
 
-    if (row_count != row_capacity) {
+    if (row_count <= row_capacity) {
         //
         // We have not reached our capacity yet, so do nothing.
         //
@@ -143,6 +143,7 @@ error_t zebra_grow_table (anemone_mempool_t *pool, zebra_table_t *table)
 
     const int64_t initial_capacity = 4;
     int64_t new_row_capacity = row_capacity == 0 ? initial_capacity : row_capacity * 2;
+    table->row_capacity = new_row_capacity;
 
     int64_t column_count = table->column_count;
     zebra_column_t *columns = table->columns;
@@ -167,7 +168,7 @@ error_t zebra_grow_attribute (anemone_mempool_t *pool, zebra_attribute_t *attrib
 
     int64_t new_capacity = table->row_capacity;
 
-    if (old_capacity != new_capacity) {
+    if (old_capacity < new_capacity) {
         attribute->times =
           zebra_grow_array (
               pool

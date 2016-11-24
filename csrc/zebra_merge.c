@@ -12,6 +12,8 @@ error_t zebra_agile_clone_attribute (anemone_mempool_t *pool, zebra_attribute_t 
 
 error_t zebra_agile_clone_table (anemone_mempool_t *pool, zebra_table_t *table, zebra_table_t *into)
 {
+    into->row_count = 0;
+    into->row_capacity = 0;
     int64_t count = table->column_count;
     into->column_count = count;
     into->columns = anemone_mempool_calloc (pool, count, sizeof (zebra_column_t));
@@ -165,10 +167,11 @@ error_t zebra_merge_entity (anemone_mempool_t *pool, zebra_entity_t *in1, zebra_
 {
     error_t err;
 
+    // TODO: assert entities are the same hash, id, attribute count
     out_into->hash            = in1->hash;
     out_into->id_length       = in1->id_length;
     out_into->id_bytes        = in1->id_bytes;
-    out_into->attribute_count = in1->attribute_count;
+    out_into->attribute_count = in1->attribute_count < in2->attribute_count ? in1->attribute_count : in2->attribute_count;
 
     out_into->attributes = anemone_mempool_alloc (pool, sizeof (zebra_attribute_t) * out_into->attribute_count );
     for (int64_t c = 0; c < out_into->attribute_count; ++c) {
