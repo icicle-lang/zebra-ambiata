@@ -483,17 +483,18 @@ error_t zebra_entities_of_block (
         int64_t attribute_count = block_entity->attribute_count;
         int64_t *attribute_ids = block_entity->attribute_ids;
         int64_t *attribute_row_counts = block_entity->attribute_row_counts;
-        zebra_attribute_t *attributes = anemone_mempool_calloc (pool, attribute_count, sizeof (zebra_attribute_t));
+        zebra_attribute_t *attributes = anemone_mempool_calloc (pool, table_count, sizeof (zebra_attribute_t));
 
-        for (int64_t aix = 0; aix < attribute_count; aix++) {
-            int64_t attribute_id = attribute_ids[aix];
-            int64_t attribute_row_count = attribute_row_counts[aix];
+        int64_t aix = 0;
+        for (int64_t attribute_id = 0; attribute_id < table_count; attribute_id++) {
+            int64_t attribute_row_count = 0;
 
-            if (attribute_id < 0 || attribute_id >= table_count) {
-                return ZEBRA_ATTRIBUTE_NOT_FOUND;
+            if (aix < attribute_count && attribute_ids[aix] == attribute_id) {
+                attribute_row_count = attribute_row_counts[aix];
+                aix++;
             }
 
-            zebra_attribute_t *attribute = attributes + aix;
+            zebra_attribute_t *attribute = attributes + attribute_id;
 
             attribute->times = block_times;
             attribute->priorities = block_priorities;
@@ -510,7 +511,15 @@ error_t zebra_entities_of_block (
             if (err) return err;
         }
 
-        entity->attribute_count = attribute_count;
+        //
+        // We need to use all the input attributes, otherwise something is wrong.
+        // They are out of order or refer to a non-existent attribute. 
+        //
+        if (aix != attribute_count) {
+            return ZEBRA_ATTRIBUTE_NOT_FOUND;
+        }
+
+        entity->attribute_count = table_count;
         entity->attributes = attributes;
     }
 
