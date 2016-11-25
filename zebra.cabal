@@ -81,15 +81,18 @@ library
   install-includes:
                        zebra_data.h
                        zebra_merge.h
+                       zebra_merge_many.h
 
   includes:
                        zebra_bindings.h
                        zebra_data.h
                        zebra_merge.h
+                       zebra_merge_many.h
 
   c-sources:
                        csrc/zebra_data.c
                        csrc/zebra_merge.c
+                       csrc/zebra_merge_many.c
 
   cc-options:
                        -std=c99 -O3 -msse4.2 -Wall -Werror -DCABAL=1

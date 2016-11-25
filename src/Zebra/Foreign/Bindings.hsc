@@ -16,6 +16,7 @@ import Anemone.Foreign.Mempool (Mempool(..))
 #include <bindings.dsl.h>
 #include "zebra_bindings.h"
 #include "zebra_data.h"
+#include "zebra_merge_many.h"
 
 #strict_import
 
@@ -88,5 +89,15 @@ import Anemone.Foreign.Mempool (Mempool(..))
 #field tables , Ptr <zebra_table>
 #stoptype
 
+#starttype struct zebra_merge_many
+#field count , Int64
+#field entities , Ptr <zebra_entity>
+#stoptype
+
 #ccall zebra_entities_of_block , Mempool -> Ptr <zebra_block> -> Ptr Int64 -> Ptr (Ptr <zebra_entity>) -> IO CError
 #ccall zebra_merge_entity , Mempool -> Ptr <zebra_entity> -> Ptr <zebra_entity> -> Ptr <zebra_entity> -> IO CError
+#ccall zebra_mm_init , Mempool -> Ptr <zebra_merge_many> -> IO CError
+#ccall zebra_mm_push , Mempool -> Ptr <zebra_merge_many> -> Int64 -> Ptr <zebra_entity> -> IO CError
+#ccall zebra_mm_pop , Ptr <zebra_merge_many> -> Ptr (Ptr <zebra_entity>) -> IO CError
+#ccall zebra_mm_clone , Mempool -> Ptr <zebra_merge_many> -> IO CError
+

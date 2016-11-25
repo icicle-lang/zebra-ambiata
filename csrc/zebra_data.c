@@ -78,9 +78,6 @@ error_t zebra_alloc_table (
 
 static void* zebra_grow_array (anemone_mempool_t *pool, void *old, size_t size, int64_t old_capacity, int64_t new_capacity)
 {
-    // XXX: This was calloc before, have changed to alloc.
-    // I don't think it needs to be zeroed since the part which is used will be initialised by memcpy,
-    // and the rest is past the end.
     void *new = anemone_mempool_alloc (pool, new_capacity * size);
 
     //
@@ -120,23 +117,6 @@ error_t zebra_grow_column (anemone_mempool_t *pool, zebra_column_t *column, int6
         default:
             return ZEBRA_INVALID_COLUMN_TYPE;
     }
-}
-
-//
-// Array capacity: compute array capacity for given count.
-// Gets next highest power of two after count, or a minimum of 4.
-// This was stolen from Icicle. Maybe it should go in Anemone.
-//
-ANEMONE_STATIC
-ANEMONE_INLINE
-int64_t zebra_grow_array_capacity(int64_t count)
-{
-    if (count < 4) return 4;
-
-    int64_t bits = 64 - __builtin_clzll (count - 1);
-    int64_t next = 1L << bits;
-
-    return next;
 }
 
 error_t zebra_grow_table (anemone_mempool_t *pool, zebra_table_t *table)
