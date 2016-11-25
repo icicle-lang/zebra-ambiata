@@ -24,6 +24,8 @@ import Anemone.Foreign.Mempool (Mempool(..))
 #znum ZEBRA_ATTRIBUTE_NOT_FOUND
 #znum ZEBRA_NOT_ENOUGH_BYTES
 #znum ZEBRA_NOT_ENOUGH_ROWS
+#znum ZEBRA_MERGE_DIFFERENT_COLUMN_TYPES
+#znum ZEBRA_MERGE_DIFFERENT_ENTITIES
 
 #integral_t enum zebra_type
 #znum ZEBRA_BYTE
@@ -87,3 +89,4 @@ import Anemone.Foreign.Mempool (Mempool(..))
 #stoptype
 
 #ccall zebra_entities_of_block , Mempool -> Ptr <zebra_block> -> Ptr Int64 -> Ptr (Ptr <zebra_entity>) -> IO CError
+#ccall zebra_merge_entity , Mempool -> Ptr <zebra_entity> -> Ptr <zebra_entity> -> Ptr <zebra_entity> -> IO CError

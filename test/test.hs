@@ -7,6 +7,7 @@ import qualified Test.Zebra.Data.Table
 import qualified Test.Zebra.Data.Table.Mutable
 import qualified Test.Zebra.Foreign.Block
 import qualified Test.Zebra.Foreign.Entity
+import qualified Test.Zebra.Foreign.Merge
 import qualified Test.Zebra.Foreign.Table
 import qualified Test.Zebra.Merge.Entity
 import qualified Test.Zebra.Serial.Array
@@ -24,6 +25,7 @@ main =
     , Test.Zebra.Data.Table.tests
     , Test.Zebra.Foreign.Block.tests
     , Test.Zebra.Foreign.Entity.tests
+    , Test.Zebra.Foreign.Merge.tests
     , Test.Zebra.Foreign.Table.tests
     , Test.Zebra.Merge.Entity.tests
     , Test.Zebra.Serial.Array.tests

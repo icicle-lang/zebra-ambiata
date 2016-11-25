@@ -61,6 +61,7 @@ library
                     Zebra.Foreign.Bindings
                     Zebra.Foreign.Block
                     Zebra.Foreign.Entity
+                    Zebra.Foreign.Merge
                     Zebra.Foreign.Table
                     Zebra.Foreign.Util
 
@@ -79,10 +80,12 @@ library
 
   install-includes:
                        zebra_data.h
+                       zebra_merge.h
 
   includes:
                        zebra_bindings.h
                        zebra_data.h
+                       zebra_merge.h
 
   c-sources:
                        csrc/zebra_data.c

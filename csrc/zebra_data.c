@@ -122,12 +122,29 @@ error_t zebra_grow_column (anemone_mempool_t *pool, zebra_column_t *column, int6
     }
 }
 
+//
+// Array capacity: compute array capacity for given count.
+// Gets next highest power of two after count, or a minimum of 4.
+// This was stolen from Icicle. Maybe it should go in Anemone.
+//
+ANEMONE_STATIC
+ANEMONE_INLINE
+int64_t zebra_grow_array_capacity(int64_t count)
+{
+    if (count < 4) return 4;
+
+    int64_t bits = 64 - __builtin_clzll (count - 1);
+    int64_t next = 1L << bits;
+
+    return next;
+}
+
 error_t zebra_grow_table (anemone_mempool_t *pool, zebra_table_t *table)
 {
     int64_t row_count = table->row_count;
     int64_t row_capacity = table->row_capacity;
 
-    if (row_count != row_capacity) {
+    if (row_count <= row_capacity) {
         //
         // We have not reached our capacity yet, so do nothing.
         //
@@ -136,13 +153,12 @@ error_t zebra_grow_table (anemone_mempool_t *pool, zebra_table_t *table)
     }
 
     //
-    // When the row count and the capacity are the same, it means we have
-    // reached our limit and need to grow the table. If the capacity is
-    // currently zero, then we need to do the initial allocation of the table.
+    // When the row count is larger or equal to the capacity, it means we have
+    // reached our limit and need to grow the table.
     //
 
-    const int64_t initial_capacity = 4;
-    int64_t new_row_capacity = row_capacity == 0 ? initial_capacity : row_capacity * 2;
+    int64_t new_row_capacity = zebra_grow_array_capacity(row_count);
+    table->row_capacity = new_row_capacity;
 
     int64_t column_count = table->column_count;
     zebra_column_t *columns = table->columns;
@@ -167,7 +183,7 @@ error_t zebra_grow_attribute (anemone_mempool_t *pool, zebra_attribute_t *attrib
 
     int64_t new_capacity = table->row_capacity;
 
-    if (old_capacity != new_capacity) {
+    if (old_capacity < new_capacity) {
         attribute->times =
           zebra_grow_array (
               pool
@@ -482,17 +498,18 @@ error_t zebra_entities_of_block (
         int64_t attribute_count = block_entity->attribute_count;
         int64_t *attribute_ids = block_entity->attribute_ids;
         int64_t *attribute_row_counts = block_entity->attribute_row_counts;
-        zebra_attribute_t *attributes = anemone_mempool_calloc (pool, attribute_count, sizeof (zebra_attribute_t));
+        zebra_attribute_t *attributes = anemone_mempool_calloc (pool, table_count, sizeof (zebra_attribute_t));
 
-        for (int64_t aix = 0; aix < attribute_count; aix++) {
-            int64_t attribute_id = attribute_ids[aix];
-            int64_t attribute_row_count = attribute_row_counts[aix];
+        int64_t aix = 0;
+        for (int64_t attribute_id = 0; attribute_id < table_count; attribute_id++) {
+            int64_t attribute_row_count = 0;
 
-            if (attribute_id < 0 || attribute_id >= table_count) {
-                return ZEBRA_ATTRIBUTE_NOT_FOUND;
+            if (aix < attribute_count && attribute_ids[aix] == attribute_id) {
+                attribute_row_count = attribute_row_counts[aix];
+                aix++;
             }
 
-            zebra_attribute_t *attribute = attributes + aix;
+            zebra_attribute_t *attribute = attributes + attribute_id;
 
             attribute->times = block_times;
             attribute->priorities = block_priorities;
@@ -509,7 +526,15 @@ error_t zebra_entities_of_block (
             if (err) return err;
         }
 
-        entity->attribute_count = attribute_count;
+        //
+        // We need to use all the input attributes, otherwise something is wrong.
+        // They are out of order or refer to a non-existent attribute. 
+        //
+        if (aix != attribute_count) {
+            return ZEBRA_ATTRIBUTE_NOT_FOUND;
+        }
+
+        entity->attribute_count = table_count;
         entity->attributes = attributes;
     }
 

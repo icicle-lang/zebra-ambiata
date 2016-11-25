@@ -3,6 +3,7 @@
 {-# LANGUAGE DoAndIfThenElse #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE PatternGuards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# OPTIONS_GHC -funbox-strict-fields #-}
 module Zebra.Data.Block.Block (
@@ -216,8 +217,23 @@ fromBlockEntity ::
   EitherT EntityError m Entity
 fromBlockEntity mtables (IndexedEntity (BlockEntity hash eid battrs) indices) = do
   mindices <- newRef indices
-  attrs <- Boxed.mapM (fromBlockAttribute mindices mtables) $ Unboxed.convert battrs
+  let battrs' = denseBlockAttributes (MBoxed.length mtables) battrs
+  attrs <- Boxed.mapM (fromBlockAttribute mindices mtables) $ Unboxed.convert battrs'
   pure $ Entity hash eid attrs
+
+denseBlockAttributes ::
+  Int ->
+  Unboxed.Vector BlockAttribute ->
+  Unboxed.Vector BlockAttribute
+denseBlockAttributes num blockAttributes =
+  Unboxed.mapAccumulate go blockAttributes $ Unboxed.enumFromN 0 num
+ where
+  go battrs ix
+   | Just (BlockAttribute aid n, battrs') <- Unboxed.uncons battrs
+   , aid == AttributeId ix
+   = (battrs', BlockAttribute aid n)
+   | otherwise
+   = (battrs, BlockAttribute (AttributeId ix) 0)
 
 fromBlockAttribute ::
   PrimMonad m =>
