@@ -67,6 +67,7 @@ library
 
                     Zebra.Merge.Base
                     Zebra.Merge.Block
+                    Zebra.Merge.BlockC
                     Zebra.Merge.Entity
 
                     Zebra.Serial
