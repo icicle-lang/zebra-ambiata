@@ -1,3 +1,4 @@
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -20,6 +21,7 @@ import qualified Data.ByteString as B
 import qualified Data.Vector as Boxed
 
 import           Foreign.Ptr (Ptr)
+import           Foreign.Storable (Storable(..))
 
 import           P
 
@@ -37,6 +39,7 @@ newtype CEntity =
   CEntity {
       unCEntity :: Ptr C'zebra_entity
     }
+  deriving Storable
 
 entityOfForeign :: MonadIO m => CEntity -> EitherT ForeignError m Entity
 entityOfForeign (CEntity c_entity) =

@@ -96,8 +96,8 @@ import Anemone.Foreign.Mempool (Mempool(..))
 
 #ccall zebra_entities_of_block , Mempool -> Ptr <zebra_block> -> Ptr Int64 -> Ptr (Ptr <zebra_entity>) -> IO CError
 #ccall zebra_merge_entity , Mempool -> Ptr <zebra_entity> -> Ptr <zebra_entity> -> Ptr <zebra_entity> -> IO CError
-#ccall zebra_mm_init , Mempool -> Ptr <zebra_merge_many> -> IO CError
+#ccall zebra_mm_init , Mempool -> Ptr (Ptr <zebra_merge_many>) -> IO CError
 #ccall zebra_mm_push , Mempool -> Ptr <zebra_merge_many> -> Int64 -> Ptr <zebra_entity> -> IO CError
 #ccall zebra_mm_pop , Ptr <zebra_merge_many> -> Ptr (Ptr <zebra_entity>) -> IO CError
-#ccall zebra_mm_clone , Mempool -> Ptr <zebra_merge_many> -> IO CError
+#ccall zebra_mm_clone , Mempool -> Ptr (Ptr <zebra_merge_many>) -> IO CError
 

@@ -26,9 +26,10 @@ int64_t zebra_entity_compare(zebra_entity_t *c1, zebra_entity_t *c2)
     return zebra_compare_strings(c1->id_bytes, c1->id_length, c2->id_bytes, c2->id_length);
 }
 
-error_t zebra_mm_init (anemone_mempool_t *pool, zebra_merge_many_t **out)
+error_t zebra_mm_init (anemone_mempool_t *pool, zebra_merge_many_t **merger)
 {
-    *out = anemone_mempool_calloc (pool, 1, sizeof (zebra_merge_many_t) );
+    *merger = anemone_mempool_calloc (pool, 1, sizeof (zebra_merge_many_t) );
+
     return ZEBRA_SUCCESS;
 }
 
@@ -53,7 +54,8 @@ error_t zebra_mm_push (anemone_mempool_t *pool, zebra_merge_many_t *merger, int6
         if (cmp == 0) {
             error_t err = zebra_merge_entity(pool, e1, e2, into);
             if (err) return err;
-
+            merger_ix++;
+            add_ix++;
         } else if (cmp < 0) {
             *into = *e1;
             merger_ix++;
@@ -179,8 +181,10 @@ error_t zebra_deep_clone_entity (anemone_mempool_t *pool, const zebra_entity_t *
 
 error_t zebra_mm_clone (
     anemone_mempool_t *pool
-  , zebra_merge_many_t *merger)
+  , zebra_merge_many_t **merger_inout)
 {
+    zebra_merge_many_t *merger = *merger_inout;
+
     int64_t merger_count = merger->count;
     zebra_entity_t *old_entities = merger->entities;
     zebra_entity_t *new_entities = anemone_mempool_calloc (pool, merger_count, sizeof(zebra_entity_t));
@@ -189,6 +193,8 @@ error_t zebra_mm_clone (
         error_t err = zebra_deep_clone_entity (pool, old_entities + i, new_entities + i);
         if (err) return err;
     }
+
+    *merger_inout = zebra_clone_array (pool, merger, 1, sizeof (zebra_merge_many_t));
 
     return ZEBRA_SUCCESS;
 }

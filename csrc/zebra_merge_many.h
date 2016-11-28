@@ -28,7 +28,7 @@ error_t zebra_mm_pop (
 
 error_t zebra_mm_clone (
     anemone_mempool_t *pool
-  , zebra_merge_many_t *merger
+  , zebra_merge_many_t **merger
   );
 
 
