@@ -1,12 +1,6 @@
 #include "zebra_data.h"
 #include "zebra_merge.h"
 
-#if CABAL
-#include "anemone_memcmp.h"
-#else
-#include "../lib/anemone/csrc/anemone_memcmp.h"
-#endif
-
 //
 // Agile clone: copy the structure, but throw away the content.
 // This is used for allocating an empty entity with the same schema as an existing entity.

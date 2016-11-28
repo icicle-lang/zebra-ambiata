@@ -3,9 +3,11 @@
 
 #if CABAL
 #include "anemone_base.h"
+#include "anemone_memcmp.h"
 #include "anemone_mempool.h"
 #else
 #include "../lib/anemone/csrc/anemone_base.h"
+#include "../lib/anemone/csrc/anemone_memcmp.h"
 #include "../lib/anemone/csrc/anemone_mempool.h"
 #endif
 
@@ -131,5 +133,23 @@ error_t zebra_entities_of_block (
   , int64_t *out_entity_count
   , zebra_entity_t **out_entities
   );
+
+//
+// Array capacity: compute array capacity for given count.
+// Gets next highest power of two after count, or a minimum of 4.
+// This was stolen from Icicle. Maybe it should go in Anemone.
+//
+ANEMONE_STATIC
+ANEMONE_INLINE
+int64_t zebra_grow_array_capacity(int64_t count)
+{
+    if (count < 4) return 4;
+
+    int64_t bits = 64 - __builtin_clzll (count - 1);
+    int64_t next = 1L << bits;
+
+    return next;
+}
+
 
 #endif//__ZEBRA_DATA_H
