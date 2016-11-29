@@ -9,6 +9,7 @@ module Zebra.Foreign.Entity (
 
   , peekEntity
   , pokeEntity
+  , peekEntityId
   , peekAttribute
   , pokeAttribute
   ) where
@@ -54,8 +55,7 @@ foreignOfEntity pool entity = do
 peekEntity :: MonadIO m => Ptr C'zebra_entity -> EitherT ForeignError m Entity
 peekEntity c_entity = do
   hash <- EntityHash <$> peekIO (p'zebra_entity'hash c_entity)
-  eid_len <- fromIntegral <$> peekIO (p'zebra_entity'id_length c_entity)
-  eid <- EntityId <$> peekByteString eid_len (p'zebra_entity'id_bytes c_entity)
+  eid <- peekEntityId c_entity
 
   n_attrs <- fromIntegral <$> peekIO (p'zebra_entity'attribute_count c_entity)
   c_attributes <- peekIO (p'zebra_entity'attributes c_entity)
@@ -81,6 +81,14 @@ pokeEntity pool c_entity (Entity hash eid attributes) = do
   pokeIO (p'zebra_entity'attribute_count c_entity) $ fromIntegral n_attrs
   pokeIO (p'zebra_entity'attributes c_entity) c_attributes
   pokeMany c_attributes attributes $ pokeAttribute pool
+
+
+peekEntityId :: MonadIO m => Ptr C'zebra_entity -> EitherT ForeignError m EntityId
+peekEntityId c_entity = do
+  eid_len <- fromIntegral <$> peekIO (p'zebra_entity'id_length c_entity)
+  EntityId <$> peekByteString eid_len (p'zebra_entity'id_bytes c_entity)
+
+
 
 peekAttribute :: MonadIO m => Ptr C'zebra_attribute -> EitherT ForeignError m Attribute
 peekAttribute c_attribute = do

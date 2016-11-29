@@ -17,7 +17,6 @@ import qualified Anemone.Foreign.Mempool as Mempool
 import           Anemone.Foreign.Mempool (Mempool)
 
 import Zebra.Data hiding (BlockEntity(..))
-import Zebra.Data.Entity
 import Zebra.Foreign.Block
 import Zebra.Foreign.Entity
 import Zebra.Foreign.Merge
@@ -117,7 +116,5 @@ mergeFiles options files = do
    | otherwise
    = return state
 
-  centityId centity = do
-    -- TODO don't convert CEntity to Entity
-    entityId <$> entityOfForeign centity
+  centityId = peekEntityId . unCEntity
 

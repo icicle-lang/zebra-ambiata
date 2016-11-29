@@ -8,6 +8,7 @@ import           Zebra.Data.Block
 import           Zebra.Serial.File
 import           Zebra.Merge.Base
 import           Zebra.Merge.Block
+import qualified Zebra.Merge.BlockC as MergeC
 
 import           P
 
@@ -18,7 +19,7 @@ import qualified X.Data.Vector as Boxed
 import qualified X.Data.Vector.Unboxed as Unboxed
 import qualified X.Data.Vector.Stream as Stream
 
-import           X.Control.Monad.Trans.Either (EitherT, left)
+import           X.Control.Monad.Trans.Either (EitherT, left, joinErrors)
 import           X.Control.Monad.Trans.Either.Exit (orDie)
 import           Control.Monad.Trans.Class (lift)
 
@@ -49,7 +50,8 @@ main = do
 data Command =
     FileDump FilePath
   | FileHeader FilePath
-  | MergeFiles [FilePath]
+  | MergeFilesHaskell [FilePath]
+  | MergeFilesC [FilePath]
   deriving (Eq, Show)
 
 parser :: Parser (SafeCommand Command)
@@ -71,8 +73,12 @@ commands =
       "header"
       "Show header information about a Zebra file"
   , cmd
-      (MergeFiles <$> pInputFiles)
-      "merge"
+      (MergeFilesHaskell <$> pInputFiles)
+      "merge-haskell"
+      "Merge multiple input files together"
+  , cmd
+      (MergeFilesC <$> pInputFiles)
+      "merge-c"
       "Merge multiple input files together"
   ]
 
@@ -101,15 +107,33 @@ run c = case c of
     lift $ IO.putStrLn "Header information:"
     lift $ IO.putStrLn (show fileheader)
 
-  MergeFiles [] -> do
+  MergeFilesHaskell [] -> do
     IO.putStrLn "Merge: No files"
     Exit.exitFailure
 
-  MergeFiles ins@(i:_) -> orDie id $ do
+  MergeFilesHaskell ins@(i:_) -> orDie id $ do
     fileheader <- fst <$> getFile' i
     let ms = mergeFiles (readBlocksCheckHeader fileheader) (Boxed.fromList ins)
     Stream.mapM_ (lift . TextIO.putStrLn . printEntityInfo) ms
     return ()
+
+  MergeFilesC [] -> do
+    IO.putStrLn "Merge: No files"
+    Exit.exitFailure
+
+  MergeFilesC ins@(i:_) -> orDie id $ do
+    fileheader <- fst <$> getFile' i
+    let getPuller :: FilePath -> IO (EitherT Text IO (Maybe Block))
+        getPuller f = do
+        streamPuller $ readBlocksCheckHeader fileheader f
+
+    files <- lift $ mapM getPuller (Boxed.fromList ins)
+
+    let pull :: Int -> EitherT Text IO (Maybe Block)
+        pull f = files Boxed.! f
+    let push _ = lift $ TextIO.putStr "."
+
+    joinErrors (Text.pack . show) id $ MergeC.mergeFiles (MergeC.MergeOptions pull push 2000) (Boxed.map fst $ Boxed.indexed $ Boxed.fromList ins)
 
 
  where
@@ -130,6 +154,26 @@ run c = case c of
    ( "Entity: " <> show (emEntityHash ent) <> " : " <> show (emEntityId ent)
    <> "\tValues: " <> show (Boxed.sum $ Boxed.map Unboxed.length $ emIndices ent))
 
+
+streamPuller :: Stream.Stream (EitherT Text IO) b -> IO (EitherT Text IO (Maybe b))
+streamPuller (Stream.Stream loop state0) = do
+  stateRef <- IORef.newIORef state0
+  return $ go stateRef
+ where
+  go stateRef = do
+    state <- lift $ IORef.readIORef stateRef
+    step  <- loop state
+    case step of
+      Stream.Yield v state' -> do
+        lift $ IORef.writeIORef stateRef state'
+        lift $ TextIO.putStrLn "Block!"
+        return (Just v)
+      Stream.Skip state' -> do
+        lift $ IORef.writeIORef stateRef state'
+        go stateRef
+      Stream.Done -> do
+        return Nothing
+        
 
 showBlocks :: Stream.Stream (EitherT Text IO) Block -> EitherT Text IO ()
 showBlocks blocks = do
