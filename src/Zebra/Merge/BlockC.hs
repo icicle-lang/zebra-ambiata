@@ -50,7 +50,7 @@ data MergeState c =
 
 -- | Merge a whole bunch of files together.
 -- All files must have the same header.
-mergeFiles :: (MonadIO m, Ord c)
+mergeFiles :: MonadIO m
   => MergeOptions c m
   -> Boxed.Vector c
   -> EitherT ForeignError m ()
