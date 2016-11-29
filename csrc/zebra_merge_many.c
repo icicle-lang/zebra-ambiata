@@ -21,7 +21,7 @@ ANEMONE_INLINE
 int64_t zebra_entity_compare(zebra_entity_t *c1, zebra_entity_t *c2)
 {
     int64_t c;
-    c = c1->hash - c2->hash;
+    c = (int64_t)c1->hash - (int64_t)c2->hash;
     if (c != 0) return c;
     return zebra_compare_strings(c1->id_bytes, c1->id_length, c2->id_bytes, c2->id_length);
 }
@@ -33,7 +33,7 @@ error_t zebra_mm_init (anemone_mempool_t *pool, zebra_merge_many_t **merger)
     return ZEBRA_SUCCESS;
 }
 
-error_t zebra_mm_push (anemone_mempool_t *pool, zebra_merge_many_t *merger, int64_t add_count, zebra_entity_t *add_entities)
+error_t zebra_mm_push (anemone_mempool_t *pool, zebra_merge_many_t *merger, int64_t add_count, zebra_entity_t **add_entities)
 {
     int64_t merger_count = merger->count;
     int64_t alloc_count  = merger->count + add_count;
@@ -47,7 +47,7 @@ error_t zebra_mm_push (anemone_mempool_t *pool, zebra_merge_many_t *merger, int6
 
     while (merger_ix != merger_count && add_ix != add_count) {
         zebra_entity_t *e1 = merger_entities + merger_ix;
-        zebra_entity_t *e2 = add_entities + add_ix;
+        zebra_entity_t *e2 = add_entities[add_ix];
         zebra_entity_t *into = entities + insert_ix;
 
         int64_t cmp = zebra_entity_compare(e1, e2);
@@ -71,7 +71,7 @@ error_t zebra_mm_push (anemone_mempool_t *pool, zebra_merge_many_t *merger, int6
         entities[insert_ix++] = merger_entities[merger_ix++];
     }
     while (add_ix != add_count) {
-        entities[insert_ix++] = add_entities[add_ix++];
+        entities[insert_ix++] = *add_entities[add_ix++];
     }
 
     merger->count = insert_ix;

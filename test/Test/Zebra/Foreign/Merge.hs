@@ -24,6 +24,7 @@ import           X.Control.Monad.Trans.Either (runEitherT, firstEitherT)
 import           Text.Show.Pretty (ppShow)
 
 import           Test.Zebra.Jack
+import qualified Test.Zebra.Merge.BlockC as TestMerge
 
 import           Zebra.Foreign.Merge
 import           Zebra.Foreign.Entity
@@ -68,8 +69,8 @@ testMergeFacts encs facts =
   in  entities
 
 
-prop_merge_1_entity_no_segfault :: Property
-prop_merge_1_entity_no_segfault =
+zprop_merge_1_entity_no_segfault :: Property
+zprop_merge_1_entity_no_segfault =
   gamble jEntityHashId $ \eid ->
   gamble jEncodings $ \encs ->
   gamble (jFactsFor eid encs) $ \facts1 ->
@@ -85,8 +86,8 @@ prop_merge_1_entity_no_segfault =
            Right _ -> True
            Left _ -> False
 
-prop_merge_1_entity_check_result :: Property
-prop_merge_1_entity_check_result =
+zprop_merge_1_entity_check_result :: Property
+zprop_merge_1_entity_check_result =
   gamble jEntityHashId $ \eid ->
   gamble jEncodings $ \encs ->
   gamble (jFactsFor eid encs) $ \facts1 ->
@@ -109,6 +110,25 @@ prop_merge_1_entity_check_result =
                 | otherwise
                 -> Boxed.empty === m'
               Left  e' -> counterexample e' False
+
+prop_merge_1_block_2_files :: Property
+prop_merge_1_block_2_files =
+  gamble jEncodings $ \encs ->
+  gamble (jFacts encs) $ \facts1 ->
+  gamble (jFacts encs) $ \facts2 ->
+  testIO . withSegv (ppShow (encs, facts1, facts2)) $ do
+    let expect = testMergeFacts encs (facts1 <> facts2)
+    let Right b1 = blockOfFacts (Boxed.fromList encs) (Boxed.fromList facts1)
+    let Right b2 = blockOfFacts (Boxed.fromList encs) (Boxed.fromList facts2)
+    let err i = firstEitherT ppShow i
+    merged <- runEitherT $ err $ TestMerge.mergeLists [[b1], [b2]]
+
+    return $ counterexample (ppShow (b1,b2))
+           $ case merged of
+              Right m'
+                -> Boxed.toList expect === m'
+              Left  e' -> counterexample e' False
+
 
 return []
 tests :: IO Bool

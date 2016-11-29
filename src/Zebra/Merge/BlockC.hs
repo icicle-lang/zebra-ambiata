@@ -33,6 +33,7 @@ import           Control.Monad.Trans.Class (lift)
 
 import qualified Data.Map as Map
 
+
 data MergeOptions c m =
   MergeOptions
   { optionPullBlock  :: c -> m (Maybe Block)
@@ -75,7 +76,7 @@ mergeFiles options files = do
         lift $ optionPushEntity options centity
         eid <- centityId centity
         state' <- refill state eid
-        return state' { stateEntityCount = stateEntityCount state' + 1 }
+        go state' { stateEntityCount = stateEntityCount state' + 1 }
 
   refill state eid =
     case Map.lookup eid $ stateEntityRefills state of

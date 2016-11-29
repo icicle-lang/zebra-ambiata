@@ -52,7 +52,7 @@ mergeManyInit pool = allocStack $ \pmerge -> do
 mergeManyPush :: MonadIO m => Mempool -> CMergeMany -> Storable.Vector CEntity -> EitherT ForeignError m ()
 mergeManyPush pool (CMergeMany merger) entities = do
   let (ptr, len) = Storable.unsafeToForeignPtr0 entities
-  let ptr' :: ForeignPtr C'zebra_entity = coerce ptr
+  let ptr' :: ForeignPtr (Ptr C'zebra_entity) = coerce ptr
   let len' :: Int64 = fromIntegral $ len
   liftCError $ withForeignPtr ptr' $ c'zebra_mm_push pool merger len'
 
