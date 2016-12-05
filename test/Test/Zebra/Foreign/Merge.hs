@@ -13,7 +13,7 @@ import           Disorder.Core.Run (disorderCheckEnvAll, ExpectedTestSpeed(..))
 import           Disorder.Jack (Property, counterexample)
 import           Disorder.Jack (gamble, (===))
 import           Disorder.Jack (Jack, sized)
-import           Disorder.Jack (listOfN, maybeOf)
+import           Disorder.Jack (listOfN, maybeOf, choose)
 
 import           P
 
@@ -36,9 +36,14 @@ import           Zebra.Data.Entity
 import           Zebra.Data.Fact
 
 
+--
+-- Generators
+--
+
 jEncodings :: Jack [Encoding]
 jEncodings = listOfN 0 5 jEncoding
 
+-- | Fact for a single entity
 jFactForEntity :: (EntityHash, EntityId) -> Encoding -> AttributeId -> Jack Fact
 jFactForEntity eid encoding aid =
   uncurry Fact
@@ -48,6 +53,8 @@ jFactForEntity eid encoding aid =
     <*> jPriority
     <*> (strictMaybe <$> maybeOf (jValue encoding))
 
+-- | Generate a bunch of facts that all have the same entity
+-- Used for testing merging the same entity
 jFactsFor :: (EntityHash, EntityId) -> [Encoding] -> Jack [Fact]
 jFactsFor eid encs = sized $ \size -> do
   let encs' = List.zip encs (fmap AttributeId [0..])
@@ -55,6 +62,31 @@ jFactsFor eid encs = sized $ \size -> do
   List.sort . List.concat <$> mapM (\(enc,aid) -> listOfN 0 maxFacts $ jFactForEntity eid enc aid) encs'
 
 
+-- | Split a list of facts so it can be treated as two blocks.
+-- This has to split on an entity boundary.
+-- If the two blocks contained the same entity, it would be bad.
+bisectBlockFacts :: Int -> [Fact] -> ([Fact],[Fact])
+bisectBlockFacts split fs =
+  let heads = List.take split fs
+      tails = List.drop split fs
+  in case tails of
+      [] -> (heads, tails)
+      (f:_) ->
+        let (heads', tails') = dropLikeEntity f tails
+        in (heads <> heads', tails')
+ where
+  factEntity = (,) <$> factEntityHash <*> factEntityId
+  dropLikeEntity f
+   = List.span (\f' -> factEntity f == factEntity f')
+
+-- | Generate a pair of facts that can be used as blocks in a single file
+jBlockPair :: [Encoding] -> Jack ([Fact],[Fact])
+jBlockPair encs = do
+  fs <- jFacts encs
+  split <- choose (0, length fs)
+  return $ bisectBlockFacts split fs
+
+-- | Construct a C Block from a bunch of facts
 testForeignOfFacts :: Mempool.Mempool -> [Encoding] -> [Fact] -> IO (Block, Boxed.Vector CEntity)
 testForeignOfFacts pool encs facts = do
   let Right block    = blockOfFacts (Boxed.fromList encs) (Boxed.fromList facts)
@@ -62,6 +94,8 @@ testForeignOfFacts pool encs facts = do
   es' <- mapM (foreignOfEntity pool) entities
   return (block, es')
 
+-- | This is the slow obvious implementation to check against.
+-- It sorts all the facts by entity and turns them into entities.
 testMergeFacts :: [Encoding] -> [Fact] -> Boxed.Vector Entity
 testMergeFacts encs facts =
   let Right block    = blockOfFacts (Boxed.fromList encs) (Boxed.fromList $ List.sort facts)
@@ -69,8 +103,9 @@ testMergeFacts encs facts =
   in  entities
 
 
-zprop_merge_1_entity_no_segfault :: Property
-zprop_merge_1_entity_no_segfault =
+-- | Merge facts for same entity. We should not segfault
+prop_merge_1_entity_no_segfault :: Property
+prop_merge_1_entity_no_segfault =
   gamble jEntityHashId $ \eid ->
   gamble jEncodings $ \encs ->
   gamble (jFactsFor eid encs) $ \facts1 ->
@@ -86,8 +121,9 @@ zprop_merge_1_entity_no_segfault =
            Right _ -> True
            Left _ -> False
 
-zprop_merge_1_entity_check_result :: Property
-zprop_merge_1_entity_check_result =
+-- | Merge facts for same entity. We should get the right result
+prop_merge_1_entity_check_result :: Property
+prop_merge_1_entity_check_result =
   gamble jEntityHashId $ \eid ->
   gamble jEncodings $ \encs ->
   gamble (jFactsFor eid encs) $ \facts1 ->
@@ -111,6 +147,8 @@ zprop_merge_1_entity_check_result =
                 -> Boxed.empty === m'
               Left  e' -> counterexample e' False
 
+
+-- | Merge two blocks from two different files (one block each)
 prop_merge_1_block_2_files :: Property
 prop_merge_1_block_2_files =
   gamble jEncodings $ \encs ->
@@ -129,8 +167,35 @@ prop_merge_1_block_2_files =
                 -> Boxed.toList expect === m'
               Left  e' -> counterexample e' False
 
+-- | Merge four blocks from two different files.
+-- This should be sufficient to show it works for many files and many blocks,
+-- since this tests the whole replenishment/refill loop anyway.
+prop_merge_2_block_2_files :: Property
+prop_merge_2_block_2_files =
+  gamble jEncodings $ \encs ->
+  gamble (jBlockPair encs) $ \(facts11, facts12) ->
+  gamble (jBlockPair encs) $ \(facts21, facts22) ->
+  testIO . withSegv (ppShow (encs, (facts11,facts12), (facts21, facts22))) $ do
+    let mkBlock = blockOfFacts (Boxed.fromList encs) . Boxed.fromList
+    let expect = testMergeFacts encs (facts11 <> facts12 <> facts21 <> facts22)
+
+    let Right b11 = mkBlock facts11
+    let Right b12 = mkBlock facts12
+    let Right b21 = mkBlock facts21
+    let Right b22 = mkBlock facts22
+    let allBlocks = [ [b11, b12], [b21, b22] ]
+
+    let err i = firstEitherT ppShow i
+    merged <- runEitherT $ err $ TestMerge.mergeLists allBlocks
+
+    return $ counterexample (ppShow allBlocks)
+           $ case merged of
+              Right m'
+                -> Boxed.toList expect === m'
+              Left  e' -> counterexample e' False
+
 
 return []
 tests :: IO Bool
-tests = $disorderCheckEnvAll TestRunNormal
+tests = $disorderCheckEnvAll TestRunMore
 
