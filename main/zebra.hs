@@ -6,6 +6,7 @@ import           DependencyInfo_ambiata_zebra
 
 import qualified Zebra.Data.Block as Block
 import qualified Zebra.Data.Entity as Entity
+import qualified Zebra.Data.Core as Core
 import           Zebra.Serial.File
 import qualified Zebra.Merge.BlockC as MergeC
 import qualified Zebra.Foreign.Entity as FoEntity
@@ -190,7 +191,7 @@ catBlocks opts blocks = do
 
         when (catBlockSummary opts) $ lift $ do
           IO.putStrLn ("  Entities: " <> show numEnts)
-          IO.putStrLn ("  Indices:  " <> show numIxs)
+          IO.putStrLn ("  Facts:    " <> show numIxs)
 
   Stream.mapM_ go blocks
 
@@ -203,7 +204,7 @@ catBlocks opts blocks = do
     IO.putStrLn "Total:"
     IO.putStrLn ("  Blocks:   " <> show numBlocks)
     IO.putStrLn ("  Entities: " <> show numEnts)
-    IO.putStrLn ("  Indices:  " <> show numIxs)
+    IO.putStrLn ("  Facts:    " <> show numIxs)
 
   return ()
 
@@ -215,12 +216,11 @@ catEntity opts entity = lift $ do
              $ Entity.entityAttributes entity
   let times  = Boxed.concatMap (Boxed.convert . Entity.attributeTime)
              $ Entity.entityAttributes entity
+  let showTime = show . Core.toDay
   when (catEntityDetails opts) $ do
-    IO.putStrLn ("      Min time: " <> show (Boxed.minimum times))
-    IO.putStrLn ("      Max time: " <> show (Boxed.maximum times))
-    IO.putStrLn ("      Min #facts per attribute: " <> show (Boxed.minimum counts))
-    IO.putStrLn ("      Max #facts per attribute: " <> show (Boxed.maximum counts))
-    IO.putStrLn ("      Total #facts: " <> show (Boxed.sum counts))
+    IO.putStrLn ("      Times:               " <> showTime (Boxed.minimum times) <> "..." <> showTime (Boxed.maximum times))
+    IO.putStrLn ("      Facts per attribute: " <> show (Boxed.minimum counts) <> "..." <> show (Boxed.maximum counts))
+    IO.putStrLn ("      Facts:               " <> show (Boxed.sum counts))
 
 
 streamOfFile :: FilePath -> IO (Stream.Stream IO B.ByteString)
