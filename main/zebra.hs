@@ -6,19 +6,18 @@ import           DependencyInfo_ambiata_zebra
 
 import           Zebra.Data.Block
 import           Zebra.Serial.File
-import           Zebra.Merge.Base
-import           Zebra.Merge.Block
+import qualified Zebra.Merge.BlockC as MergeC
+import qualified Zebra.Foreign.Entity as FoEntity
 
 import           P
 
 import qualified Data.ByteString as B
 import qualified Data.Text as Text
-import qualified Data.Text.IO as TextIO
 import qualified X.Data.Vector as Boxed
 import qualified X.Data.Vector.Unboxed as Unboxed
 import qualified X.Data.Vector.Stream as Stream
 
-import           X.Control.Monad.Trans.Either (EitherT, left)
+import           X.Control.Monad.Trans.Either (EitherT, left, joinErrors)
 import           X.Control.Monad.Trans.Either.Exit (orDie)
 import           Control.Monad.Trans.Class (lift)
 
@@ -107,9 +106,17 @@ run c = case c of
 
   MergeFiles ins@(i:_) -> orDie id $ do
     fileheader <- fst <$> getFile' i
-    let ms = mergeFiles (readBlocksCheckHeader fileheader) (Boxed.fromList ins)
-    Stream.mapM_ (lift . TextIO.putStrLn . printEntityInfo) ms
-    return ()
+    let getPuller :: FilePath -> IO (EitherT Text IO (Maybe Block))
+        getPuller f = do
+        streamPuller $ readBlocksCheckHeader fileheader f
+
+    files <- lift $ mapM getPuller (Boxed.fromList ins)
+
+    let pull :: Int -> EitherT Text IO (Maybe Block)
+        pull f = files Boxed.! f
+    let push e = printEntityInfo e
+
+    joinErrors (Text.pack . show) id $ MergeC.mergeFiles (MergeC.MergeOptions pull push 2000) (Boxed.map fst $ Boxed.indexed $ Boxed.fromList ins)
 
 
  where
@@ -124,12 +131,29 @@ run c = case c of
       left ("Block error: reading file " <> Text.pack f <> " has different header")
     return bs
 
-  printEntityInfo (Left err)  = renderMergeError err <> "\n"
-  printEntityInfo (Right ent)
-   = Text.pack
-   ( "Entity: " <> show (emEntityHash ent) <> " : " <> show (emEntityId ent)
-   <> "\tValues: " <> show (Boxed.sum $ Boxed.map Unboxed.length $ emIndices ent))
+  printEntityInfo entity = do
+    eid <- firstT (Text.pack . show) $ FoEntity.peekEntityId $ FoEntity.unCEntity entity
+    lift $ IO.putStrLn $ show eid
 
+
+streamPuller :: Stream.Stream (EitherT Text IO) b -> IO (EitherT Text IO (Maybe b))
+streamPuller (Stream.Stream loop state0) = do
+  stateRef <- IORef.newIORef state0
+  return $ go stateRef
+ where
+  go stateRef = do
+    state <- lift $ IORef.readIORef stateRef
+    step  <- loop state
+    case step of
+      Stream.Yield v state' -> do
+        lift $ IORef.writeIORef stateRef state'
+        return (Just v)
+      Stream.Skip state' -> do
+        lift $ IORef.writeIORef stateRef state'
+        go stateRef
+      Stream.Done -> do
+        return Nothing
+        
 
 showBlocks :: Stream.Stream (EitherT Text IO) Block -> EitherT Text IO ()
 showBlocks blocks = do

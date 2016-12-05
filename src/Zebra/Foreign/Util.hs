@@ -1,11 +1,14 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE PatternSynonyms #-}
 module Zebra.Foreign.Util (
     ForeignError(..)
   , fromCError
+  , liftCError
 
   , allocCopy
+  , allocStack
   , peekIO
   , pokeIO
   , peekByteString
@@ -28,6 +31,7 @@ import qualified Data.Vector.Storable as Storable
 import           Data.Word (Word8)
 
 import           Foreign.ForeignPtr (ForeignPtr, mallocForeignPtrBytes, withForeignPtr)
+import           Foreign.Marshal.Alloc (alloca)
 import           Foreign.Marshal.Utils (copyBytes)
 import           Foreign.Ptr (Ptr, plusPtr)
 import           Foreign.Storable (Storable(..))
@@ -35,6 +39,10 @@ import           Foreign.Storable (Storable(..))
 import           P
 
 import qualified Prelude as Savage
+
+import           System.IO (IO)
+
+import           X.Control.Monad.Trans.Either (EitherT, pattern EitherT, runEitherT, hoistEither)
 
 import           Zebra.Foreign.Bindings
 
@@ -69,12 +77,21 @@ fromCError = \case
   err ->
     Left $ ForeignUnknownError err
 
+liftCError :: MonadIO m => IO CError -> EitherT ForeignError m ()
+liftCError f = do
+  c_error <- liftIO f
+  hoistEither $ fromCError c_error
+
 allocCopy :: MonadIO m => Mempool -> ForeignPtr a -> Int -> Int -> m (Ptr a)
 allocCopy pool fp off len =
   liftIO . withForeignPtr fp $ \src -> do
     dst <- allocBytes pool (fromIntegral len)
     copyBytes dst (src `plusPtr` off) len
     pure dst
+
+allocStack :: MonadIO m => Storable a => (Ptr a -> EitherT e IO b) -> EitherT e m b
+allocStack f =
+  EitherT . liftIO . alloca $ \a -> runEitherT $ f a
 
 peekIO :: (MonadIO m, Storable a) => Ptr a -> m a
 peekIO ptr =

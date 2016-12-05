@@ -23,7 +23,6 @@ import qualified Data.Vector as Boxed
 import qualified Data.Vector.Storable as Storable
 import qualified Data.Vector.Unboxed as Unboxed
 
-import           Foreign.Marshal.Alloc (alloca)
 import           Foreign.Ptr (Ptr, plusPtr)
 import           Foreign.Storable (Storable(..))
 
@@ -31,7 +30,7 @@ import           P
 
 import qualified Prelude as Savage
 
-import           X.Control.Monad.Trans.Either (EitherT, pattern EitherT, runEitherT, hoistEither)
+import           X.Control.Monad.Trans.Either (EitherT)
 
 import           Zebra.Data.Block
 import           Zebra.Data.Core
@@ -58,12 +57,9 @@ foreignOfBlock pool block = do
 
 foreignEntitiesOfBlock :: MonadIO m => Mempool -> CBlock -> EitherT ForeignError m (Boxed.Vector CEntity)
 foreignEntitiesOfBlock pool (CBlock c_block) =
-  EitherT . liftIO .
-  alloca $ \p_entity_count ->
-  alloca $ \pp_entities ->
-  runEitherT $ do
-    err <- liftIO $ c'zebra_entities_of_block pool c_block p_entity_count pp_entities
-    hoistEither $ fromCError err
+  allocStack $ \p_entity_count ->
+  allocStack $ \pp_entities -> do
+    liftCError $ c'zebra_entities_of_block pool c_block p_entity_count pp_entities
 
     entity_count <- liftIO $ peek p_entity_count
     p_entities <- liftIO $ peek pp_entities

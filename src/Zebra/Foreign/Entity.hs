@@ -1,3 +1,4 @@
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -8,6 +9,7 @@ module Zebra.Foreign.Entity (
 
   , peekEntity
   , pokeEntity
+  , peekEntityId
   , peekAttribute
   , pokeAttribute
   ) where
@@ -20,6 +22,7 @@ import qualified Data.ByteString as B
 import qualified Data.Vector as Boxed
 
 import           Foreign.Ptr (Ptr)
+import           Foreign.Storable (Storable(..))
 
 import           P
 
@@ -37,6 +40,7 @@ newtype CEntity =
   CEntity {
       unCEntity :: Ptr C'zebra_entity
     }
+  deriving Storable
 
 entityOfForeign :: MonadIO m => CEntity -> EitherT ForeignError m Entity
 entityOfForeign (CEntity c_entity) =
@@ -51,8 +55,7 @@ foreignOfEntity pool entity = do
 peekEntity :: MonadIO m => Ptr C'zebra_entity -> EitherT ForeignError m Entity
 peekEntity c_entity = do
   hash <- EntityHash <$> peekIO (p'zebra_entity'hash c_entity)
-  eid_len <- fromIntegral <$> peekIO (p'zebra_entity'id_length c_entity)
-  eid <- EntityId <$> peekByteString eid_len (p'zebra_entity'id_bytes c_entity)
+  eid <- peekEntityId c_entity
 
   n_attrs <- fromIntegral <$> peekIO (p'zebra_entity'attribute_count c_entity)
   c_attributes <- peekIO (p'zebra_entity'attributes c_entity)
@@ -78,6 +81,14 @@ pokeEntity pool c_entity (Entity hash eid attributes) = do
   pokeIO (p'zebra_entity'attribute_count c_entity) $ fromIntegral n_attrs
   pokeIO (p'zebra_entity'attributes c_entity) c_attributes
   pokeMany c_attributes attributes $ pokeAttribute pool
+
+
+peekEntityId :: MonadIO m => Ptr C'zebra_entity -> EitherT ForeignError m EntityId
+peekEntityId c_entity = do
+  eid_len <- fromIntegral <$> peekIO (p'zebra_entity'id_length c_entity)
+  EntityId <$> peekByteString eid_len (p'zebra_entity'id_bytes c_entity)
+
+
 
 peekAttribute :: MonadIO m => Ptr C'zebra_attribute -> EitherT ForeignError m Attribute
 peekAttribute c_attribute = do
