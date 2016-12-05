@@ -6,15 +6,13 @@ import           DependencyInfo_ambiata_zebra
 
 import           Zebra.Data.Block
 import           Zebra.Serial.File
-import           Zebra.Merge.Base
-import           Zebra.Merge.Block
 import qualified Zebra.Merge.BlockC as MergeC
+import qualified Zebra.Foreign.Entity as FoEntity
 
 import           P
 
 import qualified Data.ByteString as B
 import qualified Data.Text as Text
-import qualified Data.Text.IO as TextIO
 import qualified X.Data.Vector as Boxed
 import qualified X.Data.Vector.Unboxed as Unboxed
 import qualified X.Data.Vector.Stream as Stream
@@ -50,8 +48,7 @@ main = do
 data Command =
     FileDump FilePath
   | FileHeader FilePath
-  | MergeFilesHaskell [FilePath]
-  | MergeFilesC [FilePath]
+  | MergeFiles [FilePath]
   deriving (Eq, Show)
 
 parser :: Parser (SafeCommand Command)
@@ -73,12 +70,8 @@ commands =
       "header"
       "Show header information about a Zebra file"
   , cmd
-      (MergeFilesHaskell <$> pInputFiles)
-      "merge-haskell"
-      "Merge multiple input files together"
-  , cmd
-      (MergeFilesC <$> pInputFiles)
-      "merge-c"
+      (MergeFiles <$> pInputFiles)
+      "merge"
       "Merge multiple input files together"
   ]
 
@@ -107,21 +100,11 @@ run c = case c of
     lift $ IO.putStrLn "Header information:"
     lift $ IO.putStrLn (show fileheader)
 
-  MergeFilesHaskell [] -> do
+  MergeFiles [] -> do
     IO.putStrLn "Merge: No files"
     Exit.exitFailure
 
-  MergeFilesHaskell ins@(i:_) -> orDie id $ do
-    fileheader <- fst <$> getFile' i
-    let ms = mergeFiles (readBlocksCheckHeader fileheader) (Boxed.fromList ins)
-    Stream.mapM_ (lift . TextIO.putStrLn . printEntityInfo) ms
-    return ()
-
-  MergeFilesC [] -> do
-    IO.putStrLn "Merge: No files"
-    Exit.exitFailure
-
-  MergeFilesC ins@(i:_) -> orDie id $ do
+  MergeFiles ins@(i:_) -> orDie id $ do
     fileheader <- fst <$> getFile' i
     let getPuller :: FilePath -> IO (EitherT Text IO (Maybe Block))
         getPuller f = do
@@ -131,7 +114,7 @@ run c = case c of
 
     let pull :: Int -> EitherT Text IO (Maybe Block)
         pull f = files Boxed.! f
-    let push _ = lift $ TextIO.putStr "."
+    let push e = printEntityInfo e
 
     joinErrors (Text.pack . show) id $ MergeC.mergeFiles (MergeC.MergeOptions pull push 2000) (Boxed.map fst $ Boxed.indexed $ Boxed.fromList ins)
 
@@ -148,11 +131,9 @@ run c = case c of
       left ("Block error: reading file " <> Text.pack f <> " has different header")
     return bs
 
-  printEntityInfo (Left err)  = renderMergeError err <> "\n"
-  printEntityInfo (Right ent)
-   = Text.pack
-   ( "Entity: " <> show (emEntityHash ent) <> " : " <> show (emEntityId ent)
-   <> "\tValues: " <> show (Boxed.sum $ Boxed.map Unboxed.length $ emIndices ent))
+  printEntityInfo entity = do
+    eid <- firstT (Text.pack . show) $ FoEntity.peekEntityId $ FoEntity.unCEntity entity
+    lift $ IO.putStrLn $ show eid
 
 
 streamPuller :: Stream.Stream (EitherT Text IO) b -> IO (EitherT Text IO (Maybe b))
@@ -166,7 +147,6 @@ streamPuller (Stream.Stream loop state0) = do
     case step of
       Stream.Yield v state' -> do
         lift $ IORef.writeIORef stateRef state'
-        lift $ TextIO.putStrLn "Block!"
         return (Just v)
       Stream.Skip state' -> do
         lift $ IORef.writeIORef stateRef state'
