@@ -4,7 +4,9 @@
 import           BuildInfo_ambiata_zebra
 import           DependencyInfo_ambiata_zebra
 
-import           Zebra.Data.Block
+import qualified Zebra.Data.Block as Block
+import qualified Zebra.Data.Entity as Entity
+import qualified Zebra.Data.Core as Core
 import           Zebra.Serial.File
 import qualified Zebra.Merge.BlockC as MergeC
 import qualified Zebra.Foreign.Entity as FoEntity
@@ -15,9 +17,10 @@ import qualified Data.ByteString as B
 import qualified Data.Text as Text
 import qualified X.Data.Vector as Boxed
 import qualified X.Data.Vector.Unboxed as Unboxed
+import qualified X.Data.Vector.Storable as Storable
 import qualified X.Data.Vector.Stream as Stream
 
-import           X.Control.Monad.Trans.Either (EitherT, left, joinErrors)
+import           X.Control.Monad.Trans.Either (EitherT, left, joinErrors, hoistEither)
 import           X.Control.Monad.Trans.Either.Exit (orDie)
 import           Control.Monad.Trans.Class (lift)
 
@@ -28,7 +31,8 @@ import qualified Data.IORef as IORef
 import qualified System.Exit as Exit
 import           X.Options.Applicative (Parser, SafeCommand(..), RunType(..), Mod, CommandFields)
 import           X.Options.Applicative (dispatch, safeCommand, command', str, metavar, subparser)
-import           X.Options.Applicative (help, argument)
+import           X.Options.Applicative (help, argument, switch, long)
+import           Text.Show.Pretty (ppShow)
 
 main :: IO ()
 main = do
@@ -46,10 +50,18 @@ main = do
         run c
 
 data Command =
-    FileDump FilePath
-  | FileHeader FilePath
+    FileCat FilePath CatOptions
   | MergeFiles [FilePath]
   deriving (Eq, Show)
+
+data CatOptions =
+  CatOptions {
+    catHeader :: Bool
+  , catBlockSummary :: Bool
+  , catEntities :: Bool
+  , catEntityDetails :: Bool
+  , catSummary :: Bool
+  } deriving (Eq, Show)
 
 parser :: Parser (SafeCommand Command)
 parser =
@@ -62,13 +74,9 @@ cmd p name desc =
 commands :: [Mod CommandFields Command]
 commands =
   [ cmd
-      (FileDump <$> pZebraFile)
-      "dump"
+      (FileCat <$> pZebraFile <*> pCatOptions)
+      "cat"
       "Dump all information in a Zebra file."
-  , cmd
-      (FileHeader <$> pZebraFile)
-      "header"
-      "Show header information about a Zebra file"
   , cmd
       (MergeFiles <$> pInputFiles)
       "merge"
@@ -86,19 +94,26 @@ pInputFiles :: Parser [FilePath]
 pInputFiles =
   many $ argument str $ help "Path to a Zebra file"
 
+pCatOptions :: Parser CatOptions
+pCatOptions =
+  CatOptions
+  <$> no_switch (long "no-header")
+  <*> no_switch (long "no-block-summary")
+  <*> no_switch (long "no-entities")
+  <*> no_switch (long "no-entity-details")
+  <*> no_switch (long "no-summary")
+ where
+  no_switch args = not <$> switch args
+
 
 run :: Command -> IO ()
 run c = case c of
-  FileDump f -> orDie id $ do
+  FileCat f opts -> orDie id $ do
     (r,blocks) <- getFile' f
-    lift $ IO.putStrLn "Header information:"
-    lift $ IO.putStrLn (show r)
-    showBlocks blocks
-
-  FileHeader f -> orDie id $ do
-    (fileheader,_) <- getFile' f
-    lift $ IO.putStrLn "Header information:"
-    lift $ IO.putStrLn (show fileheader)
+    when (catHeader opts) $ lift $ do
+      IO.putStrLn "Header information:"
+      IO.putStrLn (ppShow r)
+    catBlocks opts blocks
 
   MergeFiles [] -> do
     IO.putStrLn "Merge: No files"
@@ -106,14 +121,11 @@ run c = case c of
 
   MergeFiles ins@(i:_) -> orDie id $ do
     fileheader <- fst <$> getFile' i
-    let getPuller :: FilePath -> IO (EitherT Text IO (Maybe Block))
-        getPuller f = do
-        streamPuller $ readBlocksCheckHeader fileheader f
+    let getPuller f = streamPuller $ readBlocksCheckHeader fileheader f
 
     files <- lift $ mapM getPuller (Boxed.fromList ins)
 
-    let pull :: Int -> EitherT Text IO (Maybe Block)
-        pull f = files Boxed.! f
+    let pull f = files Boxed.! f
     let push e = printEntityInfo e
 
     joinErrors (Text.pack . show) id $ MergeC.mergeFiles (MergeC.MergeOptions pull push 2000) (Boxed.map fst $ Boxed.indexed $ Boxed.fromList ins)
@@ -132,7 +144,7 @@ run c = case c of
     return bs
 
   printEntityInfo entity = do
-    eid <- firstT (Text.pack . show) $ FoEntity.peekEntityId $ FoEntity.unCEntity entity
+    eid <- firstTshow $ FoEntity.peekEntityId $ FoEntity.unCEntity entity
     lift $ IO.putStrLn $ show eid
 
 
@@ -155,25 +167,31 @@ streamPuller (Stream.Stream loop state0) = do
         return Nothing
         
 
-showBlocks :: Stream.Stream (EitherT Text IO) Block -> EitherT Text IO ()
-showBlocks blocks = do
+catBlocks :: CatOptions -> Stream.Stream (EitherT Text IO) Block.Block -> EitherT Text IO ()
+catBlocks opts blocks = do
   let int0 = 0 :: Int
   totalBlocks <- lift $ IORef.newIORef int0
   totalEnts <- lift $ IORef.newIORef int0
   totalIxs <- lift $ IORef.newIORef int0
 
-  let go block = lift $ do
-        num <- IORef.readIORef totalBlocks
-        IORef.modifyIORef totalBlocks (+1)
-        IO.putStrLn ("Block " <> show num)
+  let go block = do
+        num <- lift $ IORef.readIORef totalBlocks
+        let numEnts = Boxed.length $ Block.blockEntities block
+        let numIxs = Unboxed.length $ Block.blockIndices block
+        lift $ IORef.modifyIORef totalBlocks (+1)
+        lift $ IORef.modifyIORef totalEnts (+numEnts)
+        lift $ IORef.modifyIORef totalIxs (+numIxs)
 
-        let numEnts = Boxed.length $ blockEntities block
-        IORef.modifyIORef totalEnts (+numEnts)
-        IO.putStrLn ("\tEntities: " <> show numEnts)
+        when (catBlockSummary opts || catEntities opts) $ lift $ do
+          IO.putStrLn ("Block " <> show num)
 
-        let numIxs = Unboxed.length $ blockIndices block
-        IORef.modifyIORef totalIxs (+numIxs)
-        IO.putStrLn ("\tIndices:  " <> show numIxs)
+        when (catEntities opts) $ do
+          entities <- firstTshow $ hoistEither $ Block.entitiesOfBlock block
+          mapM_ (catEntity opts) entities
+
+        when (catBlockSummary opts) $ lift $ do
+          IO.putStrLn ("  Entities: " <> show numEnts)
+          IO.putStrLn ("  Facts:    " <> show numIxs)
 
   Stream.mapM_ go blocks
 
@@ -181,14 +199,29 @@ showBlocks blocks = do
   numEnts <- lift $ IORef.readIORef totalEnts
   numIxs <- lift $ IORef.readIORef totalIxs
 
-  lift $ IO.putStrLn ""
-  lift $ IO.putStrLn "Total:"
-
-  lift $ IO.putStrLn ("\tBlocks:   " <> show numBlocks)
-  lift $ IO.putStrLn ("\tEntities: " <> show numEnts)
-  lift $ IO.putStrLn ("\tIndices:  " <> show numIxs)
+  when (catSummary opts) $ lift $ do
+    IO.putStrLn ""
+    IO.putStrLn "Total:"
+    IO.putStrLn ("  Blocks:   " <> show numBlocks)
+    IO.putStrLn ("  Entities: " <> show numEnts)
+    IO.putStrLn ("  Facts:    " <> show numIxs)
 
   return ()
+
+catEntity :: CatOptions -> Entity.Entity -> EitherT Text IO ()
+catEntity opts entity = lift $ do
+  IO.putStrLn ("    " <> show (Entity.entityId entity) <> " (" <> show (Entity.entityHash entity) <> ")")
+
+  let counts = Boxed.map (Storable.length . Entity.attributeTime)
+             $ Entity.entityAttributes entity
+  let times  = Boxed.concatMap (Boxed.convert . Entity.attributeTime)
+             $ Entity.entityAttributes entity
+  let showTime = show . Core.toDay
+  when (catEntityDetails opts) $ do
+    IO.putStrLn ("      Times:               " <> showTime (Boxed.minimum times) <> "..." <> showTime (Boxed.maximum times))
+    IO.putStrLn ("      Facts per attribute: " <> show (Boxed.minimum counts) <> "..." <> show (Boxed.maximum counts))
+    IO.putStrLn ("      Facts:               " <> show (Boxed.sum counts))
+
 
 streamOfFile :: FilePath -> IO (Stream.Stream IO B.ByteString)
 streamOfFile fp = do
@@ -205,3 +238,5 @@ streamOfFile fp = do
        False -> do
         return $ Stream.Yield bytes (Just handle)
 
+firstTshow :: (Functor m, Show e) => EitherT e m a -> EitherT Text m a
+firstTshow = firstT (Text.pack . show)
