@@ -1,37 +1,7 @@
+#include "zebra_clone.h"
 #include "zebra_data.h"
+#include "zebra_grow.h"
 #include "zebra_merge.h"
-
-//
-// Agile clone: copy the structure, but throw away the content.
-// This is used for allocating an empty entity with the same schema as an existing entity.
-//
-// We could probably save time by pre-allocating the contents arrays to hold both input entities,
-// but at the moment we set the initial capacity to zero.
-//
-error_t zebra_agile_clone_attribute (anemone_mempool_t *pool, const zebra_attribute_t *attribute, zebra_attribute_t *into)
-{
-    into->times = NULL;
-    into->priorities = NULL;
-    into->tombstones = NULL;
-    return zebra_agile_clone_table(pool, &attribute->table, &into->table);
-}
-
-error_t zebra_agile_clone_table (anemone_mempool_t *pool, const zebra_table_t *table, zebra_table_t *into)
-{
-    into->row_count = 0;
-    into->row_capacity = 0;
-    int64_t count = table->column_count;
-    into->column_count = count;
-    into->columns = anemone_mempool_calloc (pool, count, sizeof (zebra_column_t));
-    for (int64_t c = 0; c < count; ++c) {
-        zebra_type_t type = table->columns[c].type;
-        into->columns[c].type = type;
-        if (type == ZEBRA_ARRAY) {
-            zebra_agile_clone_table (pool, &table->columns[c].data.a.table, &into->columns[c].data.a.table);
-        }
-    }
-    return ZEBRA_SUCCESS;
-}
 
 
 //
