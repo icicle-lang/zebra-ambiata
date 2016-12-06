@@ -3,6 +3,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 module Zebra.Data.Core (
@@ -32,7 +33,7 @@ module Zebra.Data.Core (
   , tombstonesOfForeign
   ) where
 
-import           Anemone.Foreign.Hash (fasthash32)
+import           Anemone.Foreign.Hash (fasthash32')
 
 import           Control.Lens ((^.), re)
 
@@ -52,6 +53,8 @@ import           GHC.Generics (Generic)
 import           P
 
 import           X.Text.Show (gshowsPrec)
+
+import           Zebra.Foreign.Bindings (pattern C'ZEBRA_HASH_SEED)
 
 
 newtype EntityId =
@@ -130,7 +133,7 @@ instance Show Priority where
 
 hashEntityId :: EntityId -> EntityHash
 hashEntityId =
-  EntityHash . fasthash32 . unEntityId
+  EntityHash . fasthash32' C'ZEBRA_HASH_SEED . unEntityId
 {-# INLINE hashEntityId #-}
 
 fromDay :: Day -> Time
