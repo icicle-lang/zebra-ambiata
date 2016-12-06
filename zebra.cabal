@@ -81,12 +81,14 @@ library
 
   install-includes:
                        zebra_data.h
+                       zebra_hash.h
                        zebra_merge.h
                        zebra_merge_many.h
 
   includes:
                        zebra_bindings.h
                        zebra_data.h
+                       zebra_hash.h
                        zebra_merge.h
                        zebra_merge_many.h
 

@@ -16,9 +16,12 @@ import Anemone.Foreign.Mempool (Mempool(..))
 #include <bindings.dsl.h>
 #include "zebra_bindings.h"
 #include "zebra_data.h"
+#include "zebra_hash.h"
 #include "zebra_merge_many.h"
 
 #strict_import
+
+#znum ZEBRA_HASH_SEED
 
 #znum ZEBRA_SUCCESS
 #znum ZEBRA_INVALID_COLUMN_TYPE
