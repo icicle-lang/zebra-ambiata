@@ -55,5 +55,7 @@ void* zebra_grow_array (anemone_mempool_t *pool, void *old, size_t size, int64_t
     return new;
 }
 
+#define ZEBRA_GROW_ARRAY(pool, in, oldcap, newcap) zebra_grow_array (pool, in, sizeof (in[0]), oldcap, newcap )
+
 
 #endif//__ZEBRA_GROW_H
