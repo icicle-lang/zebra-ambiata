@@ -80,6 +80,7 @@ library
                        csrc
 
   install-includes:
+                       zebra_append.h
                        zebra_block_split.h
                        zebra_clone.h
                        zebra_data.h
@@ -89,6 +90,7 @@ library
                        zebra_merge_many.h
 
   includes:
+                       zebra_append.h
                        zebra_block_split.h
                        zebra_clone.h
                        zebra_data.h
@@ -99,6 +101,7 @@ library
 
 
   c-sources:
+                       csrc/zebra_append.c
                        csrc/zebra_block_split.c
                        csrc/zebra_clone.c
                        csrc/zebra_data.c

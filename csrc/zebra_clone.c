@@ -161,13 +161,13 @@ error_t zebra_deep_clone_table (anemone_mempool_t *pool, const zebra_table_t *ta
 
         switch (type) {
             case ZEBRA_BYTE:
-                into_data->b = zebra_clone_array (pool, table_data->b, row_capacity, sizeof (table_data->b[0]) );
+                into_data->b = ZEBRA_CLONE_ARRAY (pool, table_data->b, row_capacity );
                 break;
             case ZEBRA_INT:
-                into_data->i = zebra_clone_array (pool, table_data->i, row_capacity, sizeof (table_data->i[0]) );
+                into_data->i = ZEBRA_CLONE_ARRAY (pool, table_data->i, row_capacity );
                 break;
             case ZEBRA_DOUBLE:
-                into_data->d = zebra_clone_array (pool, table_data->d, row_capacity, sizeof (table_data->d[0]) );
+                into_data->d = ZEBRA_CLONE_ARRAY (pool, table_data->d, row_capacity );
                 break;
             case ZEBRA_ARRAY:
                 err = zebra_deep_clone_table (pool, &table_data->a.table, &into_data->a.table);
@@ -186,9 +186,9 @@ error_t zebra_deep_clone_table (anemone_mempool_t *pool, const zebra_table_t *ta
 error_t zebra_deep_clone_attribute (anemone_mempool_t *pool, const zebra_attribute_t *attribute, zebra_attribute_t *into)
 {
     int64_t capacity = attribute->table.row_capacity;
-    into->times = zebra_clone_array (pool, attribute->times, capacity, sizeof (attribute->times[0]) );
-    into->priorities = zebra_clone_array (pool, attribute->priorities, capacity, sizeof (attribute->priorities[0]) );
-    into->tombstones = zebra_clone_array (pool, attribute->tombstones, capacity, sizeof (attribute->tombstones[0]) );
+    into->times = ZEBRA_CLONE_ARRAY (pool, attribute->times, capacity );
+    into->priorities = ZEBRA_CLONE_ARRAY (pool, attribute->priorities, capacity );
+    into->tombstones = ZEBRA_CLONE_ARRAY (pool, attribute->tombstones, capacity );
     return zebra_deep_clone_table(pool, &attribute->table, &into->table);
 }
 
@@ -198,7 +198,7 @@ error_t zebra_deep_clone_entity (anemone_mempool_t *pool, const zebra_entity_t *
 
     into->hash            = entity->hash;
     into->id_length       = entity->id_length;
-    into->id_bytes        = zebra_clone_array (pool, entity->id_bytes, entity->id_length, sizeof (entity->id_bytes[0]) );
+    into->id_bytes        = ZEBRA_CLONE_ARRAY (pool, entity->id_bytes, entity->id_length );
     into->attribute_count = entity->attribute_count;
 
     into->attributes = anemone_mempool_alloc (pool, sizeof (zebra_attribute_t) * into->attribute_count );

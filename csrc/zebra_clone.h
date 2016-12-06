@@ -48,6 +48,7 @@ void *zebra_clone_array (
   , int64_t num_elements
   , int64_t element_size
   );
+#define ZEBRA_CLONE_ARRAY(pool, in, num_elements) zebra_clone_array (pool, in, num_elements, sizeof (*in) )
 
 error_t zebra_deep_clone_table (
     anemone_mempool_t *pool

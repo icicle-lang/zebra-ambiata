@@ -7,6 +7,7 @@ module Zebra.Foreign.Block (
   , blockOfForeign
   , foreignOfBlock
   , foreignEntitiesOfBlock
+  , appendEntityToBlock
 
   , peekBlock
   , pokeBlock
@@ -23,7 +24,7 @@ import qualified Data.Vector as Boxed
 import qualified Data.Vector.Storable as Storable
 import qualified Data.Vector.Unboxed as Unboxed
 
-import           Foreign.Ptr (Ptr, plusPtr)
+import           Foreign.Ptr (Ptr, plusPtr, nullPtr)
 import           Foreign.Storable (Storable(..))
 
 import           P
@@ -70,6 +71,13 @@ foreignEntitiesOfBlock pool (CBlock c_block) =
           ix * sizeOf (Savage.undefined :: C'zebra_entity)
       in
         CEntity (p_entities `plusPtr` offset)
+
+appendEntityToBlock :: MonadIO m => Mempool -> CEntity -> Maybe CBlock -> EitherT ForeignError m CBlock
+appendEntityToBlock pool (CEntity c_entity) c_block =
+  allocStack $ \pp_block -> do
+    pokeIO pp_block $ maybe nullPtr unCBlock c_block
+    liftCError $ c'zebra_append_block_entity pool c_entity pp_block
+    CBlock <$> peekIO pp_block
 
 peekBlock :: MonadIO m => Ptr C'zebra_block -> EitherT ForeignError m Block
 peekBlock c_block = do

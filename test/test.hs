@@ -18,18 +18,18 @@ import qualified Test.Zebra.Serial.Header
 main :: IO ()
 main =
   disorderMain [
-      Test.Zebra.Data.Block.tests
-    , Test.Zebra.Data.Core.tests
-    , Test.Zebra.Data.Schema.tests
-    , Test.Zebra.Data.Table.Mutable.tests
-    , Test.Zebra.Data.Table.tests
-    , Test.Zebra.Foreign.Block.tests
-    , Test.Zebra.Foreign.Entity.tests
-    , Test.Zebra.Foreign.Merge.tests
-    , Test.Zebra.Foreign.Table.tests
-    , Test.Zebra.Merge.Entity.tests
-    , Test.Zebra.Serial.Array.tests
-    , Test.Zebra.Serial.Block.tests
-    , Test.Zebra.Serial.File.tests
-    , Test.Zebra.Serial.Header.tests
+--    Test.Zebra.Data.Block.tests
+--  , Test.Zebra.Data.Core.tests
+--  , Test.Zebra.Data.Schema.tests
+--  , Test.Zebra.Data.Table.Mutable.tests
+--  , Test.Zebra.Data.Table.tests
+      Test.Zebra.Foreign.Block.tests
+--  , Test.Zebra.Foreign.Entity.tests
+--  , Test.Zebra.Foreign.Merge.tests
+--  , Test.Zebra.Foreign.Table.tests
+--  , Test.Zebra.Merge.Entity.tests
+--  , Test.Zebra.Serial.Array.tests
+--  , Test.Zebra.Serial.Block.tests
+--  , Test.Zebra.Serial.File.tests
+--  , Test.Zebra.Serial.Header.tests
     ]
