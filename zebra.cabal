@@ -122,6 +122,7 @@ executable zebra
 
   build-depends:
                       base
+                    , ambiata-anemone
                     , ambiata-zebra
                     , ambiata-p
                     , ambiata-x-optparse

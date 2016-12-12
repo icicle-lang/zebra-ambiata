@@ -22,7 +22,6 @@ import           Disorder.Jack ((===), gamble, counterexample, conjoin, noShrink
 import           P
 
 import           System.IO (IO)
-import qualified System.IO as IO
 
 import           Test.Zebra.Jack
 import           Test.Zebra.Util
@@ -30,7 +29,6 @@ import           Test.Zebra.Util
 import           Text.Show.Pretty (ppShow)
 
 import           X.Control.Monad.Trans.Either (EitherT, pattern EitherT, runEitherT, hoistEither)
-import           Control.Monad.Trans.Class (lift)
 
 import           Zebra.Data.Block
 import           Zebra.Data.Entity
