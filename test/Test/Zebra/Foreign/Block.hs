@@ -80,7 +80,6 @@ foreignBlockOfEntities' entities =
   runEitherT $ do
     fentities <- traverse (foreignOfEntity pool) entities
     fblock <- foldM (\fb fe -> Just <$> appendEntityToBlock pool fe fb) Nothing fentities
-    lift $ IO.putStrLn "foreignBlockOfEntities'.blockOfForeign"
     traverse blockOfForeign fblock
 
 check :: (Eq a, Eq x, Show a, Show x) => String -> a -> Either x a -> Property

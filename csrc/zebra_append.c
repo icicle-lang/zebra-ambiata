@@ -2,8 +2,6 @@
 #include "zebra_clone.h"
 #include "zebra_grow.h"
 
-#include <stdio.h>
-
 
 //
 // Append: push a single value onto the end of an attribute.
@@ -95,7 +93,6 @@ error_t zebra_append_table (anemone_mempool_t *pool, const zebra_table_t *in, in
 ANEMONE_STATIC
 error_t zebra_fill_block_entity (anemone_mempool_t *pool, zebra_entity_t *entity, zebra_block_entity_t *block_entity)
 {
-    printf("zebra_fill_block_entity: entity->hash=%d\n", entity->hash);
     block_entity->hash = entity->hash;
     block_entity->id_length = entity->id_length;
     block_entity->id_bytes = ZEBRA_CLONE_ARRAY (pool, entity->id_bytes, entity->id_length);
@@ -125,49 +122,31 @@ error_t zebra_fill_block_entity (anemone_mempool_t *pool, zebra_entity_t *entity
 
 error_t zebra_append_block_entity (anemone_mempool_t *pool, zebra_entity_t *entity, zebra_block_t **inout_block)
 {
-    printf("zebra_append_block_entity: entity=%p *inout_block=%p\n", entity, *inout_block);
-
     error_t err;
     zebra_block_t *block = *inout_block;
 
     if (!block) {
-        printf("zebra_append_block_entity: allocating new block\n");
         block = anemone_mempool_calloc (pool, 1, sizeof (zebra_block_t) );
     } else if (entity->attribute_count != block->table_count) {
-        printf("!!!!!!!!!!!!!!\n");
-        printf("ATTRIBUTE_COUNT=%lld, TABLE_COUNT=%lld\n", entity->attribute_count, block->table_count);
-        printf("!!!!!!!!!!!!!!\n");
+        // TODO: better error
+        return ZEBRA_MERGE_DIFFERENT_ENTITIES;
     }
 
-    for (int64_t c = 0; c != block->entity_count; ++c) {
-        printf("PRE: block_entity[%lld].hash=%d\n", c, block->entities[c].hash);
-    }
-
-    printf("zebra_append_block_entity: appending\n");
-
-    printf("zebra_append_block_entity: growing entities array from %lld to %lld\n", block->entity_count, block->entity_count + 1);
     block->entities = ZEBRA_GROW_ARRAY (pool, block->entities, block->entity_count, block->entity_count + 1);
-    printf("zebra_append_block_entity: fill block entity\n");
     err = zebra_fill_block_entity (pool, entity, block->entities + block->entity_count);
     if (err) return err;
     block->entity_count++;
-
-    for (int64_t c = 0; c != block->entity_count; ++c) {
-        printf("MID: block_entity[%lld].hash=%d\n", c, block->entities[c].hash);
-    }
 
     int64_t old_row_count = block->row_count;
     int64_t new_row_count = block->row_count;
     for (int64_t c = 0; c != entity->attribute_count; ++c) {
         new_row_count += entity->attributes[c].table.row_count;
     }
-    printf("zebra_append_block_entity: growing facts from %lld to %lld\n", old_row_count, new_row_count);
     block->times = ZEBRA_GROW_ARRAY (pool, block->times, block->row_count, new_row_count);
     block->priorities = ZEBRA_GROW_ARRAY (pool, block->priorities, block->row_count, new_row_count);
     block->tombstones = ZEBRA_GROW_ARRAY (pool, block->tombstones, block->row_count, new_row_count);
     block->row_count = new_row_count;
 
-    printf("zebra_append_block_entity: adding times, priorities & tombstones\n");
     int64_t cur_row_count = old_row_count;
     for (int64_t c = 0; c != entity->attribute_count; ++c) {
         zebra_attribute_t *attribute = entity->attributes + c;
@@ -180,24 +159,19 @@ error_t zebra_append_block_entity (anemone_mempool_t *pool, zebra_entity_t *enti
         cur_row_count += row_count;
     }
 
-    for (int64_t c = 0; c != block->entity_count; ++c) {
-        printf("MID2: block_entity[%lld].hash=%d\n", c, block->entities[c].hash);
-    }
-
     if (block->tables) {
-        printf("zebra_append_block_entity: appending table data\n");
         for (int64_t c = 0; c < block->table_count; ++c) {
             zebra_table_t *entity_table = &entity->attributes[c].table;
             zebra_table_t *block_table = block->tables + c;
-            printf("zebra_append_block_entity: appending table data attribute=%lld row_count=%lld\n", c, entity_table->row_count);
+            uint64_t append_ix = block_table->row_count;
+            block_table->row_count += entity_table->row_count;
+            zebra_grow_table (pool, block_table);
             for (int64_t ix = 0; ix < entity_table->row_count; ++ix) {
-                err = zebra_append_table (pool, entity_table, ix, block_table, block_table->row_count + ix);
+                err = zebra_append_table (pool, entity_table, ix, block_table, append_ix + ix);
                 if (err) return err;
             }
-            block_table->row_count += entity_table->row_count;
         }
     } else {
-        printf("zebra_append_block_entity: cloning table data\n");
         block->table_count = entity->attribute_count;
         block->tables = anemone_mempool_calloc (pool, block->table_count, sizeof(zebra_table_t) );
         for (int64_t c = 0; c < block->table_count; ++c) {
@@ -206,10 +180,6 @@ error_t zebra_append_block_entity (anemone_mempool_t *pool, zebra_entity_t *enti
         }
     }
 
-    for (int64_t c = 0; c != block->entity_count; ++c) {
-        printf("POST: block_entity[%lld].hash=%d\n", c, block->entities[c].hash);
-    }
-    printf("zebra_append_block_entity: return\n");
     *inout_block = block;
     return ZEBRA_SUCCESS;
 }
