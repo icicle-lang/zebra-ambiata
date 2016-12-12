@@ -1,3 +1,6 @@
+#ifndef __ZEBRA_DEBUG_H
+#define __ZEBRA_DEBUG_H
+
 #include "zebra_data.h"
 #include <stdio.h>
 
@@ -79,7 +82,21 @@ void zebra_debug_print_block (zebra_block_t *block)
 {
     printf("Block: %lld tables\n", block->table_count);
     for (int64_t i = 0; i != block->table_count; ++i) {
+        if (block->tables[i].row_count == 0) continue;
         printf(" Table %lld\n", i);
         zebra_debug_print_table (2, block->tables + i);
     }
 }
+
+ANEMONE_STATIC
+void zebra_debug_print_entity (zebra_entity_t *entity)
+{
+    printf("Entity: %lld attributes\n", entity->attribute_count);
+    for (int64_t i = 0; i != entity->attribute_count; ++i) {
+        if (entity->attributes[i].table.row_count == 0) continue;
+        printf(" Table %lld\n", i);
+        zebra_debug_print_table (2, &entity->attributes[i].table);
+    }
+}
+
+#endif//__ZEBRA_DEBUG_H
