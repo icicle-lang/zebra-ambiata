@@ -10,10 +10,11 @@ import qualified Zebra.Data.Core as Core
 import qualified Zebra.Serial as Serial
 import           Zebra.Serial.File
 import qualified Zebra.Merge.BlockC as MergeC
-import qualified Zebra.Foreign.Entity as FoEntity
+import qualified Zebra.Foreign.Block as FoBlock
 
 import           P
 
+import qualified Anemone.Foreign.Mempool as Mempool
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Builder as Builder
 import qualified Data.Text as Text
@@ -52,7 +53,7 @@ main = do
 
 data Command =
     FileCat FilePath CatOptions
-  | MergeFiles [FilePath] FilePath
+  | MergeFiles [FilePath] FilePath MergeOptions
   deriving (Eq, Show)
 
 data CatOptions =
@@ -62,6 +63,12 @@ data CatOptions =
   , catEntities :: Bool
   , catEntityDetails :: Bool
   , catSummary :: Bool
+  } deriving (Eq, Show)
+
+data MergeOptions =
+  MergeOptions {
+    mergeGcEvery :: Int
+  , mergeOutputBlockFacts :: Int
   } deriving (Eq, Show)
 
 parser :: Parser (SafeCommand Command)
@@ -79,7 +86,7 @@ commands =
       "cat"
       "Dump all information in a Zebra file."
   , cmd
-      (MergeFiles <$> pInputFiles <*> pOutputFile)
+      (MergeFiles <$> pInputFiles <*> pOutputFile <*> pMergeOptions)
       "merge"
       "Merge multiple input files together"
   ]
@@ -114,6 +121,19 @@ pCatOptions =
  where
   no_switch args = not <$> Options.switch args
 
+pMergeOptions :: Parser MergeOptions
+pMergeOptions =
+  MergeOptions
+  <$> Options.option Options.auto
+    (Options.value 200
+    <> Options.long "gc-entity-count"
+    <> Options.help "Garbage collect input after every Nth entity. Must be >1")
+  <*> Options.option Options.auto
+    (Options.value 4096
+    <> Options.long "output-block-facts"
+    <> Options.help "Minimum number of facts per output block (last block of leftovers will contain fewer)")
+
+
 
 run :: Command -> IO ()
 run c = case c of
@@ -124,11 +144,11 @@ run c = case c of
       IO.putStrLn (ppShow r)
     catBlocks opts blocks
 
-  MergeFiles [] _ -> do
+  MergeFiles [] _ _ -> do
     IO.putStrLn "Merge: No files"
     Exit.exitFailure
 
-  MergeFiles ins@(i:_) out -> orDie id $ do
+  MergeFiles ins@(i:_) out opts -> orDie id $ do
     fileheader <- fst <$> getFile' i
     let getPuller f = streamPuller $ readBlocksCheckHeader fileheader f
 
@@ -137,18 +157,41 @@ run c = case c of
     outfd <- lift $ IO.openBinaryFile out IO.WriteMode
     lift $ Builder.hPutBuilder outfd (Serial.bHeader fileheader)
 
-    -- separate block mempool
-    -- mempool <- IORef Mempool.create ...
+    pool0    <- lift $ Mempool.create
+    poolRef  <- lift $ IORef.newIORef pool0
+    blockRef <- lift $ IORef.newIORef Nothing
+
+    let checkPurge block = do
+        is <- FoBlock.peekBlockRowCount (FoBlock.unCBlock block)
+        return (is >= mergeOutputBlockFacts opts)
+    let doPurge block = do
+        pool    <- lift $ IORef.readIORef poolRef
+        outblock <- firstTshow $ FoBlock.blockOfForeign block
+        lift $ Builder.hPutBuilder outfd (Serial.bBlock outblock)
+        pool' <- lift $ Mempool.create
+        lift $ IORef.writeIORef poolRef pool'
+        lift $ Mempool.free pool
+        lift $ IORef.writeIORef blockRef Nothing
 
     let pull f = files Boxed.! f
     let push e = do
-        -- init or push into new block copy entity to block mempool
-        -- write block at some point and free/copy mempool every so often
-        -- block_push mempool block e
-        printEntityInfo e
-        
+        pool    <- lift $ IORef.readIORef poolRef
+        block   <- lift $ IORef.readIORef blockRef
+        block'  <- firstTshow $ FoBlock.appendEntityToBlock pool e block
+        ifpurge <- checkPurge block'
+        if ifpurge
+          then doPurge block'
+          else lift $ IORef.writeIORef blockRef (Just block')
 
-    joinErrors (Text.pack . show) id $ MergeC.mergeFiles (MergeC.MergeOptions pull push 2000) (Boxed.map fst $ Boxed.indexed $ Boxed.fromList ins)
+
+    joinErrors (Text.pack . show) id
+      $ MergeC.mergeFiles (MergeC.MergeOptions pull push $ mergeGcEvery opts)
+      $ Boxed.map fst $ Boxed.indexed $ Boxed.fromList ins
+
+    mblock  <- lift $ IORef.readIORef blockRef
+    maybe (return ()) doPurge mblock
+    lift $ IO.hClose outfd
+
 
 
  where
@@ -162,11 +205,6 @@ run c = case c of
     when (h /= fileheader) $
       left ("Block error: reading file " <> Text.pack f <> " has different header")
     return bs
-
-  printEntityInfo entity = do
-    eid <- firstTshow $ FoEntity.peekEntityId $ FoEntity.unCEntity entity
-    lift $ IO.putStrLn $ show eid
-
 
 streamPuller :: Stream.Stream (EitherT Text IO) b -> IO (EitherT Text IO (Maybe b))
 streamPuller (Stream.Stream loop state0) = do

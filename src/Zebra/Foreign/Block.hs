@@ -11,6 +11,7 @@ module Zebra.Foreign.Block (
 
   , peekBlock
   , pokeBlock
+  , peekBlockRowCount
   , peekBlockEntity
   , pokeBlockEntity
   ) where
@@ -148,6 +149,11 @@ pokeBlock pool c_block (Block entities indices tables) = do
   pokeIO (p'zebra_block'tables c_block) c_tables
   pokeIO (p'zebra_block'table_count c_block) $ fromIntegral n_tables
   pokeMany c_tables tables $ pokeTable pool
+
+peekBlockRowCount :: MonadIO m => Ptr C'zebra_block -> m Int
+peekBlockRowCount c_block =
+  fmap fromIntegral . peekIO $ p'zebra_block'row_count c_block
+
 
 peekBlockEntity :: MonadIO m => Ptr C'zebra_block_entity -> m BlockEntity
 peekBlockEntity c_entity = do
