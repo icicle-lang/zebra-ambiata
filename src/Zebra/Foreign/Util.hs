@@ -49,6 +49,7 @@ import           Zebra.Foreign.Bindings
 
 data ForeignError =
     ForeignInvalidAttributeCount !Int !Int
+  | ForeignTableNotEnoughCapacity
   | ForeignInvalidColumnType
   | ForeignAttributeNotFound
   | ForeignNotEnoughBytes

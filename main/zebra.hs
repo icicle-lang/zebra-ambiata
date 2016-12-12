@@ -165,7 +165,7 @@ run c = case c of
         is <- FoBlock.peekBlockRowCount (FoBlock.unCBlock block)
         return (is >= mergeOutputBlockFacts opts)
     let doPurge block = do
-        pool    <- lift $ IORef.readIORef poolRef
+        pool <- lift $ IORef.readIORef poolRef
         outblock <- firstTshow $ FoBlock.blockOfForeign block
         lift $ Builder.hPutBuilder outfd (Serial.bBlock outblock)
         pool' <- lift $ Mempool.create

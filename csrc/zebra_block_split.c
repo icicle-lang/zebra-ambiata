@@ -92,6 +92,7 @@ error_t zebra_table_pop_rows (
 
     in_table->row_count -= n_rows;
     out_table->row_count = n_rows;
+    out_table->row_capacity = n_rows;
 
     int64_t column_count = in_table->column_count;
     zebra_column_t *in_columns = in_table->columns;

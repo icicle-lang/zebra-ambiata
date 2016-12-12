@@ -47,6 +47,10 @@ foreignOfTable pool table = do
 peekTable :: MonadIO m => Ptr C'zebra_table -> EitherT ForeignError m Table
 peekTable c_table = do
   n_rows <- fromIntegral <$> peekIO (p'zebra_table'row_count c_table)
+  n_cap <- fromIntegral <$> peekIO (p'zebra_table'row_capacity c_table)
+  -- Make sure tests fail if the capacity is wrong
+  when (n_cap < n_rows) $ left ForeignTableNotEnoughCapacity
+
   n_cols <- fromIntegral <$> peekIO (p'zebra_table'column_count c_table)
   c_columns <- peekIO (p'zebra_table'columns c_table)
 
