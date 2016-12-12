@@ -170,6 +170,7 @@ error_t zebra_deep_clone_table (anemone_mempool_t *pool, const zebra_table_t *ta
                 into_data->d = ZEBRA_CLONE_ARRAY (pool, table_data->d, row_capacity );
                 break;
             case ZEBRA_ARRAY:
+                into_data->a.n = ZEBRA_CLONE_ARRAY (pool, table_data->a.n, row_capacity );
                 err = zebra_deep_clone_table (pool, &table_data->a.table, &into_data->a.table);
                 if (err) return err;
                 break;

@@ -39,7 +39,7 @@ mergeLists blocks0 = do
       e' <- entityOfForeign e
       entities <- liftIO $ Ref.readIORef entityRef
       liftIO $ Ref.writeIORef entityRef (e' : entities)
-  let opts = MergeOptions pull push 5
+  let opts = MergeOptions pull push 2
 
   let ixes = Boxed.enumFromN (0 :: Int) (length blocks0)
 
