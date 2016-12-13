@@ -9,8 +9,9 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeFamilies #-}
 module Zebra.Merge.BlockC
-  ( mergeFiles
+  ( mergeBlocks
   , MergeOptions(..)
+  , MergeError(..)
   ) where
 
 import qualified Anemone.Foreign.Mempool as Mempool
@@ -27,10 +28,15 @@ import qualified X.Data.Vector as Boxed
 import P
 
 import           Control.Monad.IO.Class (MonadIO(..))
-import           X.Control.Monad.Trans.Either (EitherT)
+import           X.Control.Monad.Trans.Either (EitherT, left)
 import           Control.Monad.Trans.Class (lift)
 
 import qualified Data.Map as Map
+
+data MergeError =
+    MergeInputEntitiesOutOfOrder (EntityHash,EntityId) (EntityHash,EntityId)
+  | MergeForeign ForeignError
+  deriving (Eq, Ord, Show)
 
 
 data MergeOptions c m =
@@ -46,36 +52,49 @@ data MergeState c =
   , stateEntityRefills :: Map.Map EntityId [c]
   , stateMempool       :: Mempool
   , stateMergeMany     :: CMergeMany
+  -- Last seen entity id, to check
+  , stateLastEntityId  :: Maybe (EntityHash, EntityId)
   }
 
 -- | Merge a whole bunch of files together.
 -- All files must have the same header.
-mergeFiles :: MonadIO m
+mergeBlocks :: MonadIO m
   => MergeOptions c m
   -> Boxed.Vector c
-  -> EitherT ForeignError m ()
+  -> EitherT MergeError m ()
 
-mergeFiles options files = do
+mergeBlocks options files = do
   pool <- liftIO Mempool.create
-  merger <- mergeManyInit pool
-  let state0 = MergeState 0 Map.empty pool merger
+  merger <- foreign $ mergeManyInit pool
+  let state0 = MergeState 0 Map.empty pool merger Nothing
   -- TODO bracket/catch and clean up last memory pool on error
+  -- need to convert state into an IORef for this
   state <- foldM fill state0 files
   state' <- go state
   liftIO $ Mempool.free $ stateMempool state'
   return ()
  where
+
   go state0 = do
     state <- gc state0
-    pop <- mergeManyPop (stateMergeMany state)
+    pop <- foreign $ mergeManyPop (stateMergeMany state)
     case pop of
       Nothing ->
         return state
       Just centity -> do
         lift $ optionPushEntity options centity
         eid <- centityId centity
+        ehash <- centityHash centity
+
+        case stateLastEntityId state of
+         Nothing -> return ()
+         Just last
+          -> when ((ehash,eid) <= last) $
+              left $ MergeInputEntitiesOutOfOrder last (ehash,eid)
+
         state' <- refill state eid
-        go state' { stateEntityCount = stateEntityCount state' + 1 }
+        go state' { stateEntityCount = stateEntityCount state' + 1
+                  , stateLastEntityId = Just (ehash,eid) }
 
   refill state eid =
     case Map.lookup eid $ stateEntityRefills state of
@@ -91,8 +110,8 @@ mergeFiles options files = do
         return state
       Just block -> do
         cblock <- lift $ foreignOfBlock (stateMempool state) block
-        entities <- foreignEntitiesOfBlock (stateMempool state) cblock
-        mergeManyPush (stateMempool state) (stateMergeMany state) (Boxed.convert entities)
+        entities <- foreign $ foreignEntitiesOfBlock (stateMempool state) cblock
+        foreign $ mergeManyPush (stateMempool state) (stateMergeMany state) (Boxed.convert entities)
 
         -- TODO do this better
         case Boxed.uncons $ Boxed.reverse entities of
@@ -109,12 +128,15 @@ mergeFiles options files = do
   gc state
    | stateEntityCount state + 1 `mod` optionGCEvery options == 0 = do
     pool' <- liftIO Mempool.create
-    merger' <- mergeManyClone pool' $ stateMergeMany state
+    merger' <- foreign $ mergeManyClone pool' $ stateMergeMany state
     liftIO $ Mempool.free $ stateMempool state
     return state { stateMempool = pool', stateMergeMany = merger' }
 
    | otherwise
    = return state
 
-  centityId = peekEntityId . unCEntity
+  centityId = foreign . peekEntityId . unCEntity
+  centityHash = foreign . peekEntityHash . unCEntity
+
+  foreign = firstT MergeForeign
 
