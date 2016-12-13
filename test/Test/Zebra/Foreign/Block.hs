@@ -17,7 +17,7 @@ import qualified Data.Vector.Unboxed as Unboxed
 import           Disorder.Core.IO (testIO)
 import           Disorder.Core.Run (disorderCheckEnvAll, ExpectedTestSpeed(..))
 import           Disorder.Jack (Property)
-import           Disorder.Jack ((===), gamble, counterexample, conjoin, noShrink)
+import           Disorder.Jack ((===), gamble, counterexample, conjoin)
 
 import           P
 
@@ -182,7 +182,7 @@ prop_c_entities_of_block =
 
 prop_c_block_of_entities :: Property
 prop_c_block_of_entities =
-  gamble (noShrink jBlock) $ check_block_of_entities
+  gamble jBlock $ check_block_of_entities
 
 prop_roundtrip_blocks :: Property
 prop_roundtrip_blocks =

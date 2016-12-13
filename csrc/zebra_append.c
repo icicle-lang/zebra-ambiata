@@ -62,8 +62,8 @@ error_t zebra_append_column (anemone_mempool_t *pool, const zebra_column_t *in, 
 
                 out_into->data.a.table.row_count += value_count;
                 zebra_grow_table (pool, &out_into->data.a.table);
-                // copy each value separately. this could be a lot better.
-                // zebra_append_* should copy multiple values
+                // copy each value separately.
+                // TODO: this could be a lot better. zebra_append_* should copy multiple values
                 for (int64_t v = 0; v < value_count; ++v) {
                     err = zebra_append_table (pool, &in->data.a.table, value_in_ix, &out_into->data.a.table, value_out_ix);
                     if (err) return err;
@@ -128,8 +128,7 @@ error_t zebra_append_block_entity (anemone_mempool_t *pool, zebra_entity_t *enti
     if (!block) {
         block = anemone_mempool_calloc (pool, 1, sizeof (zebra_block_t) );
     } else if (entity->attribute_count != block->table_count) {
-        // TODO: better error
-        return ZEBRA_MERGE_DIFFERENT_ENTITIES;
+        return ZEBRA_APPEND_DIFFERENT_ATTRIBUTE_COUNT;
     }
 
     block->entities = ZEBRA_GROW_ARRAY (pool, block->entities, block->entity_count, block->entity_count + 1);
@@ -142,6 +141,8 @@ error_t zebra_append_block_entity (anemone_mempool_t *pool, zebra_entity_t *enti
     for (int64_t c = 0; c != entity->attribute_count; ++c) {
         new_row_count += entity->attributes[c].table.row_count;
     }
+
+    // TODO: this should check capacity and mutate if possible, otherwise grow and copy
     block->times = ZEBRA_GROW_ARRAY (pool, block->times, block->row_count, new_row_count);
     block->priorities = ZEBRA_GROW_ARRAY (pool, block->priorities, block->row_count, new_row_count);
     block->tombstones = ZEBRA_GROW_ARRAY (pool, block->tombstones, block->row_count, new_row_count);
