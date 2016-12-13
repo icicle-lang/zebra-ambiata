@@ -198,7 +198,7 @@ run c = case c of
 
 
     joinErrors (Text.pack . show) id
-      $ MergeC.mergeFiles (MergeC.MergeOptions pull push $ mergeGcEvery opts)
+      $ MergeC.mergeBlocks (MergeC.MergeOptions pull push $ mergeGcEvery opts)
       $ Boxed.map fst $ Boxed.indexed $ Boxed.fromList ins
 
     mblock  <- lift $ IORef.readIORef blockRef
