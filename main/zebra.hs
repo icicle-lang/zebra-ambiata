@@ -8,22 +8,24 @@ import qualified Zebra.Data.Block as Block
 import qualified Zebra.Data.Entity as Entity
 import qualified Zebra.Data.Core as Core
 import qualified Zebra.Serial as Serial
-import           Zebra.Serial.File
-import qualified Zebra.Merge.BlockC as MergeC
+import qualified Zebra.Serial.File as Serial
+import qualified Zebra.Merge.BlockC as Merge
+import qualified Zebra.Merge.Puller as MergePuller
 import qualified Zebra.Foreign.Block as FoBlock
+import qualified Zebra.Foreign.Entity as FoEntity
 
 import           P
 
 import qualified Anemone.Foreign.Mempool as Mempool
-import qualified Data.ByteString as B
 import qualified Data.ByteString.Builder as Builder
+import qualified Data.List as List
 import qualified Data.Text as Text
 import qualified X.Data.Vector as Boxed
 import qualified X.Data.Vector.Unboxed as Unboxed
 import qualified X.Data.Vector.Storable as Storable
 import qualified X.Data.Vector.Stream as Stream
 
-import           X.Control.Monad.Trans.Either (EitherT, left, joinErrors, hoistEither, bracketEitherT')
+import           X.Control.Monad.Trans.Either (EitherT, joinErrors, hoistEither, bracketEitherT')
 import           X.Control.Monad.Trans.Either.Exit (orDie)
 import           Control.Monad.Trans.Class (lift)
 
@@ -62,6 +64,7 @@ data CatOptions =
   , catBlockSummary :: Bool
   , catEntities :: Bool
   , catEntityDetails :: Bool
+  , catEntitySummary :: Bool
   , catSummary :: Bool
   } deriving (Eq, Show)
 
@@ -112,14 +115,20 @@ pOutputFile =
 
 pCatOptions :: Parser CatOptions
 pCatOptions =
-  CatOptions
-  <$> no_switch (Options.long "no-header")
-  <*> no_switch (Options.long "no-block-summary")
-  <*> no_switch (Options.long "no-entities")
-  <*> no_switch (Options.long "no-entity-details")
-  <*> no_switch (Options.long "no-summary")
- where
-  no_switch args = not <$> Options.switch args
+  fixCatOptions
+  <$> (CatOptions
+  <$> Options.switch (Options.long "header")
+  <*> Options.switch (Options.long "block-summary")
+  <*> Options.switch (Options.long "entities")
+  <*> Options.switch (Options.long "entity-details")
+  <*> Options.switch (Options.long "entity-summary")
+  <*> Options.switch (Options.long "summary")
+  )
+
+fixCatOptions :: CatOptions -> CatOptions
+fixCatOptions opts
+ = opts
+ { catEntities = catEntities opts || catEntityDetails opts || catEntitySummary opts }
 
 pMergeOptions :: Parser MergeOptions
 pMergeOptions =
@@ -138,100 +147,72 @@ pMergeOptions =
 run :: Command -> IO ()
 run c = case c of
   FileCat f opts -> orDie id $ do
-    (r,blocks) <- getFile' f
+    (header,blocks) <- firstTshow $ Serial.fileOfFilePath f
     when (catHeader opts) $ lift $ do
       IO.putStrLn "Header information:"
-      IO.putStrLn (ppShow r)
+      IO.putStrLn (ppShow header)
     catBlocks opts blocks
 
   MergeFiles [] _ _ -> do
     IO.putStrLn "Merge: No files"
     Exit.exitFailure
 
-  MergeFiles ins@(i:_) out opts -> orDie id $ do
-    fileheader <- fst <$> getFile' i
-    let getPuller f = streamPuller $ readBlocksCheckHeader fileheader f
-
-    files <- lift $ mapM getPuller (Boxed.fromList ins)
-
-    outfd <- lift $ IO.openBinaryFile out IO.WriteMode
-    lift $ Builder.hPutBuilder outfd (Serial.bHeader fileheader)
-
-    pool0    <- lift $ Mempool.create
-
-    let freePool poolRef = do
-        pool <- lift $ IORef.readIORef poolRef
-        lift $ Mempool.free pool
-
-    bracketEitherT' (lift $ IORef.newIORef pool0) freePool $ \poolRef -> do
-    blockRef <- lift $ IORef.newIORef Nothing
-
-    let checkPurge block = do
-        is <- FoBlock.peekBlockRowCount (FoBlock.unCBlock block)
-        return (is >= mergeOutputBlockFacts opts)
-    let doPurge block = do
-        pool <- lift $ IORef.readIORef poolRef
-        outblock <- firstTshow $ FoBlock.blockOfForeign block
-        lift $ Builder.hPutBuilder outfd (Serial.bBlock outblock)
-        pool' <- lift $ Mempool.create
-        lift $ IORef.writeIORef poolRef pool'
-        lift $ Mempool.free pool
-        lift $ IORef.writeIORef blockRef Nothing
-
-    let pull f = files Boxed.! f
-    let push e = do
-        pool    <- lift $ IORef.readIORef poolRef
-        block   <- lift $ IORef.readIORef blockRef
-        block'  <- firstTshow $ FoBlock.appendEntityToBlock pool e block
-        ifpurge <- checkPurge block'
-        if ifpurge
-          then doPurge block'
-          else lift $ IORef.writeIORef blockRef (Just block')
+  MergeFiles ins@(in1:_) out opts -> orDie id $ do
+    (puller, pullids) <- firstTshow $ MergePuller.blockChainPuller (Boxed.fromList ins)
+    withOutputPusher opts in1 out $ \pusher -> do
+    let runOpts = Merge.MergeOptions (firstTshow . puller) pusher $ mergeGcEvery opts
+    joinErrors (Text.pack . show) id $ Merge.mergeBlocks runOpts pullids
 
 
-    joinErrors (Text.pack . show) id
-      $ MergeC.mergeFiles (MergeC.MergeOptions pull push $ mergeGcEvery opts)
-      $ Boxed.map fst $ Boxed.indexed $ Boxed.fromList ins
+withOutputPusher :: MergeOptions -> FilePath -> FilePath
+  -> ((FoEntity.CEntity -> EitherT Text IO ()) -> EitherT Text IO ())
+  -> EitherT Text IO ()
 
-    mblock  <- lift $ IORef.readIORef blockRef
-    -- This final purge will actually create a new Mempool, but it will be freed by the bracket anyway
-    maybe (return ()) doPurge mblock
-    lift $ IO.hClose outfd
+withOutputPusher opts inputfile outputfile runWith = do
+  (fileheader,_) <- firstTshow $ Serial.fileOfFilePath inputfile
+  outfd <- lift $ IO.openBinaryFile outputfile IO.WriteMode
+  lift $ Builder.hPutBuilder outfd (Serial.bHeader fileheader)
+
+  pool0    <- lift $ Mempool.create
+
+  let freePool poolRef = do
+      pool <- lift $ IORef.readIORef poolRef
+      lift $ Mempool.free pool
+
+  blockRef <- lift $ IORef.newIORef Nothing
+  bracketEitherT' (lift $ IORef.newIORef pool0) freePool $ \poolRef -> do
+
+  let checkPurge block = do
+      is <- FoBlock.peekBlockRowCount (FoBlock.unCBlock block)
+      return (is >= mergeOutputBlockFacts opts)
+
+  let doPurge block = do
+      pool <- lift $ IORef.readIORef poolRef
+      outblock <- firstTshow $ FoBlock.blockOfForeign block
+      lift $ Builder.hPutBuilder outfd (Serial.bBlock outblock)
+      pool' <- lift $ Mempool.create
+      lift $ IORef.writeIORef poolRef pool'
+      lift $ Mempool.free pool
+      lift $ IORef.writeIORef blockRef Nothing
+
+  let pusher e = do
+      pool    <- lift $ IORef.readIORef poolRef
+      block   <- lift $ IORef.readIORef blockRef
+      block'  <- firstTshow $ FoBlock.appendEntityToBlock pool e block
+      ifpurge <- checkPurge block'
+      if ifpurge
+        then doPurge block'
+        else lift $ IORef.writeIORef blockRef (Just block')
+
+  runWith pusher
+
+  mblock  <- lift $ IORef.readIORef blockRef
+  -- This final purge will actually create a new Mempool, but it will be freed by the bracket anyway
+  maybe (return ()) doPurge mblock
+  lift $ IO.hClose outfd
 
 
-
- where
-  getFile' f = do
-    stream <- lift $ streamOfFile f
-    (h,bs) <- firstT renderDecodeError $ getFile stream
-    return (h, Stream.trans (firstT renderDecodeError) bs)
-
-  readBlocksCheckHeader fileheader f = Stream.embed $ do
-    (h,bs) <- getFile' f
-    when (h /= fileheader) $
-      left ("Block error: reading file " <> Text.pack f <> " has different header")
-    return bs
-
-streamPuller :: Stream.Stream (EitherT Text IO) b -> IO (EitherT Text IO (Maybe b))
-streamPuller (Stream.Stream loop state0) = do
-  stateRef <- IORef.newIORef state0
-  return $ go stateRef
- where
-  go stateRef = do
-    state <- lift $ IORef.readIORef stateRef
-    step  <- loop state
-    case step of
-      Stream.Yield v state' -> do
-        lift $ IORef.writeIORef stateRef state'
-        return (Just v)
-      Stream.Skip state' -> do
-        lift $ IORef.writeIORef stateRef state'
-        go stateRef
-      Stream.Done -> do
-        return Nothing
-        
-
-catBlocks :: CatOptions -> Stream.Stream (EitherT Text IO) Block.Block -> EitherT Text IO ()
+catBlocks :: CatOptions -> Stream.Stream (EitherT Serial.DecodeError IO) Block.Block -> EitherT Text IO ()
 catBlocks opts blocks = do
   let int0 = 0 :: Int
   totalBlocks <- lift $ IORef.newIORef int0
@@ -257,7 +238,8 @@ catBlocks opts blocks = do
           IO.putStrLn ("  Entities: " <> show numEnts)
           IO.putStrLn ("  Facts:    " <> show numIxs)
 
-  Stream.mapM_ go blocks
+  let blocks' = Stream.trans (firstT Serial.renderDecodeError) blocks
+  Stream.mapM_ go blocks'
 
   numBlocks <- lift $ IORef.readIORef totalBlocks
   numEnts <- lift $ IORef.readIORef totalEnts
@@ -276,31 +258,37 @@ catEntity :: CatOptions -> Entity.Entity -> EitherT Text IO ()
 catEntity opts entity = lift $ do
   IO.putStrLn ("    " <> show (Entity.entityId entity) <> " (" <> show (Entity.entityHash entity) <> ")")
 
-  let counts = Boxed.map (Storable.length . Entity.attributeTime)
+  when (catEntityDetails opts) $ catEntityFacts entity
+
+  let facts' = Boxed.filter ((>0) . Storable.length . Entity.attributeTime)
              $ Entity.entityAttributes entity
-  let times  = Boxed.concatMap (Boxed.convert . Entity.attributeTime)
-             $ Entity.entityAttributes entity
+  let counts = Boxed.map (Storable.length . Entity.attributeTime) facts'
+  let times  = Boxed.concatMap (Boxed.convert . Entity.attributeTime) facts'
+
+
   let showTime = show . Core.toDay
-  when (catEntityDetails opts) $ do
-    IO.putStrLn ("      Times:               " <> showTime (Boxed.minimum times) <> "..." <> showTime (Boxed.maximum times))
-    IO.putStrLn ("      Facts per attribute: " <> show (Boxed.minimum counts) <> "..." <> show (Boxed.maximum counts))
+  when (catEntitySummary opts) $ do
+    IO.putStrLn ("      Times:               " <> showRange showTime times)
+    IO.putStrLn ("      Facts per attribute: " <> showRange show counts)
     IO.putStrLn ("      Facts:               " <> show (Boxed.sum counts))
 
+ where
+  showRange showf inps
+   | Boxed.null inps
+   = "(empty)"
+   | otherwise
+   = showf (Boxed.minimum inps) <> "..." <> showf (Boxed.maximum inps)
 
-streamOfFile :: FilePath -> IO (Stream.Stream IO B.ByteString)
-streamOfFile fp = do
-  handle <- IO.openBinaryFile fp IO.ReadMode
-  return $ Stream.Stream getBytes (Just handle)
-  where
-    getBytes Nothing = return $ Stream.Done
-    getBytes (Just handle) = do
-      bytes <- B.hGet handle (1024*1024)
-      case B.null bytes of
-       True -> do
-        IO.hClose handle
-        return $ Stream.Skip Nothing
-       False -> do
-        return $ Stream.Yield bytes (Just handle)
+catEntityFacts :: Entity.Entity -> IO ()
+catEntityFacts entity = do
+  IO.putStrLn ("      Values:")
+  let facts' = Boxed.filter ((>0) . Storable.length . Entity.attributeTime)
+             $ Entity.entityAttributes entity
+  mapM_ (putIndented 8 . ppShow) facts'
+
+putIndented :: Int -> String -> IO ()
+putIndented indents str =
+  mapM_ (IO.putStrLn . (List.replicate indents ' ' <>)) $ List.lines str
 
 firstTshow :: (Functor m, Show e) => EitherT e m a -> EitherT Text m a
 firstTshow = firstT (Text.pack . show)

@@ -7,11 +7,17 @@
 module Zebra.Serial.File (
     DecodeError(..)
   , renderDecodeError
-  , getBlocks
-  , getFile
+  , blocksOfBytes
+  , fileOfBytes
   , runStreamOne
   , runStreamMany
+  , streamOfFile
+  , fileOfFilePath
   ) where
+
+import           Zebra.Data
+import           Zebra.Serial.Header
+import           Zebra.Serial.Block
 
 import           Data.Binary.Get (Get)
 import qualified Data.Binary.Get as Get
@@ -24,15 +30,16 @@ import           Data.String (String)
 
 import           P
 
-import           Zebra.Data
-import           Zebra.Serial.Header
-import           Zebra.Serial.Block
-
 import qualified X.Data.Vector as Boxed
 import qualified X.Data.Vector.Stream as Stream
 
 import           X.Control.Monad.Trans.Either
 import           Control.Monad.Trans.Class
+import           Control.Monad.IO.Class (MonadIO(..))
+
+import           System.IO (FilePath)
+import qualified System.IO as IO
+
 
 data DecodeError
  = DecodeError String
@@ -50,8 +57,8 @@ renderDecodeError = \case
   DecodeErrorBadParserExpectsMoreAfterEnd ->
     "Decode error: the parser asked for more input after telling it the stream has ended. This means there is a bug in the parser."
 
-getFile :: Monad m => Stream.Stream m B.ByteString -> EitherT DecodeError m (Map AttributeName Schema, Stream.Stream (EitherT DecodeError m) Block)
-getFile input = EitherT $ do
+fileOfBytes :: Monad m => Stream.Stream m B.ByteString -> EitherT DecodeError m (Map AttributeName Schema, Stream.Stream (EitherT DecodeError m) Block)
+fileOfBytes input = EitherT $ do
   (header, rest) <- runStreamOne getHeader input
   case header of
    Left err -> return $ Left err
@@ -60,8 +67,8 @@ getFile input = EitherT $ do
         blocks = runStreamMany (getBlock schema) rest
     in  return $ Right (header', blocks)
 
-getBlocks :: Monad m => Boxed.Vector Schema -> Stream.Stream m B.ByteString -> Stream.Stream (EitherT DecodeError m) Block
-getBlocks schemas inp = runStreamMany (getBlock schemas) inp
+blocksOfBytes :: Monad m => Boxed.Vector Schema -> Stream.Stream m B.ByteString -> Stream.Stream (EitherT DecodeError m) Block
+blocksOfBytes schemas inp = runStreamMany (getBlock schemas) inp
 
 
 -- | Run a 'Get' binary decoder over a stream of strict bytestrings.
@@ -135,4 +142,26 @@ runStreamMany g (Stream.Stream s'go s'init) =
          -> return $ Stream.Skip (s, "", Just decoder')
         Get.Done str' _ ret
          -> return $ Stream.Yield ret (s, str', Nothing)
+
+
+fileOfFilePath :: MonadIO m => FilePath -> EitherT DecodeError m (Map AttributeName Schema, Stream.Stream (EitherT DecodeError m) Block)
+fileOfFilePath path = do
+  bytes <- lift $ streamOfFile path
+  fileOfBytes bytes
+
+-- This should catch and wrap in EitherT. Too bad.
+streamOfFile :: MonadIO m => FilePath -> m (Stream.Stream m B.ByteString)
+streamOfFile fp = do
+  handle <- liftIO $ IO.openBinaryFile fp IO.ReadMode
+  return $ Stream.Stream getBytes (Just handle)
+  where
+    getBytes Nothing = return $ Stream.Done
+    getBytes (Just handle) = do
+      bytes <- liftIO $ B.hGet handle (1024*1024)
+      case B.null bytes of
+       True -> do
+        liftIO $ IO.hClose handle
+        return $ Stream.Skip Nothing
+       False -> do
+        return $ Stream.Yield bytes (Just handle)
 

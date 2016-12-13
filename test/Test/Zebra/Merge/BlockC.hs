@@ -22,9 +22,8 @@ import           X.Control.Monad.Trans.Either (EitherT, joinEitherT)
 
 import           Zebra.Data.Entity
 import           Zebra.Foreign.Entity
-import           Zebra.Foreign.Util
 
-mergeLists :: [[Block]] -> EitherT ForeignError IO [Entity]
+mergeLists :: [[Block]] -> EitherT MergeError IO [Entity]
 mergeLists blocks0 = do
   blockRef <- liftIO $ Ref.newIORef blocks0
   entityRef <- liftIO $ Ref.newIORef []
@@ -43,7 +42,7 @@ mergeLists blocks0 = do
 
   let ixes = Boxed.enumFromN (0 :: Int) (length blocks0)
 
-  joinEitherT id $ mergeFiles opts ixes
+  joinEitherT MergeForeign $ mergeBlocks opts ixes
   reverse <$> liftIO (Ref.readIORef entityRef)
 
  where
