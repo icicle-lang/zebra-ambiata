@@ -15,8 +15,9 @@ import qualified Data.Vector.Storable as Storable
 import qualified Data.Vector.Unboxed as Unboxed
 
 import           Disorder.Core.IO (testIO)
+import           Disorder.Core.Run (disorderCheckEnvAll, ExpectedTestSpeed(..))
 import           Disorder.Jack (Property)
-import           Disorder.Jack ((===), quickCheckAll, gamble, counterexample, conjoin)
+import           Disorder.Jack ((===), gamble, counterexample, conjoin)
 
 import           P
 
@@ -70,6 +71,15 @@ foreignEntitiesOfBlock' block =
     fentities <- foreignEntitiesOfBlock pool fblock
     traverse entityOfForeign fentities
 
+foreignBlockOfEntities' :: Boxed.Vector Entity -> EitherT ForeignError IO (Maybe Block)
+foreignBlockOfEntities' entities =
+  EitherT .
+  bracket Mempool.create Mempool.free $ \pool ->
+  runEitherT $ do
+    fentities <- traverse (foreignOfEntity pool) entities
+    fblock <- foldM (\fb fe -> Just <$> appendEntityToBlock pool fe fb) Nothing fentities
+    traverse blockOfForeign fblock
+
 check :: (Eq a, Eq x, Show a, Show x) => String -> a -> Either x a -> Property
 check header v0 ev1 =
   counterexample "" .
@@ -83,8 +93,8 @@ check header v0 ev1 =
     Right v1 ->
       v0 === v1
 
-check_conversion :: (Block -> EitherT CommonError IO (Boxed.Vector Entity)) -> Block -> Property
-check_conversion convert block =
+check_entities_of_block :: (Block -> EitherT CommonError IO (Boxed.Vector Entity)) -> Block -> Property
+check_entities_of_block convert block =
   testIO . withSegv (ppShow block) $ do
     entities <- runEitherT $ convert block
 
@@ -119,6 +129,19 @@ check_conversion convert block =
           fmap (sumAttribute $ rowsOfTable . attributeTable) entities
       ]
 
+
+check_block_of_entities :: Block -> Property
+check_block_of_entities block =
+  testIO . withSegv (ppShow block) $ do
+    block' <- runEitherT ( foreignEntitiesOfBlock' block >>= foreignBlockOfEntities')
+    let expect
+          | Boxed.null (blockEntities block)
+          = Nothing
+          | otherwise
+          = Just block
+    return (Right expect === block')
+
+
 check_c_vs_haskell :: Block -> Property
 check_c_vs_haskell block =
   testIO . withSegv (ppShow block) $ do
@@ -149,13 +172,17 @@ prop_compare_entities_of_block_yolo =
 
 prop_haskell_entities_of_block :: Property
 prop_haskell_entities_of_block =
-  gamble jBlock . check_conversion $
+  gamble jBlock . check_entities_of_block $
     firstT fromEntityError . hoistEither . entitiesOfBlock
 
 prop_c_entities_of_block :: Property
 prop_c_entities_of_block =
-  gamble jBlock . check_conversion $
+  gamble jBlock . check_entities_of_block $
     firstT fromForeignError . foreignEntitiesOfBlock'
+
+prop_c_block_of_entities :: Property
+prop_c_block_of_entities =
+  gamble jBlock $ check_block_of_entities
 
 prop_roundtrip_blocks :: Property
 prop_roundtrip_blocks =
@@ -165,5 +192,4 @@ prop_roundtrip_blocks =
 
 return []
 tests :: IO Bool
-tests =
-  $quickCheckAll
+tests = $disorderCheckEnvAll TestRunMore

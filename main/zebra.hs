@@ -7,20 +7,23 @@ import           DependencyInfo_ambiata_zebra
 import qualified Zebra.Data.Block as Block
 import qualified Zebra.Data.Entity as Entity
 import qualified Zebra.Data.Core as Core
+import qualified Zebra.Serial as Serial
 import           Zebra.Serial.File
 import qualified Zebra.Merge.BlockC as MergeC
-import qualified Zebra.Foreign.Entity as FoEntity
+import qualified Zebra.Foreign.Block as FoBlock
 
 import           P
 
+import qualified Anemone.Foreign.Mempool as Mempool
 import qualified Data.ByteString as B
+import qualified Data.ByteString.Builder as Builder
 import qualified Data.Text as Text
 import qualified X.Data.Vector as Boxed
 import qualified X.Data.Vector.Unboxed as Unboxed
 import qualified X.Data.Vector.Storable as Storable
 import qualified X.Data.Vector.Stream as Stream
 
-import           X.Control.Monad.Trans.Either (EitherT, left, joinErrors, hoistEither)
+import           X.Control.Monad.Trans.Either (EitherT, left, joinErrors, hoistEither, bracketEitherT')
 import           X.Control.Monad.Trans.Either.Exit (orDie)
 import           Control.Monad.Trans.Class (lift)
 
@@ -30,15 +33,14 @@ import qualified System.IO as IO
 import qualified Data.IORef as IORef
 import qualified System.Exit as Exit
 import           X.Options.Applicative (Parser, SafeCommand(..), RunType(..), Mod, CommandFields)
-import           X.Options.Applicative (dispatch, safeCommand, command', str, metavar, subparser)
-import           X.Options.Applicative (help, argument, switch, long)
+import qualified X.Options.Applicative as Options
 import           Text.Show.Pretty (ppShow)
 
 main :: IO ()
 main = do
   IO.hSetBuffering IO.stdout IO.LineBuffering
   IO.hSetBuffering IO.stderr IO.LineBuffering
-  dispatch parser >>= \sc ->
+  Options.dispatch parser >>= \sc ->
     case sc of
       VersionCommand ->
         IO.putStrLn buildInfoVersion >> Exit.exitSuccess
@@ -51,7 +53,7 @@ main = do
 
 data Command =
     FileCat FilePath CatOptions
-  | MergeFiles [FilePath]
+  | MergeFiles [FilePath] FilePath MergeOptions
   deriving (Eq, Show)
 
 data CatOptions =
@@ -63,13 +65,19 @@ data CatOptions =
   , catSummary :: Bool
   } deriving (Eq, Show)
 
+data MergeOptions =
+  MergeOptions {
+    mergeGcEvery :: Int
+  , mergeOutputBlockFacts :: Int
+  } deriving (Eq, Show)
+
 parser :: Parser (SafeCommand Command)
 parser =
-  safeCommand . subparser $ mconcat commands
+  Options.safeCommand . Options.subparser $ mconcat commands
 
 cmd :: Parser a -> String -> String -> Mod CommandFields a
 cmd p name desc =
-  command' name desc p
+  Options.command' name desc p
 
 commands :: [Mod CommandFields Command]
 commands =
@@ -78,7 +86,7 @@ commands =
       "cat"
       "Dump all information in a Zebra file."
   , cmd
-      (MergeFiles <$> pInputFiles)
+      (MergeFiles <$> pInputFiles <*> pOutputFile <*> pMergeOptions)
       "merge"
       "Merge multiple input files together"
   ]
@@ -86,24 +94,45 @@ commands =
 
 pZebraFile :: Parser FilePath
 pZebraFile =
-  argument str $
-    metavar "ZEBRA_PATH" <>
-    help "Path to a Zebra file"
+  Options.argument Options.str $
+    Options.metavar "ZEBRA_PATH" <>
+    Options.help "Path to a Zebra file"
 
 pInputFiles :: Parser [FilePath]
 pInputFiles =
-  many $ argument str $ help "Path to a Zebra file"
+  many $ Options.argument Options.str $ Options.help "Path to a Zebra file"
+
+pOutputFile :: Parser FilePath
+pOutputFile =
+  Options.option Options.str $
+    Options.short 'o' <>
+    Options.long "output" <>
+    Options.metavar "OUTPUT_PATH" <>
+    Options.help "Path to a Zebra output file"
 
 pCatOptions :: Parser CatOptions
 pCatOptions =
   CatOptions
-  <$> no_switch (long "no-header")
-  <*> no_switch (long "no-block-summary")
-  <*> no_switch (long "no-entities")
-  <*> no_switch (long "no-entity-details")
-  <*> no_switch (long "no-summary")
+  <$> no_switch (Options.long "no-header")
+  <*> no_switch (Options.long "no-block-summary")
+  <*> no_switch (Options.long "no-entities")
+  <*> no_switch (Options.long "no-entity-details")
+  <*> no_switch (Options.long "no-summary")
  where
-  no_switch args = not <$> switch args
+  no_switch args = not <$> Options.switch args
+
+pMergeOptions :: Parser MergeOptions
+pMergeOptions =
+  MergeOptions
+  <$> Options.option Options.auto
+    (Options.value 200
+    <> Options.long "gc-entity-count"
+    <> Options.help "Garbage collect input after every Nth entity. Must be >1")
+  <*> Options.option Options.auto
+    (Options.value 4096
+    <> Options.long "output-block-facts"
+    <> Options.help "Minimum number of facts per output block (last block of leftovers will contain fewer)")
+
 
 
 run :: Command -> IO ()
@@ -115,20 +144,60 @@ run c = case c of
       IO.putStrLn (ppShow r)
     catBlocks opts blocks
 
-  MergeFiles [] -> do
+  MergeFiles [] _ _ -> do
     IO.putStrLn "Merge: No files"
     Exit.exitFailure
 
-  MergeFiles ins@(i:_) -> orDie id $ do
+  MergeFiles ins@(i:_) out opts -> orDie id $ do
     fileheader <- fst <$> getFile' i
     let getPuller f = streamPuller $ readBlocksCheckHeader fileheader f
 
     files <- lift $ mapM getPuller (Boxed.fromList ins)
 
-    let pull f = files Boxed.! f
-    let push e = printEntityInfo e
+    outfd <- lift $ IO.openBinaryFile out IO.WriteMode
+    lift $ Builder.hPutBuilder outfd (Serial.bHeader fileheader)
 
-    joinErrors (Text.pack . show) id $ MergeC.mergeFiles (MergeC.MergeOptions pull push 2000) (Boxed.map fst $ Boxed.indexed $ Boxed.fromList ins)
+    pool0    <- lift $ Mempool.create
+
+    let freePool poolRef = do
+        pool <- lift $ IORef.readIORef poolRef
+        lift $ Mempool.free pool
+
+    bracketEitherT' (lift $ IORef.newIORef pool0) freePool $ \poolRef -> do
+    blockRef <- lift $ IORef.newIORef Nothing
+
+    let checkPurge block = do
+        is <- FoBlock.peekBlockRowCount (FoBlock.unCBlock block)
+        return (is >= mergeOutputBlockFacts opts)
+    let doPurge block = do
+        pool <- lift $ IORef.readIORef poolRef
+        outblock <- firstTshow $ FoBlock.blockOfForeign block
+        lift $ Builder.hPutBuilder outfd (Serial.bBlock outblock)
+        pool' <- lift $ Mempool.create
+        lift $ IORef.writeIORef poolRef pool'
+        lift $ Mempool.free pool
+        lift $ IORef.writeIORef blockRef Nothing
+
+    let pull f = files Boxed.! f
+    let push e = do
+        pool    <- lift $ IORef.readIORef poolRef
+        block   <- lift $ IORef.readIORef blockRef
+        block'  <- firstTshow $ FoBlock.appendEntityToBlock pool e block
+        ifpurge <- checkPurge block'
+        if ifpurge
+          then doPurge block'
+          else lift $ IORef.writeIORef blockRef (Just block')
+
+
+    joinErrors (Text.pack . show) id
+      $ MergeC.mergeFiles (MergeC.MergeOptions pull push $ mergeGcEvery opts)
+      $ Boxed.map fst $ Boxed.indexed $ Boxed.fromList ins
+
+    mblock  <- lift $ IORef.readIORef blockRef
+    -- This final purge will actually create a new Mempool, but it will be freed by the bracket anyway
+    maybe (return ()) doPurge mblock
+    lift $ IO.hClose outfd
+
 
 
  where
@@ -142,11 +211,6 @@ run c = case c of
     when (h /= fileheader) $
       left ("Block error: reading file " <> Text.pack f <> " has different header")
     return bs
-
-  printEntityInfo entity = do
-    eid <- firstTshow $ FoEntity.peekEntityId $ FoEntity.unCEntity entity
-    lift $ IO.putStrLn $ show eid
-
 
 streamPuller :: Stream.Stream (EitherT Text IO) b -> IO (EitherT Text IO (Maybe b))
 streamPuller (Stream.Stream loop state0) = do

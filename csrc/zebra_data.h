@@ -18,6 +18,7 @@
 #define ZEBRA_NOT_ENOUGH_ROWS 33
 #define ZEBRA_MERGE_DIFFERENT_COLUMN_TYPES 34
 #define ZEBRA_MERGE_DIFFERENT_ENTITIES 35
+#define ZEBRA_APPEND_DIFFERENT_ATTRIBUTE_COUNT 36
 
 typedef int64_t bool64_t;
 
@@ -109,47 +110,5 @@ error_t zebra_add_row (
   , zebra_column_t **out_columns
   , int64_t *out_index
   );
-
-error_t zebra_grow_column (
-    anemone_mempool_t *pool
-  , zebra_column_t *column
-  , int64_t old_capacity
-  , int64_t new_capacity
-  );
-
-error_t zebra_grow_table (
-    anemone_mempool_t *pool
-  , zebra_table_t *table
-  );
-
-error_t zebra_grow_attribute (
-    anemone_mempool_t *pool
-  , zebra_attribute_t *attribute
-  );
-
-error_t zebra_entities_of_block (
-    anemone_mempool_t *pool
-  , zebra_block_t *block
-  , int64_t *out_entity_count
-  , zebra_entity_t **out_entities
-  );
-
-//
-// Array capacity: compute array capacity for given count.
-// Gets next highest power of two after count, or a minimum of 4.
-// This was stolen from Icicle. Maybe it should go in Anemone.
-//
-ANEMONE_STATIC
-ANEMONE_INLINE
-int64_t zebra_grow_array_capacity(int64_t count)
-{
-    if (count < 4) return 4;
-
-    int64_t bits = 64 - __builtin_clzll (count - 1);
-    int64_t next = 1L << bits;
-
-    return next;
-}
-
 
 #endif//__ZEBRA_DATA_H

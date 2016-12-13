@@ -49,12 +49,14 @@ import           Zebra.Foreign.Bindings
 
 data ForeignError =
     ForeignInvalidAttributeCount !Int !Int
+  | ForeignTableNotEnoughCapacity
   | ForeignInvalidColumnType
   | ForeignAttributeNotFound
   | ForeignNotEnoughBytes
   | ForeignNotEnoughRows
   | ForeignMergeDifferentColumnTypes
   | ForeignMergeDifferentEntities
+  | ForeignAppendDifferentAttributeCount
   | ForeignUnknownError !CError
     deriving (Eq, Ord, Show)
 
@@ -74,6 +76,8 @@ fromCError = \case
     Left ForeignMergeDifferentColumnTypes
   C'ZEBRA_MERGE_DIFFERENT_ENTITIES ->
     Left ForeignMergeDifferentEntities
+  C'ZEBRA_APPEND_DIFFERENT_ATTRIBUTE_COUNT ->
+    Left ForeignAppendDifferentAttributeCount
   err ->
     Left $ ForeignUnknownError err
 

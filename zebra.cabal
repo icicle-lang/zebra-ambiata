@@ -80,20 +80,32 @@ library
                        csrc
 
   install-includes:
+                       zebra_append.h
+                       zebra_block_split.h
+                       zebra_clone.h
                        zebra_data.h
+                       zebra_grow.h
                        zebra_hash.h
                        zebra_merge.h
                        zebra_merge_many.h
 
   includes:
-                       zebra_bindings.h
+                       zebra_append.h
+                       zebra_block_split.h
+                       zebra_clone.h
                        zebra_data.h
+                       zebra_grow.h
                        zebra_hash.h
                        zebra_merge.h
                        zebra_merge_many.h
 
+
   c-sources:
+                       csrc/zebra_append.c
+                       csrc/zebra_block_split.c
+                       csrc/zebra_clone.c
                        csrc/zebra_data.c
+                       csrc/zebra_grow.c
                        csrc/zebra_merge.c
                        csrc/zebra_merge_many.c
 
@@ -112,6 +124,7 @@ executable zebra
 
   build-depends:
                       base
+                    , ambiata-anemone
                     , ambiata-zebra
                     , ambiata-p
                     , ambiata-x-optparse
