@@ -23,7 +23,7 @@ import qualified X.Data.Vector.Unboxed as Unboxed
 import qualified X.Data.Vector.Storable as Storable
 import qualified X.Data.Vector.Stream as Stream
 
-import           X.Control.Monad.Trans.Either (EitherT, left, joinErrors, hoistEither)
+import           X.Control.Monad.Trans.Either (EitherT, left, joinErrors, hoistEither, bracketEitherT')
 import           X.Control.Monad.Trans.Either.Exit (orDie)
 import           Control.Monad.Trans.Class (lift)
 
@@ -158,7 +158,12 @@ run c = case c of
     lift $ Builder.hPutBuilder outfd (Serial.bHeader fileheader)
 
     pool0    <- lift $ Mempool.create
-    poolRef  <- lift $ IORef.newIORef pool0
+
+    let freePool poolRef = do
+        pool <- lift $ IORef.readIORef poolRef
+        lift $ Mempool.free pool
+
+    bracketEitherT' (lift $ IORef.newIORef pool0) freePool $ \poolRef -> do
     blockRef <- lift $ IORef.newIORef Nothing
 
     let checkPurge block = do
@@ -189,6 +194,7 @@ run c = case c of
       $ Boxed.map fst $ Boxed.indexed $ Boxed.fromList ins
 
     mblock  <- lift $ IORef.readIORef blockRef
+    -- This final purge will actually create a new Mempool, but it will be freed by the bracket anyway
     maybe (return ()) doPurge mblock
     lift $ IO.hClose outfd
 
