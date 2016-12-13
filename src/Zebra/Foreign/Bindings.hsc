@@ -27,6 +27,7 @@ import Anemone.Foreign.Mempool (Mempool(..))
 #znum ZEBRA_NOT_ENOUGH_ROWS
 #znum ZEBRA_MERGE_DIFFERENT_COLUMN_TYPES
 #znum ZEBRA_MERGE_DIFFERENT_ENTITIES
+#znum ZEBRA_APPEND_DIFFERENT_ATTRIBUTE_COUNT
 
 #integral_t enum zebra_type
 #znum ZEBRA_BYTE
