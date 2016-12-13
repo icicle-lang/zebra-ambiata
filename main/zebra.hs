@@ -17,6 +17,7 @@ import           P
 import qualified Anemone.Foreign.Mempool as Mempool
 import qualified Data.ByteString as B
 import qualified Data.ByteString.Builder as Builder
+import qualified Data.List as List
 import qualified Data.Text as Text
 import qualified X.Data.Vector as Boxed
 import qualified X.Data.Vector.Unboxed as Unboxed
@@ -62,6 +63,7 @@ data CatOptions =
   , catBlockSummary :: Bool
   , catEntities :: Bool
   , catEntityDetails :: Bool
+  , catEntitySummary :: Bool
   , catSummary :: Bool
   } deriving (Eq, Show)
 
@@ -112,14 +114,20 @@ pOutputFile =
 
 pCatOptions :: Parser CatOptions
 pCatOptions =
-  CatOptions
-  <$> no_switch (Options.long "no-header")
-  <*> no_switch (Options.long "no-block-summary")
-  <*> no_switch (Options.long "no-entities")
-  <*> no_switch (Options.long "no-entity-details")
-  <*> no_switch (Options.long "no-summary")
- where
-  no_switch args = not <$> Options.switch args
+  fixCatOptions
+  <$> (CatOptions
+  <$> Options.switch (Options.long "header")
+  <*> Options.switch (Options.long "block-summary")
+  <*> Options.switch (Options.long "entities")
+  <*> Options.switch (Options.long "entity-details")
+  <*> Options.switch (Options.long "entity-summary")
+  <*> Options.switch (Options.long "summary")
+  )
+
+fixCatOptions :: CatOptions -> CatOptions
+fixCatOptions opts
+ = opts
+ { catEntities = catEntities opts || catEntityDetails opts || catEntitySummary opts }
 
 pMergeOptions :: Parser MergeOptions
 pMergeOptions =
@@ -276,16 +284,37 @@ catEntity :: CatOptions -> Entity.Entity -> EitherT Text IO ()
 catEntity opts entity = lift $ do
   IO.putStrLn ("    " <> show (Entity.entityId entity) <> " (" <> show (Entity.entityHash entity) <> ")")
 
-  let counts = Boxed.map (Storable.length . Entity.attributeTime)
+  when (catEntityDetails opts) $ catEntityFacts entity
+
+  let facts' = Boxed.filter ((>0) . Storable.length . Entity.attributeTime)
              $ Entity.entityAttributes entity
-  let times  = Boxed.concatMap (Boxed.convert . Entity.attributeTime)
-             $ Entity.entityAttributes entity
+  let counts = Boxed.map (Storable.length . Entity.attributeTime) facts'
+  let times  = Boxed.concatMap (Boxed.convert . Entity.attributeTime) facts'
+
+
   let showTime = show . Core.toDay
-  when (catEntityDetails opts) $ do
-    IO.putStrLn ("      Times:               " <> showTime (Boxed.minimum times) <> "..." <> showTime (Boxed.maximum times))
-    IO.putStrLn ("      Facts per attribute: " <> show (Boxed.minimum counts) <> "..." <> show (Boxed.maximum counts))
+  when (catEntitySummary opts) $ do
+    IO.putStrLn ("      Times:               " <> showRange showTime times)
+    IO.putStrLn ("      Facts per attribute: " <> showRange show counts)
     IO.putStrLn ("      Facts:               " <> show (Boxed.sum counts))
 
+ where
+  showRange showf inps
+   | Boxed.null inps
+   = "(empty)"
+   | otherwise
+   = showf (Boxed.minimum inps) <> "..." <> showf (Boxed.maximum inps)
+
+catEntityFacts :: Entity.Entity -> IO ()
+catEntityFacts entity = do
+  IO.putStrLn ("      Values:")
+  let facts' = Boxed.filter ((>0) . Storable.length . Entity.attributeTime)
+             $ Entity.entityAttributes entity
+  mapM_ (putIndented 8 . ppShow) facts'
+
+putIndented :: Int -> String -> IO ()
+putIndented indents str =
+  mapM_ (IO.putStrLn . (List.replicate indents ' ' <>)) $ List.lines str
 
 streamOfFile :: FilePath -> IO (Stream.Stream IO B.ByteString)
 streamOfFile fp = do
