@@ -49,11 +49,11 @@ data MergeOptions c m =
 data MergeState c =
   MergeState
   { stateEntityCount   :: !Int
-  , stateEntityRefills :: Map.Map EntityId [c]
-  , stateMempool       :: Mempool
-  , stateMergeMany     :: CMergeMany
+  , stateEntityRefills :: !(Map.Map EntityId [c])
+  , stateMempool       :: !Mempool
+  , stateMergeMany     :: !CMergeMany
   -- Last seen entity id, to check
-  , stateLastEntityId  :: Maybe (EntityHash, EntityId)
+  , stateLastEntityId  :: !(Maybe (EntityHash, EntityId))
   }
 
 -- | Merge a whole bunch of files together.
