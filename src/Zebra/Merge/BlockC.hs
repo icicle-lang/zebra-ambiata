@@ -31,7 +31,7 @@ import           Control.Monad.IO.Class (MonadIO(..))
 import           X.Control.Monad.Trans.Either (EitherT, left)
 import           Control.Monad.Trans.Class (lift)
 
-import qualified Data.Map as Map
+import qualified Data.Map.Strict as Map
 
 data MergeError =
     MergeInputEntitiesOutOfOrder (EntityHash,EntityId) (EntityHash,EntityId)
