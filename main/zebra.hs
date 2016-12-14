@@ -282,9 +282,10 @@ catEntity opts entity = lift $ do
 catEntityFacts :: Entity.Entity -> IO ()
 catEntityFacts entity = do
   IO.putStrLn ("      Values:")
-  let facts' = Boxed.filter ((>0) . Storable.length . Entity.attributeTime)
+  let facts' = Boxed.filter ((>0) . Storable.length . Entity.attributeTime . snd)
+             $ Boxed.indexed
              $ Entity.entityAttributes entity
-  mapM_ (putIndented 8 . ppShow) facts'
+  mapM_ (\(ix,attr) -> putIndented 8 (show ix <> ": " <> ppShow attr)) facts'
 
 putIndented :: Int -> String -> IO ()
 putIndented indents str =
