@@ -14,64 +14,66 @@ error_t zebra_append_attribute (anemone_mempool_t *pool, const zebra_attribute_t
     int64_t out_ix = out_into->table.row_count;
 
     out_into->table.row_count++;
+    // XXX: this will call grow_table twice (here and in append_table), but that should be ok
     err = zebra_grow_attribute (pool, out_into);
+    if (err) return err;
+    // XXX: cheating. so append_table works
+    out_into->table.row_count--;
+
+    err = zebra_append_table (pool, &in->table, ix, &out_into->table, 1);
     if (err) return err;
 
     out_into->times[out_ix] = in->times[ix];
     out_into->priorities[out_ix] = in->priorities[ix];
     out_into->tombstones[out_ix] = in->tombstones[ix];
 
-    return zebra_append_table (pool, &in->table, ix, &out_into->table, out_ix);
+    return 0;
 }
 
 
-error_t zebra_append_column (anemone_mempool_t *pool, const zebra_column_t *in, int64_t in_ix, zebra_column_t *out_into, int64_t out_ix)
+error_t zebra_append_column (anemone_mempool_t *pool, const zebra_column_t *in, int64_t in_ix, zebra_column_t *out_into, int64_t out_ix, int64_t out_count)
 {
-    error_t err;
-
     if (in->type != out_into->type) return ZEBRA_MERGE_DIFFERENT_COLUMN_TYPES;
 
     switch (in->type) {
         case ZEBRA_BYTE:
-            out_into->data.b[out_ix] = in->data.b[in_ix];
+            for (int64_t ix = 0; ix != out_count; ++ix) {
+                out_into->data.b[out_ix + ix] = in->data.b[in_ix + ix];
+            }
             return ZEBRA_SUCCESS;
 
         case ZEBRA_INT:
-            out_into->data.i[out_ix] = in->data.i[in_ix];
+            for (int64_t ix = 0; ix != out_count; ++ix) {
+                out_into->data.i[out_ix + ix] = in->data.i[in_ix + ix];
+            }
             return ZEBRA_SUCCESS;
 
         case ZEBRA_DOUBLE:
-            out_into->data.d[out_ix] = in->data.d[in_ix];
+            for (int64_t ix = 0; ix != out_count; ++ix) {
+                out_into->data.d[out_ix + ix] = in->data.d[in_ix + ix];
+            }
             return ZEBRA_SUCCESS;
 
         case ZEBRA_ARRAY:
             {
                 // find value start indices by summing array lengths
                 // this could be better if we stored this somewhere rather than recomputing each time
-                int64_t value_count = in->data.a.n[in_ix];
                 int64_t value_in_ix = 0;
-                int64_t value_out_ix = 0;
                 for (int64_t i = 0; i < in_ix; ++i) {
                     value_in_ix += in->data.a.n[i];
                 }
-                for (int64_t o = 0; o < out_ix; ++o) {
-                    value_out_ix += out_into->data.a.n[o];
+                // invariant: out_ix is parent table's row_count
+                // ==>
+                // sum out_into->data.a.n[0..out_ix] = out_into->data.a.table.row_count
+                int64_t nested_count = 0;
+
+                for (int64_t ix = 0; ix != out_count; ++ix) {
+                    int64_t n = in->data.a.n[in_ix + ix];
+                    out_into->data.a.n[out_ix + ix] = n;
+                    nested_count += n;
                 }
 
-                out_into->data.a.n[out_ix] = value_count;
-
-                out_into->data.a.table.row_count += value_count;
-                zebra_grow_table (pool, &out_into->data.a.table);
-                // copy each value separately.
-                // TODO: this could be a lot better. zebra_append_* should copy multiple values
-                for (int64_t v = 0; v < value_count; ++v) {
-                    err = zebra_append_table (pool, &in->data.a.table, value_in_ix, &out_into->data.a.table, value_out_ix);
-                    if (err) return err;
-                    value_in_ix++;
-                    value_out_ix++;
-                }
-
-                return ZEBRA_SUCCESS;
+                return zebra_append_table (pool, &in->data.a.table, value_in_ix, &out_into->data.a.table, nested_count);
             }
 
         default:
@@ -79,14 +81,20 @@ error_t zebra_append_column (anemone_mempool_t *pool, const zebra_column_t *in, 
     }
 }
 
-error_t zebra_append_table (anemone_mempool_t *pool, const zebra_table_t *in, int64_t in_ix, zebra_table_t *out_into, int64_t out_ix)
+error_t zebra_append_table (anemone_mempool_t *pool, const zebra_table_t *in, int64_t in_ix, zebra_table_t *out_into, int64_t count)
 {
     error_t err;
 
+    int64_t out_ix = out_into->row_count;
+    out_into->row_count += count;
+    err = zebra_grow_table (pool, out_into);
+    if (err) return err;
+
     for (int64_t c = 0; c < in->column_count; ++c) {
-        err = zebra_append_column (pool, in->columns + c, in_ix, out_into->columns + c, out_ix);
+        err = zebra_append_column (pool, in->columns + c, in_ix, out_into->columns + c, out_ix, count);
         if (err) return err;
     }
+
     return ZEBRA_SUCCESS;
 }
 
@@ -164,13 +172,8 @@ error_t zebra_append_block_entity (anemone_mempool_t *pool, zebra_entity_t *enti
         for (int64_t c = 0; c < block->table_count; ++c) {
             zebra_table_t *entity_table = &entity->attributes[c].table;
             zebra_table_t *block_table = block->tables + c;
-            uint64_t append_ix = block_table->row_count;
-            block_table->row_count += entity_table->row_count;
-            zebra_grow_table (pool, block_table);
-            for (int64_t ix = 0; ix < entity_table->row_count; ++ix) {
-                err = zebra_append_table (pool, entity_table, ix, block_table, append_ix + ix);
-                if (err) return err;
-            }
+            err = zebra_append_table (pool, entity_table, 0, block_table, entity_table->row_count);
+            if (err) return err;
         }
     } else {
         block->table_count = entity->attribute_count;

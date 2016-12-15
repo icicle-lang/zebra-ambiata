@@ -16,6 +16,7 @@ error_t zebra_append_column (
   , int64_t in_ix
   , zebra_column_t *out_into
   , int64_t out_ix
+  , int64_t out_count
   );
 
 error_t zebra_append_table (
@@ -23,7 +24,7 @@ error_t zebra_append_table (
   , const zebra_table_t *in
   , int64_t ix
   , zebra_table_t *out_into
-  , int64_t out_ix
+  , int64_t out_count
   );
 
 error_t zebra_append_block_entity (
