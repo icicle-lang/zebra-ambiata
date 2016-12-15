@@ -5,6 +5,7 @@ module Test.Zebra.Serial.Array where
 import qualified Data.Vector as Boxed
 import qualified Data.Vector.Storable as Storable
 
+import           Disorder.Core.Run
 import           Disorder.Jack (Property, quickCheckAll)
 import           Disorder.Jack (gamble, listOf, arbitrary, sizedBounded)
 
@@ -50,5 +51,4 @@ midBig x y =
 
 return []
 tests :: IO Bool
-tests =
-  $quickCheckAll
+tests = $disorderCheckEnvAll TestRunMore
