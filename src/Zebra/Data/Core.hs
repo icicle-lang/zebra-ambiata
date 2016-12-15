@@ -19,6 +19,7 @@ module Zebra.Data.Core (
   , hashEntityId
   , fromDay
   , toDay
+  , toUTCTime
 
   , foreignOfAttributeIds
   , foreignOfTimes
@@ -35,11 +36,10 @@ module Zebra.Data.Core (
 
 import           Anemone.Foreign.Hash (fasthash32')
 
-import           Control.Lens ((^.), re)
-
-import           Data.AffineSpace ((.-.), (.+^))
 import           Data.ByteString (ByteString)
-import           Data.Thyme.Calendar (Day, YearMonthDay(..), gregorian)
+import           Data.Thyme (UTCTime, Day, TimeDiff)
+import           Data.Thyme.Time.Core (addDays, diffDays, fromGregorian)
+import           Data.Thyme.Time.Core (mkUTCTime, addUTCTime, fromMicroseconds)
 import           Data.Typeable (Typeable)
 import qualified Data.Vector.Storable as Storable
 import           Data.Vector.Unboxed.Deriving (derivingUnbox)
@@ -138,18 +138,33 @@ hashEntityId =
 
 fromDay :: Day -> Time
 fromDay day =
-  Time . fromIntegral $ (day .-. ivoryEpoch) * 86400
+  Time . fromIntegral $ (diffDays day ivoryEpochDay) * 86400
 {-# INLINE fromDay #-}
 
 toDay :: Time -> Day
 toDay (Time time) =
-  ivoryEpoch .+^ fromIntegral time `div` 86400
+  addDays (fromIntegral time `div` 86400) ivoryEpochDay
 {-# INLINE toDay #-}
 
-ivoryEpoch :: Day
-ivoryEpoch =
-  YearMonthDay 1600 3 1 ^. re gregorian
-{-# INLINE ivoryEpoch #-}
+toUTCTime :: Time -> UTCTime
+toUTCTime (Time time) =
+  addUTCTime (fromSeconds time) ivoryEpochTime
+{-# INLINE toUTCTime #-}
+
+ivoryEpochDay :: Day
+ivoryEpochDay =
+  fromGregorian 1600 3 1
+{-# INLINE ivoryEpochDay #-}
+
+ivoryEpochTime :: UTCTime
+ivoryEpochTime =
+  mkUTCTime ivoryEpochDay (fromSeconds 0)
+{-# INLINE ivoryEpochTime #-}
+
+fromSeconds :: TimeDiff t => Int64 -> t
+fromSeconds seconds =
+  fromMicroseconds (seconds * 1000000)
+{-# INLINE fromSeconds #-}
 
 --
 -- We do these conversions here so that we can ensure the 'Storable' instances

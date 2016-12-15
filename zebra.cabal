@@ -27,6 +27,7 @@ library
                     , containers                      == 0.5.*
                     , lens                            >= 4.7        && < 4.15
                     , mtl                             == 2.2.*
+                    , old-locale                      == 1.0.*
                     , pretty-show                     == 1.6.*
                     , primitive                       == 0.6.*
                     , text                            == 1.2.*

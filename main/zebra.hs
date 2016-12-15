@@ -5,8 +5,10 @@ import           BuildInfo_ambiata_zebra
 import           DependencyInfo_ambiata_zebra
 
 import qualified Zebra.Data.Block as Block
-import qualified Zebra.Data.Entity as Entity
 import qualified Zebra.Data.Core as Core
+import qualified Zebra.Data.Entity as Entity
+import qualified Zebra.Data.Fact as Fact
+import qualified Zebra.Data.Schema as Schema
 import qualified Zebra.Serial as Serial
 import qualified Zebra.Serial.File as Serial
 import qualified Zebra.Merge.BlockC as Merge
@@ -17,7 +19,9 @@ import qualified Zebra.Foreign.Entity as FoEntity
 import           P
 
 import qualified Anemone.Foreign.Mempool as Mempool
+import qualified Data.ByteString.Char8 as Char8
 import qualified Data.ByteString.Builder as Builder
+import qualified Data.Map as Map
 import qualified Data.List as List
 import qualified Data.Text as Text
 import qualified X.Data.Vector as Boxed
@@ -25,8 +29,9 @@ import qualified X.Data.Vector.Unboxed as Unboxed
 import qualified X.Data.Vector.Storable as Storable
 import qualified X.Data.Vector.Stream as Stream
 
-import           X.Control.Monad.Trans.Either (EitherT, joinErrors, hoistEither, bracketEitherT')
+import           X.Control.Monad.Trans.Either (EitherT, joinErrors, hoistEither, bracketEitherT', left)
 import           X.Control.Monad.Trans.Either.Exit (orDie)
+import           Control.Monad.IO.Class (liftIO)
 import           Control.Monad.Trans.Class (lift)
 
 import           Data.String (String)
@@ -55,6 +60,7 @@ main = do
 
 data Command =
     FileCat FilePath CatOptions
+  | FileFacts FilePath
   | MergeFiles [FilePath] FilePath MergeOptions
   deriving (Eq, Show)
 
@@ -88,6 +94,10 @@ commands =
       (FileCat <$> pZebraFile <*> pCatOptions)
       "cat"
       "Dump all information in a Zebra file."
+  , cmd
+      (FileFacts <$> pZebraFile)
+      "facts"
+      "Dump the Zebra file as facts."
   , cmd
       (MergeFiles <$> pInputFiles <*> pOutputFile <*> pMergeOptions)
       "merge"
@@ -153,6 +163,10 @@ run c = case c of
       IO.putStrLn (ppShow header)
     catBlocks opts blocks
 
+  FileFacts f -> orDie id $ do
+    (header,blocks) <- firstTshow $ Serial.fileOfFilePath f
+    catFacts (Map.elems header) blocks
+
   MergeFiles [] _ _ -> do
     IO.putStrLn "Merge: No files"
     Exit.exitFailure
@@ -211,6 +225,24 @@ withOutputPusher opts inputfile outputfile runWith = do
   maybe (return ()) doPurge mblock
   lift $ IO.hClose outfd
 
+catFacts :: [Schema.Schema] -> Stream.Stream (EitherT Serial.DecodeError IO) Block.Block -> EitherT Text IO ()
+catFacts schemas blocks =
+  case traverse Schema.recoverEncodingOfSchema schemas of
+    Nothing ->
+      left "failed to recover encodings from schemas for fact output"
+    Just encodings0 -> do
+      let
+        encodings =
+          Boxed.fromList encodings0
+
+        go block = do
+          facts <- firstTshow . hoistEither $ Block.factsOfBlock encodings block
+          Boxed.mapM_ (liftIO . Char8.putStrLn . Fact.renderFact) facts
+
+        blocks' =
+          Stream.trans (firstT Serial.renderDecodeError) blocks
+
+      Stream.mapM_ go blocks'
 
 catBlocks :: CatOptions -> Stream.Stream (EitherT Serial.DecodeError IO) Block.Block -> EitherT Text IO ()
 catBlocks opts blocks = do

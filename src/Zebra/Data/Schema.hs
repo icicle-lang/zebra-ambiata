@@ -22,10 +22,15 @@ module Zebra.Data.Schema (
   , schemaOfDictionary
   , schemaOfEncoding
   , schemaOfFieldEncoding
+
+  -- * Recover lossy encoding from schema
+  , recoverEncodingOfSchema
   ) where
 
 import qualified Data.Attoparsec.Text as Atto
+import qualified Data.List as List
 import           Data.Map (Map)
+import qualified Data.Text as T
 import qualified Data.Vector as Boxed
 
 import           GHC.Generics (Generic)
@@ -128,3 +133,40 @@ schemaOfFieldEncoding = \case
         schemaOfEncoding encoding
       OptionalField ->
         Schema (pure IntFormat) <> schemaOfEncoding encoding
+
+-- Best effort to recover an encoding
+recoverEncodingOfSchema :: Schema -> Maybe Encoding
+recoverEncodingOfSchema (Schema formats) =
+  case recoverEncodingsOfFormats formats of
+    Nothing ->
+      Nothing
+    Just [] ->
+      Nothing
+    Just [x] ->
+      Just x
+    Just xs ->
+      let
+        mkField :: Int -> Encoding -> (FieldName, FieldEncoding)
+        mkField i x =
+          (FieldName . T.pack $ show i, FieldEncoding RequiredField x)
+      in
+        Just .
+          StructEncoding .
+          Boxed.fromList $
+          List.zipWith mkField [0..] xs
+
+recoverEncodingsOfFormats :: [Format] -> Maybe [Encoding]
+recoverEncodingsOfFormats = \case
+  [] ->
+    Just []
+  ByteFormat : _ ->
+    Nothing
+  IntFormat : xs ->
+    (Int64Encoding :) <$> recoverEncodingsOfFormats xs
+  DoubleFormat : xs ->
+    (DoubleEncoding :) <$> recoverEncodingsOfFormats xs
+  ArrayFormat (Schema [ByteFormat]) : xs ->
+    (StringEncoding :) <$> recoverEncodingsOfFormats xs
+  ArrayFormat schema : xs -> do
+    encoding <- recoverEncodingOfSchema schema
+    (ListEncoding encoding :) <$> recoverEncodingsOfFormats xs
