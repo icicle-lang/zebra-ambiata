@@ -80,11 +80,13 @@ fromCError = \case
     Left ForeignAppendDifferentAttributeCount
   err ->
     Left $ ForeignUnknownError err
+{-# INLINE fromCError #-}
 
 liftCError :: MonadIO m => IO CError -> EitherT ForeignError m ()
 liftCError f = do
   c_error <- liftIO f
   hoistEither $ fromCError c_error
+{-# INLINE liftCError #-}
 
 allocCopy :: MonadIO m => Mempool -> ForeignPtr a -> Int -> Int -> m (Ptr a)
 allocCopy pool fp off len =
@@ -92,10 +94,12 @@ allocCopy pool fp off len =
     dst <- allocBytes pool (fromIntegral len)
     copyBytes dst (src `plusPtr` off) len
     pure dst
+{-# INLINE allocCopy #-}
 
 allocStack :: MonadIO m => Storable a => (Ptr a -> EitherT e IO b) -> EitherT e m b
 allocStack f =
   EitherT . liftIO . alloca $ \a -> runEitherT $ f a
+{-# INLINE allocStack #-}
 
 peekIO :: (MonadIO m, Storable a) => Ptr a -> m a
 peekIO ptr =
@@ -152,6 +156,7 @@ peekMany ptr0 n peekOne =
         ptr0 `plusPtr` (i * sizeOf (Savage.undefined :: a))
     in
       peekOne ptr
+{-# INLINE peekMany #-}
 
 pokeMany :: forall m v a b. (MonadIO m, Storable a, Generic.Vector v b) => Ptr a -> v b -> (Ptr a -> b -> m ()) -> m ()
 pokeMany ptr0 xs pokeOne =
@@ -162,3 +167,4 @@ pokeMany ptr0 xs pokeOne =
         (i * sizeOf (Savage.undefined :: a))
     in
       pokeOne ptr x
+{-# INLINE pokeMany #-}
