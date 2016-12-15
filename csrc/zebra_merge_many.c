@@ -106,6 +106,7 @@ error_t zebra_mm_clone (
     int64_t merger_count = merger->count;
     zebra_entity_t *old_entities = merger->entities;
     zebra_entity_t *new_entities = anemone_mempool_calloc (pool, merger_count, sizeof(zebra_entity_t));
+    merger->entities = new_entities;
 
     for (int64_t i = 0; i != merger_count; ++i) {
         error_t err = zebra_deep_clone_entity (pool, old_entities + i, new_entities + i);

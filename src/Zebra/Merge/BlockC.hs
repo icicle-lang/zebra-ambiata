@@ -48,7 +48,7 @@ data MergeOptions c m =
 
 data MergeState c =
   MergeState
-  { stateEntityCount   :: !Int
+  { stateEntityBlockCount   :: !Int
   , stateEntityRefills :: !(Map.Map EntityId [c])
   , stateMempool       :: !Mempool
   , stateMergeMany     :: !CMergeMany
@@ -93,7 +93,7 @@ mergeBlocks options files = do
               left $ MergeInputEntitiesOutOfOrder last (ehash,eid)
 
         state' <- refill state eid
-        go state' { stateEntityCount = stateEntityCount state' + 1
+        go state' { stateEntityBlockCount = stateEntityBlockCount state' + 1
                   , stateLastEntityId = Just (ehash,eid) }
 
   refill state eid =
@@ -121,12 +121,14 @@ mergeBlocks options files = do
             eid <- centityId centity
             let refills  = Map.insertWith (<>) eid [fileId]
                          $ stateEntityRefills state
-            let state'   = state { stateEntityRefills = refills }
-            return state'
+            let state'   = state
+                         { stateEntityBlockCount = stateEntityBlockCount state + 1
+                         , stateEntityRefills = refills }
+            gc state'
 
 
   gc state
-   | stateEntityCount state + 1 `mod` optionGCEvery options == 0 = do
+   | (stateEntityBlockCount state + 1) `mod` optionGCEvery options == 0 = do
     pool' <- liftIO Mempool.create
     merger' <- foreign $ mergeManyClone pool' $ stateMergeMany state
     liftIO $ Mempool.free $ stateMempool state
