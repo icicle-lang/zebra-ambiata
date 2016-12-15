@@ -59,7 +59,7 @@ main = do
         run c
 
 data Command =
-    FileCat FilePath CatOptions
+    FileCat [FilePath] CatOptions
   | FileFacts FilePath
   | MergeFiles [FilePath] FilePath MergeOptions
   deriving (Eq, Show)
@@ -78,6 +78,7 @@ data MergeOptions =
   MergeOptions {
     mergeGcEvery :: Int
   , mergeOutputBlockFacts :: Int
+  , mergeNoOutput :: Bool
   } deriving (Eq, Show)
 
 parser :: Parser (SafeCommand Command)
@@ -91,7 +92,7 @@ cmd p name desc =
 commands :: [Mod CommandFields Command]
 commands =
   [ cmd
-      (FileCat <$> pZebraFile <*> pCatOptions)
+      (FileCat <$> pInputFiles <*> pCatOptions)
       "cat"
       "Dump all information in a Zebra file."
   , cmd
@@ -151,12 +152,15 @@ pMergeOptions =
     (Options.value 4096
     <> Options.long "output-block-facts"
     <> Options.help "Minimum number of facts per output block (last block of leftovers will contain fewer)")
+  <*> Options.switch
+    (Options.long "no-output"
+    <> Options.help "Don't output block file, just print entity id")
 
 
 
 run :: Command -> IO ()
 run c = case c of
-  FileCat f opts -> orDie id $ do
+  FileCat fs opts -> orDie id $ forM_ fs $ \f -> do
     (header,blocks) <- firstTshow $ Serial.fileOfFilePath f
     when (catHeader opts) $ lift $ do
       IO.putStrLn "Header information:"
@@ -173,9 +177,24 @@ run c = case c of
 
   MergeFiles ins@(in1:_) out opts -> orDie id $ do
     (puller, pullids) <- firstTshow $ MergePuller.blockChainPuller (Boxed.fromList ins)
-    withOutputPusher opts in1 out $ \pusher -> do
+    let withPusher | mergeNoOutput opts
+                   = withPrintPusher
+                   | otherwise
+                   = withOutputPusher opts in1 out
+ 
+    withPusher $ \pusher -> do
     let runOpts = Merge.MergeOptions (firstTshow . puller) pusher $ mergeGcEvery opts
     joinErrors (Text.pack . show) id $ Merge.mergeBlocks runOpts pullids
+
+withPrintPusher :: ((FoEntity.CEntity -> EitherT Text IO ()) -> EitherT Text IO ())
+  -> EitherT Text IO ()
+
+withPrintPusher runWith = do
+  let pusher e = do
+      eid     <- firstTshow $ FoEntity.peekEntityId $ FoEntity.unCEntity e
+      lift $ IO.putStrLn (show eid)
+
+  runWith pusher
 
 
 withOutputPusher :: MergeOptions -> FilePath -> FilePath
