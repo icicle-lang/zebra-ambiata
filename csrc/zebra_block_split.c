@@ -62,15 +62,18 @@ error_t zebra_column_pop_rows (
         case ZEBRA_ARRAY:
         {
             int64_t *n = in_data->a.n;
+            int64_t *s = in_data->a.s;
+            int64_t s_offset = in_data->a.s_offset;
 
             out_data->a.n = n;
+            out_data->a.s = s;
+            out_data->a.s_offset = s_offset;
             in_data->a.n = n + n_rows;
+            in_data->a.s = s + n_rows;
+            if (n_rows > 0)
+                in_data->a.s_offset = s[n_rows-1];
 
-            int64_t n_inner_rows = 0;
-
-            for (int64_t i = 0; i < n_rows; i++) {
-                n_inner_rows += n[i];
-            }
+            int64_t n_inner_rows = in_data->a.s_offset - s_offset;
 
             return zebra_table_pop_rows (pool, n_inner_rows, &in_data->a.table, &out_data->a.table);
         }

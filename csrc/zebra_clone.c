@@ -66,6 +66,8 @@ error_t zebra_neritic_clone_column (
 
         case ZEBRA_ARRAY:
             out_data->a.n = in_data->a.n;
+            out_data->a.s = in_data->a.s;
+            out_data->a.s_offset = in_data->a.s_offset;
             return zebra_neritic_clone_table (pool, &in_data->a.table, &out_data->a.table);
 
         default:
@@ -171,6 +173,8 @@ error_t zebra_deep_clone_table (anemone_mempool_t *pool, const zebra_table_t *ta
                 break;
             case ZEBRA_ARRAY:
                 into_data->a.n = ZEBRA_CLONE_ARRAY (pool, table_data->a.n, row_capacity );
+                into_data->a.s = ZEBRA_CLONE_ARRAY (pool, table_data->a.s, row_capacity );
+                into_data->a.s_offset = table_data->a.s_offset;
                 err = zebra_deep_clone_table (pool, &table_data->a.table, &into_data->a.table);
                 if (err) return err;
                 break;

@@ -20,6 +20,7 @@ error_t zebra_grow_column (anemone_mempool_t *pool, zebra_column_t *column, int6
 
         case ZEBRA_ARRAY:
             data->a.n = zebra_grow_array (pool, data->a.n, sizeof (data->a.n[0]), old_capacity, new_capacity);
+            data->a.s = zebra_grow_array (pool, data->a.s, sizeof (data->a.s[0]), old_capacity, new_capacity);
             return ZEBRA_SUCCESS;
 
         default:

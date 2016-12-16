@@ -45,6 +45,11 @@ typedef union zebra_data {
     double *d;
     struct {
         int64_t *n;
+        // forall i. s[i] = sum {n[j] | j <= i} + s_offset
+        int64_t *s;
+        // s_offset allows us to reuse slices of the same array for s
+        // if s is a slice of a larger array, s_offset = s[-1]
+        int64_t s_offset;
         zebra_table_t table;
     } a;
 } zebra_data_t;

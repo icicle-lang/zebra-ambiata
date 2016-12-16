@@ -18,6 +18,12 @@ void zebra_debug_print_table (int64_t indent, zebra_table_t *table) ;
 ANEMONE_STATIC
 void zebra_debug_print_column (int64_t indent, zebra_column_t *column, int64_t row_count)
 {
+    if (row_count < 0)
+    {
+        printf("Negative row_count of %lld! Error or too big to print\n", row_count);
+        row_count = 0;
+    }
+
     switch (column->type) {
         case ZEBRA_BYTE:
             INDENTF("BYTE:\n");
@@ -54,10 +60,24 @@ void zebra_debug_print_column (int64_t indent, zebra_column_t *column, int64_t r
             INDENTF("ARRAY:\n");
             INDENTF(" SEGD:\n");
             INDENTF("  ");
+            int64_t num_sum = 0;
             for (int64_t i = 0; i != row_count; ++i) {
                 printf("%lld ", column->data.a.n[i]);
+                num_sum += column->data.a.n[i];
             }
             printf("\n");
+            INDENTF(" SCAN:\n");
+            INDENTF("  ");
+            for (int64_t i = 0; i != row_count; ++i) {
+                printf("%lld ", column->data.a.s[i]);
+            }
+            printf("\n");
+            INDENTF(" SCAN OFFSET: %lld\n", column->data.a.s_offset);
+
+            if (row_count > 0 && num_sum != (column->data.a.s[row_count - 1] - column->data.a.s_offset)) {
+                printf("invalid segment descriptor scans\n");
+                exit(66);
+            }
             INDENTF(" NESTED:\n");
             zebra_debug_print_table(indent + 2, &column->data.a.table);
             return;
@@ -89,7 +109,7 @@ void zebra_debug_print_block (zebra_block_t *block)
 }
 
 ANEMONE_STATIC
-void zebra_debug_print_entity (zebra_entity_t *entity)
+void zebra_debug_print_entity (const zebra_entity_t *entity)
 {
     printf("Entity: %lld attributes\n", entity->attribute_count);
     for (int64_t i = 0; i != entity->attribute_count; ++i) {

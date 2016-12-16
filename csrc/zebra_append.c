@@ -2,6 +2,7 @@
 #include "zebra_clone.h"
 #include "zebra_grow.h"
 
+#include <stdio.h>
 
 //
 // Append: push a single value onto the end of an attribute.
@@ -34,6 +35,7 @@ error_t zebra_append_attribute (anemone_mempool_t *pool, const zebra_attribute_t
 error_t zebra_append_column (anemone_mempool_t *pool, const zebra_column_t *in, int64_t in_ix, zebra_column_t *out_into, int64_t out_ix, int64_t out_count)
 {
     if (in->type != out_into->type) return ZEBRA_MERGE_DIFFERENT_COLUMN_TYPES;
+    if (out_count == 0) return ZEBRA_SUCCESS;
 
     switch (in->type) {
         case ZEBRA_BYTE:
@@ -56,21 +58,24 @@ error_t zebra_append_column (anemone_mempool_t *pool, const zebra_column_t *in, 
 
         case ZEBRA_ARRAY:
             {
-                // find value start indices by summing array lengths
-                // this could be better if we stored this somewhere rather than recomputing each time
+                // find value start indices
                 int64_t value_in_ix = 0;
-                for (int64_t i = 0; i < in_ix; ++i) {
-                    value_in_ix += in->data.a.n[i];
+                if (in_ix > 0) {
+                    value_in_ix = in->data.a.s[in_ix-1] - in->data.a.s_offset;
                 }
-                // invariant: out_ix is parent table's row_count
-                // ==>
-                // sum out_into->data.a.n[0..out_ix] = out_into->data.a.table.row_count
                 int64_t nested_count = 0;
+                int64_t s = 0;
+                if (out_ix > 0) {
+                    s = out_into->data.a.s[out_ix-1];
+                } else {
+                    s = out_into->data.a.s_offset;
+                }
 
                 for (int64_t ix = 0; ix != out_count; ++ix) {
                     int64_t n = in->data.a.n[in_ix + ix];
                     out_into->data.a.n[out_ix + ix] = n;
                     nested_count += n;
+                    out_into->data.a.s[out_ix + ix] = s + nested_count;
                 }
 
                 return zebra_append_table (pool, &in->data.a.table, value_in_ix, &out_into->data.a.table, nested_count);
