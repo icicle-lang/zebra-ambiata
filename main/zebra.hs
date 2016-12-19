@@ -61,7 +61,7 @@ main = do
 data Command =
     FileCat [FilePath] CatOptions
   | FileFacts FilePath
-  | MergeFiles [FilePath] FilePath MergeOptions
+  | MergeFiles [FilePath] (Maybe FilePath) MergeOptions
   deriving (Eq, Show)
 
 data CatOptions =
@@ -78,7 +78,6 @@ data MergeOptions =
   MergeOptions {
     mergeGcEvery :: Int
   , mergeOutputBlockFacts :: Int
-  , mergeNoOutput :: Bool
   } deriving (Eq, Show)
 
 parser :: Parser (SafeCommand Command)
@@ -116,13 +115,17 @@ pInputFiles :: Parser [FilePath]
 pInputFiles =
   many $ Options.argument Options.str $ Options.help "Path to a Zebra file"
 
-pOutputFile :: Parser FilePath
+pOutputFile :: Parser (Maybe FilePath)
 pOutputFile =
-  Options.option Options.str $
-    Options.short 'o' <>
-    Options.long "output" <>
-    Options.metavar "OUTPUT_PATH" <>
-    Options.help "Path to a Zebra output file"
+  let out  = Options.option Options.str $
+             Options.short 'o' <>
+             Options.long "output" <>
+             Options.metavar "OUTPUT_PATH" <>
+             Options.help "Path to a Zebra output file"
+      none = Options.flag' Nothing $
+             Options.long "no-output" <>
+             Options.help "Don't output block file, just print entity id"
+  in (Just <$> out) <|> none
 
 pCatOptions :: Parser CatOptions
 pCatOptions =
@@ -152,9 +155,6 @@ pMergeOptions =
     (Options.value 4096
     <> Options.long "output-block-facts"
     <> Options.help "Minimum number of facts per output block (last block of leftovers will contain fewer)")
-  <*> Options.switch
-    (Options.long "no-output"
-    <> Options.help "Don't output block file, just print entity id")
 
 
 
@@ -175,12 +175,11 @@ run c = case c of
     IO.putStrLn "Merge: No files"
     Exit.exitFailure
 
-  MergeFiles ins@(in1:_) out opts -> orDie id $ do
+  MergeFiles ins@(in1:_) outputPath opts -> orDie id $ do
     (puller, pullids) <- firstTshow $ MergePuller.blockChainPuller (Boxed.fromList ins)
-    let withPusher | mergeNoOutput opts
-                   = withPrintPusher
-                   | otherwise
-                   = withOutputPusher opts in1 out
+    let withPusher = case outputPath of
+          Just out -> withOutputPusher opts in1 out
+          Nothing  -> withPrintPusher
  
     withPusher $ \pusher -> do
     let runOpts = Merge.MergeOptions (firstTshow . puller) pusher $ mergeGcEvery opts
