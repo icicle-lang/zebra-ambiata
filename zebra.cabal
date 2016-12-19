@@ -63,6 +63,7 @@ library
                     Zebra.Foreign.Block
                     Zebra.Foreign.Entity
                     Zebra.Foreign.Merge
+                    Zebra.Foreign.Serial
                     Zebra.Foreign.Table
                     Zebra.Foreign.Util
 
@@ -90,6 +91,7 @@ library
                        zebra_hash.h
                        zebra_merge.h
                        zebra_merge_many.h
+                       zebra_unpack.h
 
   includes:
                        zebra_append.h
@@ -100,6 +102,7 @@ library
                        zebra_hash.h
                        zebra_merge.h
                        zebra_merge_many.h
+                       zebra_unpack.h
 
 
   c-sources:
@@ -110,6 +113,7 @@ library
                        csrc/zebra_grow.c
                        csrc/zebra_merge.c
                        csrc/zebra_merge_many.c
+                       csrc/zebra_unpack.c
 
   cc-options:
                        -std=c99 -O3 -msse4.2 -Wall -Werror -DCABAL=1

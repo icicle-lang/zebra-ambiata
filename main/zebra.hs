@@ -59,9 +59,9 @@ main = do
         run c
 
 data Command =
-    FileCat FilePath CatOptions
+    FileCat [FilePath] CatOptions
   | FileFacts FilePath
-  | MergeFiles [FilePath] FilePath MergeOptions
+  | MergeFiles [FilePath] (Maybe FilePath) MergeOptions
   deriving (Eq, Show)
 
 data CatOptions =
@@ -91,7 +91,7 @@ cmd p name desc =
 commands :: [Mod CommandFields Command]
 commands =
   [ cmd
-      (FileCat <$> pZebraFile <*> pCatOptions)
+      (FileCat <$> pInputFiles <*> pCatOptions)
       "cat"
       "Dump all information in a Zebra file."
   , cmd
@@ -115,13 +115,17 @@ pInputFiles :: Parser [FilePath]
 pInputFiles =
   many $ Options.argument Options.str $ Options.help "Path to a Zebra file"
 
-pOutputFile :: Parser FilePath
+pOutputFile :: Parser (Maybe FilePath)
 pOutputFile =
-  Options.option Options.str $
-    Options.short 'o' <>
-    Options.long "output" <>
-    Options.metavar "OUTPUT_PATH" <>
-    Options.help "Path to a Zebra output file"
+  let out  = Options.option Options.str $
+             Options.short 'o' <>
+             Options.long "output" <>
+             Options.metavar "OUTPUT_PATH" <>
+             Options.help "Path to a Zebra output file"
+      none = Options.flag' Nothing $
+             Options.long "no-output" <>
+             Options.help "Don't output block file, just print entity id"
+  in (Just <$> out) <|> none
 
 pCatOptions :: Parser CatOptions
 pCatOptions =
@@ -156,7 +160,7 @@ pMergeOptions =
 
 run :: Command -> IO ()
 run c = case c of
-  FileCat f opts -> orDie id $ do
+  FileCat fs opts -> orDie id $ forM_ fs $ \f -> do
     (header,blocks) <- firstTshow $ Serial.fileOfFilePath f
     when (catHeader opts) $ lift $ do
       IO.putStrLn "Header information:"
@@ -171,11 +175,25 @@ run c = case c of
     IO.putStrLn "Merge: No files"
     Exit.exitFailure
 
-  MergeFiles ins@(in1:_) out opts -> orDie id $ do
+  MergeFiles ins@(in1:_) outputPath opts -> orDie id $ do
     (puller, pullids) <- firstTshow $ MergePuller.blockChainPuller (Boxed.fromList ins)
-    withOutputPusher opts in1 out $ \pusher -> do
+    let withPusher = case outputPath of
+          Just out -> withOutputPusher opts in1 out
+          Nothing  -> withPrintPusher
+ 
+    withPusher $ \pusher -> do
     let runOpts = Merge.MergeOptions (firstTshow . puller) pusher $ mergeGcEvery opts
     joinErrors (Text.pack . show) id $ Merge.mergeBlocks runOpts pullids
+
+withPrintPusher :: ((FoEntity.CEntity -> EitherT Text IO ()) -> EitherT Text IO ())
+  -> EitherT Text IO ()
+
+withPrintPusher runWith = do
+  let pusher e = do
+      eid     <- firstTshow $ FoEntity.peekEntityId $ FoEntity.unCEntity e
+      lift $ IO.putStrLn (show eid)
+
+  runWith pusher
 
 
 withOutputPusher :: MergeOptions -> FilePath -> FilePath

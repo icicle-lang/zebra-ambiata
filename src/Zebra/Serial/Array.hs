@@ -15,6 +15,7 @@ module Zebra.Serial.Array (
   , unZigZag64
   ) where
 
+import qualified Zebra.Foreign.Serial as FoSerial
 import           Anemone.Foreign.Pack (Packed64(..))
 import qualified Anemone.Foreign.Pack as Anemone
 
@@ -185,29 +186,14 @@ bIntArray xs =
     remains
 
 getIntArray :: Int -> Get (Storable.Vector Int64)
-getIntArray n = do
-  size <- fromIntegral <$> Get.getWord32le
+getIntArray elems = do
+  bufsize <- fromIntegral <$> Get.getWord32le
   offset <- fromIntegral <$> Get.getWord64le
-  Get.isolate size $ do
-    let
-      (n_parts, n_remains) =
-        n `quotRem` intPartSize
-
-      unpack nbits bs =
-        case Anemone.unpack64 $ Packed64 1 nbits bs of
-          Nothing ->
-            fail $ "Could not unpack 64 x " <> show nbits <> "-bit words"
-          Just xs ->
-            pure xs
-
-    nbits <- replicateM n_parts $ fmap fromIntegral Get.getWord8
-    parts <- traverse (Get.getByteString . (* intSize)) nbits
-    remains <- Storable.replicateM n_remains Get.getWord64le
-    words <- zipWithM unpack nbits parts
-
-    pure .
-      Storable.map ((+ offset) . unZigZag64) .
-      Storable.concat $ words <> [remains]
+  Get.isolate bufsize $ do
+    bytes <- Get.getByteString bufsize
+    case FoSerial.unpackArray bytes bufsize elems offset of
+     Left err -> fail $ "Could not unpack 64-encoded words: " <> show err
+     Right xs -> pure xs
 
 intPartSize :: Int
 intPartSize =

@@ -61,7 +61,7 @@ foreignEntitiesOfBlock :: MonadIO m => Mempool -> CBlock -> EitherT ForeignError
 foreignEntitiesOfBlock pool (CBlock c_block) =
   allocStack $ \p_entity_count ->
   allocStack $ \pp_entities -> do
-    liftCError $ c'zebra_entities_of_block pool c_block p_entity_count pp_entities
+    liftCError $ unsafe'c'zebra_entities_of_block pool c_block p_entity_count pp_entities
 
     entity_count <- liftIO $ peek p_entity_count
     p_entities <- liftIO $ peek pp_entities
@@ -77,7 +77,7 @@ appendEntityToBlock :: MonadIO m => Mempool -> CEntity -> Maybe CBlock -> Either
 appendEntityToBlock pool (CEntity c_entity) c_block =
   allocStack $ \pp_block -> do
     pokeIO pp_block $ maybe nullPtr unCBlock c_block
-    liftCError $ c'zebra_append_block_entity pool c_entity pp_block
+    liftCError $ unsafe'c'zebra_append_block_entity pool c_entity pp_block
     CBlock <$> peekIO pp_block
 
 peekBlock :: MonadIO m => Ptr C'zebra_block -> EitherT ForeignError m Block
