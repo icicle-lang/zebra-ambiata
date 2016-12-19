@@ -4,7 +4,6 @@
 #include "zebra_grow.h"
 #include "zebra_merge.h"
 
-#include "zebra_debug.h"
 
 error_t zebra_merge_attribute (anemone_mempool_t *pool, const zebra_attribute_t *in1, const zebra_attribute_t *in2, zebra_attribute_t *out_into)
 {
@@ -80,21 +79,10 @@ error_t zebra_merge_entity (anemone_mempool_t *pool, const zebra_entity_t *in1, 
 
     out_into->attributes = anemone_mempool_alloc (pool, sizeof (zebra_attribute_t) * out_into->attribute_count );
 
-    // printf("\n\n\n");
-    // printf("Entity 1:\n");
-    // zebra_debug_print_entity (in1);
-    // printf("Entity 2:\n");
-    // zebra_debug_print_entity (in2);
-    // printf("\n\n\n");
-    // printf("Merging 2:\n");
-
     for (int64_t c = 0; c < out_into->attribute_count; ++c) {
         err = zebra_merge_attribute (pool, in1->attributes + c, in2->attributes + c, out_into->attributes + c);
         if (err) return err;
     }
-
-    // printf("Output:\n");
-    // zebra_debug_print_entity (in2);
 
     return ZEBRA_SUCCESS;
 }

@@ -1,6 +1,5 @@
 #include "zebra_clone.h"
 
-#include "zebra_debug.h"
 
 //
 // Agile clone: copy the structure, but throw away the content.
