@@ -1,5 +1,7 @@
 #include "zebra_clone.h"
 
+#include "zebra_debug.h"
+
 //
 // Agile clone: copy the structure, but throw away the content.
 // This is used for allocating an empty entity with the same schema as an existing entity.
@@ -66,8 +68,6 @@ error_t zebra_neritic_clone_column (
 
         case ZEBRA_ARRAY:
             out_data->a.n = in_data->a.n;
-            out_data->a.s = in_data->a.s;
-            out_data->a.s_offset = in_data->a.s_offset;
             return zebra_neritic_clone_table (pool, &in_data->a.table, &out_data->a.table);
 
         default:
@@ -138,7 +138,7 @@ void *zebra_clone_array (anemone_mempool_t *pool, const void *in, int64_t num_el
 {
     int64_t bytes = num_elements * element_size;
     void *out = anemone_mempool_alloc (pool, bytes);
-    memcpy (out, in, bytes);
+    if (in) memcpy (out, in, bytes);
     return out;
 }
 
@@ -172,9 +172,7 @@ error_t zebra_deep_clone_table (anemone_mempool_t *pool, const zebra_table_t *ta
                 into_data->d = ZEBRA_CLONE_ARRAY (pool, table_data->d, row_capacity );
                 break;
             case ZEBRA_ARRAY:
-                into_data->a.n = ZEBRA_CLONE_ARRAY (pool, table_data->a.n, row_capacity );
-                into_data->a.s = ZEBRA_CLONE_ARRAY (pool, table_data->a.s, row_capacity );
-                into_data->a.s_offset = table_data->a.s_offset;
+                into_data->a.n = ZEBRA_CLONE_ARRAY (pool, table_data->a.n, row_capacity + 1);
                 err = zebra_deep_clone_table (pool, &table_data->a.table, &into_data->a.table);
                 if (err) return err;
                 break;

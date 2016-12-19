@@ -58,28 +58,30 @@ void zebra_debug_print_column (int64_t indent, zebra_column_t *column, int64_t r
 
         case ZEBRA_ARRAY:
             INDENTF("ARRAY:\n");
-            INDENTF(" SEGD:\n");
+            INDENTF(" LENS:\n");
             INDENTF("  ");
-            int64_t num_sum = 0;
             for (int64_t i = 0; i != row_count; ++i) {
-                printf("%lld ", column->data.a.n[i]);
-                num_sum += column->data.a.n[i];
+                printf("%lld ", column->data.a.n[i+1] - column->data.a.n[i]);
             }
             printf("\n");
             INDENTF(" SCAN:\n");
             INDENTF("  ");
-            for (int64_t i = 0; i != row_count; ++i) {
-                printf("%lld ", column->data.a.s[i]);
+            for (int64_t i = 0; i != row_count+1; ++i) {
+                if (column->data.a.n) printf("%lld ", column->data.a.n[i]);
             }
-            printf("\n");
-            INDENTF(" SCAN OFFSET: %lld\n", column->data.a.s_offset);
 
-            if (row_count > 0 && num_sum != (column->data.a.s[row_count - 1] - column->data.a.s_offset)) {
-                printf("invalid segment descriptor scans\n");
-                exit(66);
-            }
+            printf("\n");
             INDENTF(" NESTED:\n");
             zebra_debug_print_table(indent + 2, &column->data.a.table);
+
+            if (column->data.a.n) {
+                int64_t compute_count = column->data.a.n[row_count] - column->data.a.n[0];
+                if (compute_count != column->data.a.table.row_count) {
+                    printf("!!!\n\nComputed row count was %lld but child table has row count %lld!\n", compute_count, column->data.a.table.row_count);
+                    exit(1);
+                }
+            }
+
             return;
 
         default:

@@ -58,19 +58,23 @@ error_t zebra_append_column (anemone_mempool_t *pool, const zebra_column_t *in, 
 
         case ZEBRA_ARRAY:
             {
-                // find value start indices
-                int64_t value_in_ix = in->data.a.n[in_ix] - in->data.a.n[0];
-                int64_t nested_count = 0;
-                int64_t s = out_into->data.a.n[out_ix];
+                int64_t in_offs = in->data.a.n[0];
+                int64_t in_scan_start = in->data.a.n[in_ix];
+                int64_t in_scan_count = in->data.a.n[in_ix + out_count];
 
+                // how many nested values to skip in the input
+                int64_t in_skip = in_scan_start - in_offs;
+                // and how many to copy
+                int64_t in_copy = in_scan_count - in_scan_start;
+
+                // copy over the segment descriptor lengths
+                int64_t out_scan_start = out_into->data.a.n[out_ix];
                 for (int64_t ix = 0; ix != out_count; ++ix) {
-                    int64_t n = in->data.a.n[in_ix + ix];
-                    out_into->data.a.n[out_ix + ix] = n;
-                    nested_count += n;
-                    out_into->data.a.s[out_ix + ix] = s + nested_count;
+                    int64_t in_scan = in->data.a.n[in_ix + ix + 1] - in_scan_start;
+                    out_into->data.a.n[out_ix + ix + 1] = out_scan_start + in_scan;
                 }
 
-                return zebra_append_table (pool, &in->data.a.table, value_in_ix, &out_into->data.a.table, nested_count);
+                return zebra_append_table (pool, &in->data.a.table, in_skip, &out_into->data.a.table, in_copy);
             }
 
         default:
