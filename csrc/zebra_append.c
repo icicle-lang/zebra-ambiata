@@ -59,17 +59,9 @@ error_t zebra_append_column (anemone_mempool_t *pool, const zebra_column_t *in, 
         case ZEBRA_ARRAY:
             {
                 // find value start indices
-                int64_t value_in_ix = 0;
-                if (in_ix > 0) {
-                    value_in_ix = in->data.a.s[in_ix-1] - in->data.a.s_offset;
-                }
+                int64_t value_in_ix = in->data.a.n[in_ix] - in->data.a.n[0];
                 int64_t nested_count = 0;
-                int64_t s = 0;
-                if (out_ix > 0) {
-                    s = out_into->data.a.s[out_ix-1];
-                } else {
-                    s = out_into->data.a.s_offset;
-                }
+                int64_t s = out_into->data.a.n[out_ix];
 
                 for (int64_t ix = 0; ix != out_count; ++ix) {
                     int64_t n = in->data.a.n[in_ix + ix];

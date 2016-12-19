@@ -44,12 +44,11 @@ typedef union zebra_data {
     int64_t *i;
     double *d;
     struct {
+        // lengths are stored as a zero-initialised prefix sum
+        // so that size of nested value i is actually (n[i+1] - n[i])
+        // therefore length of n needs to be one more than parent row_count
+        // start is n[i], end is n[i+1]
         int64_t *n;
-        // forall i. s[i] = sum {n[j] | j <= i} + s_offset
-        int64_t *s;
-        // s_offset allows us to reuse slices of the same array for s
-        // if s is a slice of a larger array, s_offset = s[-1]
-        int64_t s_offset;
         zebra_table_t table;
     } a;
 } zebra_data_t;

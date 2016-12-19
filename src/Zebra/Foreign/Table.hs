@@ -16,8 +16,8 @@ import           Anemone.Foreign.Mempool (Mempool, alloc, calloc)
 
 import           Control.Monad.IO.Class (MonadIO(..))
 
-import qualified Data.Vector as Boxed
-import qualified Data.Vector.Storable as Storable
+import qualified X.Data.Vector as Boxed
+import qualified X.Data.Vector.Storable as Storable
 
 import           Foreign.Ptr (Ptr)
 
@@ -93,7 +93,7 @@ peekColumn n_rows c_column = do
 
     C'ZEBRA_ARRAY ->
       ArrayColumn
-        <$> peekVector n_rows (p'zebra_data'a'n $ p'zebra_column'data c_column)
+        <$> peekOffsetsVector n_rows (p'zebra_data'a'n $ p'zebra_column'data c_column)
         <*> peekTable (p'zebra_data'a'table $ p'zebra_column'data c_column)
 
     _ ->
@@ -115,7 +115,15 @@ pokeColumn pool c_column = \case
 
   ArrayColumn ns table -> do
     pokeIO (p'zebra_column'type c_column) C'ZEBRA_ARRAY
-    pokeVector pool (p'zebra_data'a'n $ p'zebra_column'data c_column) ns
-    pokeVector pool (p'zebra_data'a's $ p'zebra_column'data c_column) (Storable.postscanl (+) 0 ns)
-    pokeIO (p'zebra_data'a's_offset $ p'zebra_column'data c_column) 0
+    pokeOffsetsVector pool (p'zebra_data'a'n $ p'zebra_column'data c_column) ns
     pokeTable pool (p'zebra_data'a'table $ p'zebra_column'data c_column) table
+
+
+peekOffsetsVector :: forall m. (MonadIO m) => Int -> Ptr (Ptr Int64) -> m (Storable.Vector Int64)
+peekOffsetsVector n_rows p
+ = do ns <- peekVector (n_rows + 1) p
+      return $ Storable.zipWith (-) (Storable.tail ns) ns
+
+pokeOffsetsVector :: forall m. (MonadIO m) => Mempool -> Ptr (Ptr Int64) -> Storable.Vector Int64 -> m ()
+pokeOffsetsVector pool p ns
+ = pokeVector pool p (Storable.scanl (+) 0 ns)

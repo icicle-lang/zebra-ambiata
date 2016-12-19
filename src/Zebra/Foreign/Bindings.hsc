@@ -50,8 +50,6 @@ import Anemone.Foreign.Mempool (Mempool(..))
 #field i , Ptr Int64
 #field d , Ptr Double
 #field a.n , Ptr Int64
-#field a.s , Ptr Int64
-#field a.s_offset , Int64
 #field a.table , <zebra_table>
 #stoptype
 
