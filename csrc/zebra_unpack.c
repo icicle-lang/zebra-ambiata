@@ -59,34 +59,3 @@ error_t zebra_unpack_array (
     return 0;
 }
 
-
-/* read |blocks| number of blocks of 64 values from |in| at |bits| bits per value, and write 64-bit values to |out|. */
-// error_t anemone_unpack64_64 (uint64_t blocks, const uint64_t bits, const uint8_t *in, uint64_t *out) {
-
-/*
-
-    let
-      (n_parts, n_remains) =
-        elems `quotRem` intPartSize
-
-      unpack nbits bs =
-        case Anemone.unpack64 $ Packed64 1 nbits bs of
-          Nothing ->
-            fail $ "Could not unpack 64 x " <> show nbits <> "-bit words"
-          Just xs ->
-            pure xs
-
-    nbits <- replicateM n_parts $ fmap fromIntegral Get.getWord8
-    parts <- traverse (Get.getByteString . (* intSize)) nbits
-    remains <- Storable.replicateM n_remains Get.getWord64le
-    words <- zipWithM unpack nbits parts
-
-    pure .
-      Storable.map ((+ offset) . unZigZag64) .
-      Storable.concat $ words <> [remains]
-
-unZigZag64 :: Word64 -> Int64
-unZigZag64 !n =
-  fromIntegral $! (n `shiftR` 1) `xor` negate (n .&. 0x1)
-*/
-
