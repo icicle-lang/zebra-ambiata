@@ -2,7 +2,6 @@
 #include "zebra_clone.h"
 #include "zebra_grow.h"
 
-#include <stdio.h>
 
 //
 // Append: push a single value onto the end of an attribute.
@@ -15,10 +14,14 @@ error_t zebra_append_attribute (anemone_mempool_t *pool, const zebra_attribute_t
     int64_t out_ix = out_into->table.row_count;
 
     out_into->table.row_count++;
-    // XXX: this will call grow_table twice (here and in append_table), but that should be ok
+    // XXX: this will call grow_table twice (here and in append_table)
+    // but that should be ok because the second grow_table will not do anything
+    //
+    // The important thing is that we grow the attribute before growing the table
     err = zebra_grow_attribute (pool, out_into);
     if (err) return err;
-    // XXX: cheating. so append_table works
+    // XXX: because append_table adds the count itself, we need to undo the count we just added.
+    // sorry.
     out_into->table.row_count--;
 
     err = zebra_append_table (pool, &in->table, ix, &out_into->table, 1);
