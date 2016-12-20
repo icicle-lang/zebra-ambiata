@@ -121,6 +121,9 @@ pokeColumn pool c_column = \case
 
 peekOffsetsVector :: forall m. (MonadIO m) => Int -> Ptr (Ptr Int64) -> m (Storable.Vector Int64)
 peekOffsetsVector n_rows p
+ | n_rows == 0
+ = return Storable.empty
+ | otherwise
  = do ns <- peekVector (n_rows + 1) p
       return $ Storable.zipWith (-) (Storable.tail ns) ns
 
