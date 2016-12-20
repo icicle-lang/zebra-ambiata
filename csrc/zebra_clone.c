@@ -22,10 +22,12 @@ error_t zebra_agile_clone_table (anemone_mempool_t *pool, const zebra_table_t *t
     into->row_capacity = 0;
     int64_t count = table->column_count;
     into->column_count = count;
-    into->columns = anemone_mempool_calloc (pool, count, sizeof (zebra_column_t));
+    into->columns = anemone_mempool_alloc (pool, count * sizeof (zebra_column_t));
     for (int64_t c = 0; c < count; ++c) {
         zebra_type_t type = table->columns[c].type;
         into->columns[c].type = type;
+        // zero out first pointer
+        into->columns[c].data.b = NULL;
         if (type == ZEBRA_ARRAY) {
             zebra_agile_clone_table (pool, &table->columns[c].data.a.table, &into->columns[c].data.a.table);
         }
@@ -152,7 +154,7 @@ error_t zebra_deep_clone_table (anemone_mempool_t *pool, const zebra_table_t *ta
 
     int64_t count = table->column_count;
     into->column_count = count;
-    into->columns = anemone_mempool_calloc (pool, count, sizeof (zebra_column_t));
+    into->columns = anemone_mempool_alloc (pool, count * sizeof (zebra_column_t));
     for (int64_t c = 0; c < count; ++c) {
         zebra_data_t *table_data = &table->columns[c].data;
         zebra_data_t *into_data = &into->columns[c].data;

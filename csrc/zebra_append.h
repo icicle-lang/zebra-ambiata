@@ -10,15 +10,6 @@ error_t zebra_append_attribute (
   , zebra_attribute_t *out_into
   );
 
-error_t zebra_append_column (
-    anemone_mempool_t *pool
-  , const zebra_column_t *in
-  , int64_t in_ix
-  , zebra_column_t *out_into
-  , int64_t out_ix
-  , int64_t out_count
-  );
-
 error_t zebra_append_table (
     anemone_mempool_t *pool
   , const zebra_table_t *in

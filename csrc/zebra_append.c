@@ -34,7 +34,32 @@ error_t zebra_append_attribute (anemone_mempool_t *pool, const zebra_attribute_t
     return 0;
 }
 
+error_t zebra_append_column_array (anemone_mempool_t *pool, const zebra_column_t *in, int64_t in_ix, zebra_column_t *out_into, int64_t out_ix, int64_t out_count)
+{
+    int64_t* in_n = in->data.a.n + in_ix;
+    int64_t* out_n = in->data.a.n + out_ix;
+    int64_t in_scan_start = in_n[0];
 
+
+    // copy over the segment descriptor lengths
+    int64_t out_scan_start = out_n[0];
+
+    for (int64_t ix = 0; ix != out_count; ++ix) {
+        int64_t in_scan = in_n[ix + 1] - in_scan_start;
+        out_n[ix + 1] = out_scan_start + in_scan;
+    }
+
+    int64_t in_offs = in->data.a.n[0];
+    // how many nested values to skip in the input
+    int64_t in_skip = in_scan_start - in_offs;
+    // and how many to copy
+    int64_t in_scan_count = in_n[out_count];
+    int64_t in_copy = in_scan_count - in_scan_start;
+    return zebra_append_table (pool, &in->data.a.table, in_skip, &out_into->data.a.table, in_copy);
+}
+
+ANEMONE_STATIC
+ANEMONE_INLINE
 error_t zebra_append_column (anemone_mempool_t *pool, const zebra_column_t *in, int64_t in_ix, zebra_column_t *out_into, int64_t out_ix, int64_t out_count)
 {
     if (in->type != out_into->type) return ZEBRA_MERGE_DIFFERENT_COLUMN_TYPES;
@@ -42,44 +67,19 @@ error_t zebra_append_column (anemone_mempool_t *pool, const zebra_column_t *in, 
 
     switch (in->type) {
         case ZEBRA_BYTE:
-            for (int64_t ix = 0; ix != out_count; ++ix) {
-                out_into->data.b[out_ix + ix] = in->data.b[in_ix + ix];
-            }
+            memcpy(out_into->data.b + out_ix, in->data.b + in_ix, out_count * sizeof(uint8_t));
             return ZEBRA_SUCCESS;
 
         case ZEBRA_INT:
-            for (int64_t ix = 0; ix != out_count; ++ix) {
-                out_into->data.i[out_ix + ix] = in->data.i[in_ix + ix];
-            }
+            memcpy(out_into->data.i + out_ix, in->data.i + in_ix, out_count * sizeof(uint64_t));
             return ZEBRA_SUCCESS;
 
         case ZEBRA_DOUBLE:
-            for (int64_t ix = 0; ix != out_count; ++ix) {
-                out_into->data.d[out_ix + ix] = in->data.d[in_ix + ix];
-            }
+            memcpy(out_into->data.d + out_ix, in->data.d + in_ix, out_count * sizeof(double));
             return ZEBRA_SUCCESS;
 
         case ZEBRA_ARRAY:
-            {
-                int64_t in_offs = in->data.a.n[0];
-                int64_t in_scan_start = in->data.a.n[in_ix];
-                int64_t in_scan_count = in->data.a.n[in_ix + out_count];
-
-                // how many nested values to skip in the input
-                int64_t in_skip = in_scan_start - in_offs;
-                // and how many to copy
-                int64_t in_copy = in_scan_count - in_scan_start;
-
-                // copy over the segment descriptor lengths
-                int64_t out_scan_start = out_into->data.a.n[out_ix];
-                for (int64_t ix = 0; ix != out_count; ++ix) {
-                    int64_t in_scan = in->data.a.n[in_ix + ix + 1] - in_scan_start;
-                    out_into->data.a.n[out_ix + ix + 1] = out_scan_start + in_scan;
-                }
-
-                return zebra_append_table (pool, &in->data.a.table, in_skip, &out_into->data.a.table, in_copy);
-            }
-
+            return zebra_append_column_array (pool, in, in_ix, out_into, out_ix, out_count);
         default:
             return ZEBRA_INVALID_COLUMN_TYPE;
     }
