@@ -34,10 +34,12 @@ error_t zebra_append_attribute (anemone_mempool_t *pool, const zebra_attribute_t
     return 0;
 }
 
+ANEMONE_STATIC
+ANEMONE_INLINE
 error_t zebra_append_column_array (anemone_mempool_t *pool, const zebra_column_t *in, int64_t in_ix, zebra_column_t *out_into, int64_t out_ix, int64_t out_count)
 {
     int64_t* in_n = in->data.a.n + in_ix;
-    int64_t* out_n = in->data.a.n + out_ix;
+    int64_t* out_n = out_into->data.a.n + out_ix;
     int64_t in_scan_start = in_n[0];
 
 
