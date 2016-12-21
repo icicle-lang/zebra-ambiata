@@ -4,6 +4,12 @@
 #include "zebra_data.h"
 #include <stdio.h>
 
+#if __clang__
+    #pragma clang diagnostic ignored "-Wno-unused-function"
+#elif __GNUC__
+    #pragma GCC diagnostic ignored "-Wno-unused-function"
+#endif
+
 ANEMONE_STATIC
 void zebra_debug_print_indent (int64_t indent)
 {
@@ -18,6 +24,12 @@ void zebra_debug_print_table (int64_t indent, zebra_table_t *table) ;
 ANEMONE_STATIC
 void zebra_debug_print_column (int64_t indent, zebra_column_t *column, int64_t row_count)
 {
+    if (row_count < 0)
+    {
+        printf("Negative row_count of %lld! Error or too big to print\n", row_count);
+        row_count = 0;
+    }
+
     switch (column->type) {
         case ZEBRA_BYTE:
             INDENTF("BYTE:\n");
@@ -52,14 +64,30 @@ void zebra_debug_print_column (int64_t indent, zebra_column_t *column, int64_t r
 
         case ZEBRA_ARRAY:
             INDENTF("ARRAY:\n");
-            INDENTF(" SEGD:\n");
+            INDENTF(" LENS:\n");
             INDENTF("  ");
             for (int64_t i = 0; i != row_count; ++i) {
-                printf("%lld ", column->data.a.n[i]);
+                printf("%lld ", column->data.a.n[i+1] - column->data.a.n[i]);
             }
+            printf("\n");
+            INDENTF(" SCAN:\n");
+            INDENTF("  ");
+            for (int64_t i = 0; i != row_count+1; ++i) {
+                if (column->data.a.n) printf("%lld ", column->data.a.n[i]);
+            }
+
             printf("\n");
             INDENTF(" NESTED:\n");
             zebra_debug_print_table(indent + 2, &column->data.a.table);
+
+            if (column->data.a.n) {
+                int64_t compute_count = column->data.a.n[row_count] - column->data.a.n[0];
+                if (compute_count != column->data.a.table.row_count) {
+                    printf("!!!\n\nComputed row count was %lld but child table has row count %lld!\n", compute_count, column->data.a.table.row_count);
+                    exit(1);
+                }
+            }
+
             return;
 
         default:
@@ -89,7 +117,7 @@ void zebra_debug_print_block (zebra_block_t *block)
 }
 
 ANEMONE_STATIC
-void zebra_debug_print_entity (zebra_entity_t *entity)
+void zebra_debug_print_entity (const zebra_entity_t *entity)
 {
     printf("Entity: %lld attributes\n", entity->attribute_count);
     for (int64_t i = 0; i != entity->attribute_count; ++i) {

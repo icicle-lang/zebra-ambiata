@@ -78,6 +78,7 @@ error_t zebra_merge_entity (anemone_mempool_t *pool, const zebra_entity_t *in1, 
     out_into->attribute_count = in1->attribute_count;
 
     out_into->attributes = anemone_mempool_alloc (pool, sizeof (zebra_attribute_t) * out_into->attribute_count );
+
     for (int64_t c = 0; c < out_into->attribute_count; ++c) {
         err = zebra_merge_attribute (pool, in1->attributes + c, in2->attributes + c, out_into->attributes + c);
         if (err) return err;

@@ -1,5 +1,6 @@
 #include "zebra_clone.h"
 
+
 //
 // Agile clone: copy the structure, but throw away the content.
 // This is used for allocating an empty entity with the same schema as an existing entity.
@@ -21,10 +22,12 @@ error_t zebra_agile_clone_table (anemone_mempool_t *pool, const zebra_table_t *t
     into->row_capacity = 0;
     int64_t count = table->column_count;
     into->column_count = count;
-    into->columns = anemone_mempool_calloc (pool, count, sizeof (zebra_column_t));
+    into->columns = anemone_mempool_alloc (pool, count * sizeof (zebra_column_t));
     for (int64_t c = 0; c < count; ++c) {
         zebra_type_t type = table->columns[c].type;
         into->columns[c].type = type;
+        // zero out first pointer
+        into->columns[c].data.b = NULL;
         if (type == ZEBRA_ARRAY) {
             zebra_agile_clone_table (pool, &table->columns[c].data.a.table, &into->columns[c].data.a.table);
         }
@@ -136,7 +139,7 @@ void *zebra_clone_array (anemone_mempool_t *pool, const void *in, int64_t num_el
 {
     int64_t bytes = num_elements * element_size;
     void *out = anemone_mempool_alloc (pool, bytes);
-    memcpy (out, in, bytes);
+    if (in) memcpy (out, in, bytes);
     return out;
 }
 
@@ -151,7 +154,7 @@ error_t zebra_deep_clone_table (anemone_mempool_t *pool, const zebra_table_t *ta
 
     int64_t count = table->column_count;
     into->column_count = count;
-    into->columns = anemone_mempool_calloc (pool, count, sizeof (zebra_column_t));
+    into->columns = anemone_mempool_alloc (pool, count * sizeof (zebra_column_t));
     for (int64_t c = 0; c < count; ++c) {
         zebra_data_t *table_data = &table->columns[c].data;
         zebra_data_t *into_data = &into->columns[c].data;
@@ -170,7 +173,7 @@ error_t zebra_deep_clone_table (anemone_mempool_t *pool, const zebra_table_t *ta
                 into_data->d = ZEBRA_CLONE_ARRAY (pool, table_data->d, row_capacity );
                 break;
             case ZEBRA_ARRAY:
-                into_data->a.n = ZEBRA_CLONE_ARRAY (pool, table_data->a.n, row_capacity );
+                into_data->a.n = ZEBRA_CLONE_ARRAY (pool, table_data->a.n, row_capacity + 1);
                 err = zebra_deep_clone_table (pool, &table_data->a.table, &into_data->a.table);
                 if (err) return err;
                 break;

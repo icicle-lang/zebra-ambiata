@@ -44,6 +44,31 @@ typedef union zebra_data {
     int64_t *i;
     double *d;
     struct {
+        // Lengths are stored as an prefix sum of length + 1.
+        // Usually, a prefix sum would always start with 0, but we
+        // generalise this to allow any offset at the start.
+        // This requires a little more computation to remove the offset,
+        // but allows us to reuse prefix sums from the middle of other arrays
+        // without copying them.
+        // 
+        // Example nested array:
+        //
+        //            [ [ 1 2 3 ]  [ 4 5 ]  [ 6 7 8 ] ]
+        //  Lengths   [ 3          2        3         ]
+        //  Starts    [ 0          3        5         ]
+        //  Ends      [ 3          5        8         ]
+        //
+        // So we would represent this as follows, with "o" for the original offset.
+        //  Scans     [ o        o+3      o+5     o+8 ]
+        //
+        // The equivalences are something like
+        //
+        //  Lengths[i] = Scans[i+1] - Scans[i]
+        //  Starts[i]  = Scans[i]   - Scans[0]
+        //  Ends[i]    = Scans[i+1] - Scans[0]
+        // 
+        // The inner table's row count is the total number of elements:
+        //  table.row_count = Scans[length] - Scans[0]
         int64_t *n;
         zebra_table_t table;
     } a;

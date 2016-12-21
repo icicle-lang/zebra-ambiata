@@ -62,15 +62,9 @@ error_t zebra_column_pop_rows (
         case ZEBRA_ARRAY:
         {
             int64_t *n = in_data->a.n;
-
             out_data->a.n = n;
             in_data->a.n = n + n_rows;
-
-            int64_t n_inner_rows = 0;
-
-            for (int64_t i = 0; i < n_rows; i++) {
-                n_inner_rows += n[i];
-            }
+            int64_t n_inner_rows = n[n_rows] - n[0];
 
             return zebra_table_pop_rows (pool, n_inner_rows, &in_data->a.table, &out_data->a.table);
         }
