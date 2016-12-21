@@ -4,6 +4,12 @@
 #include "zebra_data.h"
 #include <stdio.h>
 
+#if __clang__
+    #pragma clang diagnostic ignored "-Wno-unused-function"
+#elif __GNUC__
+    #pragma GCC diagnostic ignored "-Wno-unused-function"
+#endif
+
 ANEMONE_STATIC
 void zebra_debug_print_indent (int64_t indent)
 {
