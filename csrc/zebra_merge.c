@@ -15,6 +15,20 @@ error_t zebra_merge_attribute (anemone_mempool_t *pool, const zebra_attribute_t 
     int64_t in1_ix = 0;
     int64_t in2_ix = 0;
 
+    // zebra_append_attribute can be expensive, since it has to traverse down to find the values.
+    // we can get some gains by saving up calls to it, so that if we have inputs something like
+    // > [ 1, 2, 3 ]
+    // and
+    // > [ 4, 5 ]
+    // we don't have to call zebra_append_attribute separately for each of 1, 2 and 3.
+    // instead we call it to copy all three elements at once.
+    // pending_out1 and pending_out2 are used to keep track of how many values we would have copied.
+    //
+    // the loop invariant is that at least one of these are zero:
+    // pending_out1 == 0 \/ pending_out2 == 0
+    int64_t pending_out1 = 0;
+    int64_t pending_out2 = 0;
+
     while (in1_ix < in1->table.row_count && in2_ix < in2->table.row_count) {
         int64_t time1 = in1->times[in1_ix];
         int64_t time2 = in2->times[in2_ix];
@@ -26,31 +40,47 @@ error_t zebra_merge_attribute (anemone_mempool_t *pool, const zebra_attribute_t 
             || (time1 == time2 && prio1 < prio2);
 
         if (copy_from_1) {
-            err = zebra_append_attribute (pool, in1, in1_ix, out_into);
-            if (err) return err;
-
             in1_ix++;
-        } else {
-            err = zebra_append_attribute (pool, in2, in2_ix, out_into);
-            if (err) return err;
+            pending_out1++;
+            // check if we need to write anything from 2 first:
+            // if so, flush it and set it to zero.
+            if (pending_out2 > 0) {
+                err = zebra_append_attribute (pool, in2, in2_ix - pending_out2, out_into, pending_out2);
+                if (err) return err;
 
+                pending_out2 = 0;
+            }
+        } else {
             in2_ix++;
+            pending_out2++;
+            if (pending_out1 > 0) {
+                err = zebra_append_attribute (pool, in1, in1_ix - pending_out1, out_into, pending_out1);
+                if (err) return err;
+
+                pending_out1 = 0;
+            }
         }
+    }
+
+    // flush any pending outputs we need to.
+    // we could do this with the fixup loops below, but one extra call shouldn't hurt.
+    if (pending_out1 > 0) {
+        err = zebra_append_attribute (pool, in1, in1_ix - pending_out1, out_into, pending_out1);
+        if (err) return err;
+    }
+    if (pending_out2 > 0) {
+        err = zebra_append_attribute (pool, in2, in2_ix - pending_out2, out_into, pending_out2);
+        if (err) return err;
     }
 
     // assert (in1_ix == in1->table.row_count || in2_ix == in2->table.row_count)
     // fixup loops after one of the inputs is finished
-    while (in1_ix < in1->table.row_count) {
-        err = zebra_append_attribute (pool, in1, in1_ix, out_into);
+    if (in1_ix < in1->table.row_count) {
+        err = zebra_append_attribute (pool, in1, in1_ix, out_into, in1->table.row_count - in1_ix);
         if (err) return err;
-
-        in1_ix++;
-    }
-    while (in2_ix < in2->table.row_count) {
-        err = zebra_append_attribute (pool, in2, in2_ix, out_into);
+    } else if (in2_ix < in2->table.row_count) {
+        err = zebra_append_attribute (pool, in2, in2_ix, out_into, in2->table.row_count - in2_ix);
         if (err) return err;
-
-        in2_ix++;
     }
 
     return ZEBRA_SUCCESS;

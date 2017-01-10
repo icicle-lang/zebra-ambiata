@@ -119,8 +119,12 @@ library
                        -std=c99 -O3 -g -msse4.2 -Wall -Werror -DCABAL=1
 
 executable zebra
-  ghc-options:
-                    -Wall -threaded -O2
+  if impl(ghc >= 8.0)
+    ghc-options:
+                    -Wall -threaded -O2 -rtsopts "-with-rtsopts=-A128m -n4m"
+  else
+    ghc-options:
+                    -Wall -threaded -O2 -rtsopts "-with-rtsopts=-A128m -n4m -qg"
 
   hs-source-dirs:
                     gen
