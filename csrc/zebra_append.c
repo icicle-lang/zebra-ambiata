@@ -7,29 +7,22 @@
 // Append: push a single value onto the end of an attribute.
 // Take the value of attribute "in" at index "ix", and add it to the end of "out_into".
 //
-error_t zebra_append_attribute (anemone_mempool_t *pool, const zebra_attribute_t *in, int64_t ix, zebra_attribute_t *out_into)
+error_t zebra_append_attribute (anemone_mempool_t *pool, const zebra_attribute_t *in, int64_t ix, zebra_attribute_t *out_into, int64_t out_count)
 {
     error_t err;
 
     int64_t out_ix = out_into->table.row_count;
 
-    out_into->table.row_count++;
-    // XXX: this will call grow_table twice (here and in append_table)
-    // but that should be ok because the second grow_table will not do anything
-    //
-    // The important thing is that we grow the attribute before growing the table
+    out_into->table.row_count += out_count;
     err = zebra_grow_attribute (pool, out_into);
     if (err) return err;
-    // XXX: because append_table adds the count itself, we need to undo the count we just added.
-    // sorry.
-    out_into->table.row_count--;
 
-    err = zebra_append_table (pool, &in->table, ix, &out_into->table, 1);
+    err = zebra_append_table_nogrow (pool, &in->table, ix, &out_into->table, out_count);
     if (err) return err;
 
-    out_into->times[out_ix] = in->times[ix];
-    out_into->priorities[out_ix] = in->priorities[ix];
-    out_into->tombstones[out_ix] = in->tombstones[ix];
+    memcpy (out_into->times + out_ix, in->times + ix, out_count * sizeof(int64_t));
+    memcpy (out_into->priorities + out_ix, in->priorities + ix, out_count * sizeof(int64_t));
+    memcpy (out_into->tombstones + out_ix, in->tombstones + ix, out_count * sizeof(bool64_t));
 
     return 0;
 }
@@ -91,11 +84,18 @@ error_t zebra_append_table (anemone_mempool_t *pool, const zebra_table_t *in, in
 {
     error_t err;
 
-    int64_t out_ix = out_into->row_count;
     out_into->row_count += count;
     err = zebra_grow_table (pool, out_into);
     if (err) return err;
 
+    return zebra_append_table_nogrow (pool, in, in_ix, out_into, count);
+}
+
+error_t zebra_append_table_nogrow (anemone_mempool_t *pool, const zebra_table_t *in, int64_t in_ix, zebra_table_t *out_into, int64_t count)
+{
+    error_t err;
+
+    int64_t out_ix = out_into->row_count - count;
     for (int64_t c = 0; c < in->column_count; ++c) {
         err = zebra_append_column (pool, in->columns + c, in_ix, out_into->columns + c, out_ix, count);
         if (err) return err;

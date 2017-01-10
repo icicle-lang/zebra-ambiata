@@ -8,6 +8,7 @@ error_t zebra_append_attribute (
   , const zebra_attribute_t *in
   , int64_t ix
   , zebra_attribute_t *out_into
+  , int64_t out_count
   );
 
 error_t zebra_append_table (
@@ -17,6 +18,15 @@ error_t zebra_append_table (
   , zebra_table_t *out_into
   , int64_t out_count
   );
+
+error_t zebra_append_table_nogrow (
+    anemone_mempool_t *pool
+  , const zebra_table_t *in
+  , int64_t ix
+  , zebra_table_t *out_into
+  , int64_t out_count
+  );
+
 
 error_t zebra_append_block_entity (
     anemone_mempool_t *pool
