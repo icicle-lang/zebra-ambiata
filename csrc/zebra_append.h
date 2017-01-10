@@ -28,6 +28,10 @@ error_t zebra_append_table_nogrow (
   );
 
 
+// Append an entity to a block.
+// If *block is null, a new block will be allocated.
+// The block must have been allocated using this function, as it ensures the arrays are allocated with extra capacity on the end.
+// Do not call this with blocks allocated elsewhere, or you will write over someone else's memory.
 error_t zebra_append_block_entity (
     anemone_mempool_t *pool
   , zebra_entity_t *entity

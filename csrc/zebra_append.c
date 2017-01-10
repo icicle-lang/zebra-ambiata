@@ -134,6 +134,20 @@ error_t zebra_fill_block_entity (anemone_mempool_t *pool, zebra_entity_t *entity
     return ZEBRA_SUCCESS;
 }
 
+// Ensure an array has the capacity to store some stuff.
+// The array must have been allocated using zebra_ensure_capacity, because it adds the extra stuff on the end.
+ANEMONE_STATIC
+ANEMONE_INLINE
+void* zebra_ensure_capacity (anemone_mempool_t *pool, void *old, size_t size, int64_t old_used, int64_t required)
+{
+    int64_t current_capacity = zebra_grow_array_capacity (old_used);
+
+    if (old != NULL && required <= current_capacity) return old;
+    
+    return zebra_grow_array (pool, old, size, old_used, zebra_grow_array_capacity (required) );
+}
+#define ZEBRA_ENSURE_CAPACITY(pool, in, oldcap, newcap) zebra_ensure_capacity (pool, in, sizeof (in[0]), oldcap, newcap )
+
 error_t zebra_append_block_entity (anemone_mempool_t *pool, zebra_entity_t *entity, zebra_block_t **inout_block)
 {
     error_t err;
@@ -145,7 +159,7 @@ error_t zebra_append_block_entity (anemone_mempool_t *pool, zebra_entity_t *enti
         return ZEBRA_APPEND_DIFFERENT_ATTRIBUTE_COUNT;
     }
 
-    block->entities = ZEBRA_GROW_ARRAY (pool, block->entities, block->entity_count, block->entity_count + 1);
+    block->entities = ZEBRA_ENSURE_CAPACITY (pool, block->entities, block->entity_count, block->entity_count + 1);
     err = zebra_fill_block_entity (pool, entity, block->entities + block->entity_count);
     if (err) return err;
     block->entity_count++;
@@ -156,10 +170,9 @@ error_t zebra_append_block_entity (anemone_mempool_t *pool, zebra_entity_t *enti
         new_row_count += entity->attributes[c].table.row_count;
     }
 
-    // TODO: this should check capacity and mutate if possible, otherwise grow and copy
-    block->times = ZEBRA_GROW_ARRAY (pool, block->times, block->row_count, new_row_count);
-    block->priorities = ZEBRA_GROW_ARRAY (pool, block->priorities, block->row_count, new_row_count);
-    block->tombstones = ZEBRA_GROW_ARRAY (pool, block->tombstones, block->row_count, new_row_count);
+    block->times = ZEBRA_ENSURE_CAPACITY (pool, block->times, block->row_count, new_row_count);
+    block->priorities = ZEBRA_ENSURE_CAPACITY (pool, block->priorities, block->row_count, new_row_count);
+    block->tombstones = ZEBRA_ENSURE_CAPACITY (pool, block->tombstones, block->row_count, new_row_count);
     block->row_count = new_row_count;
 
     int64_t cur_row_count = old_row_count;
