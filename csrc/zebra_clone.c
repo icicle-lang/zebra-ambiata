@@ -22,14 +22,19 @@ error_t zebra_agile_clone_table (anemone_mempool_t *pool, const zebra_table_t *t
     into->row_capacity = 0;
     int64_t count = table->column_count;
     into->column_count = count;
-    into->columns = anemone_mempool_alloc (pool, count * sizeof (zebra_column_t));
+    zebra_column_t *in_columns = table->columns;
+    zebra_column_t *out_columns = anemone_mempool_alloc (pool, count * sizeof (zebra_column_t));
+    into->columns = out_columns;
+
     for (int64_t c = 0; c < count; ++c) {
-        zebra_type_t type = table->columns[c].type;
-        into->columns[c].type = type;
+        zebra_column_t *in_column = in_columns + c;
+        zebra_column_t *out_column = out_columns + c;
+        zebra_type_t type = in_column->type;
+        out_column->type = type;
         // zero out first pointer
-        into->columns[c].data.b = NULL;
+        out_column->data.b = NULL;
         if (type == ZEBRA_ARRAY) {
-            zebra_agile_clone_table (pool, &table->columns[c].data.a.table, &into->columns[c].data.a.table);
+            zebra_agile_clone_table (pool, &in_column->data.a.table, &out_column->data.a.table);
         }
     }
     return ZEBRA_SUCCESS;
