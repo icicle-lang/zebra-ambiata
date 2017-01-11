@@ -5,7 +5,7 @@
 
 typedef struct zebra_merge_many {
     int64_t count;
-    zebra_entity_t *entities;
+    zebra_entity_t **entities;
 } zebra_merge_many_t;
 
 
@@ -22,7 +22,8 @@ error_t zebra_mm_push (
   );
 
 error_t zebra_mm_pop (
-    zebra_merge_many_t *merger
+    anemone_mempool_t *pool
+  , zebra_merge_many_t *merger
   , zebra_entity_t **out
   );
 

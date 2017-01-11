@@ -6,8 +6,6 @@ module Test.Zebra.Foreign.Merge where
 import qualified Anemone.Foreign.Mempool as Mempool
 import           Anemone.Foreign.Segv (withSegv)
 
-import           Control.Monad.Catch (bracket)
-
 import           Disorder.Core.IO (testIO)
 import           Disorder.Core.Run (disorderCheckEnvAll, ExpectedTestSpeed(..))
 import           Disorder.Jack (Property, counterexample)
@@ -26,7 +24,6 @@ import           Text.Show.Pretty (ppShow)
 import           Test.Zebra.Jack
 import qualified Test.Zebra.Merge.BlockC as TestMerge
 
-import           Zebra.Foreign.Merge
 import           Zebra.Foreign.Entity
 
 import           Zebra.Data.Block
@@ -102,50 +99,6 @@ testMergeFacts encs facts =
       Right entities = entitiesOfBlock block
   in  entities
 
-
--- | Merge facts for same entity. We should not segfault
-prop_merge_1_entity_no_segfault :: Property
-prop_merge_1_entity_no_segfault =
-  gamble jEntityHashId $ \eid ->
-  gamble jEncodings $ \encs ->
-  gamble (jFactsFor eid encs) $ \facts1 ->
-  gamble (jFactsFor eid encs) $ \facts2 ->
-  testIO . bracket Mempool.create Mempool.free $ \pool -> withSegv (ppShow (eid, encs, facts1, facts2)) $ do
-    (b1,cs1) <- testForeignOfFacts pool encs facts1
-    (b2,cs2) <- testForeignOfFacts pool encs facts2
-    let cs' = Boxed.zip cs1 cs2
-    merged <- runEitherT $ mapM (uncurry $ mergeEntity pool) cs'
-    -- Only checking segfault for now
-    return $ counterexample (ppShow (b1,b2))
-        $ case merged of
-           Right _ -> True
-           Left _ -> False
-
--- | Merge facts for same entity. We should get the right result
-prop_merge_1_entity_check_result :: Property
-prop_merge_1_entity_check_result =
-  gamble jEntityHashId $ \eid ->
-  gamble jEncodings $ \encs ->
-  gamble (jFactsFor eid encs) $ \facts1 ->
-  gamble (jFactsFor eid encs) $ \facts2 ->
-  testIO . bracket Mempool.create Mempool.free $ \pool -> withSegv (ppShow (eid, encs, facts1, facts2)) $ do
-    let expect = testMergeFacts encs (facts1 <> facts2)
-    (b1,cs1) <- testForeignOfFacts pool encs facts1
-    (b2,cs2) <- testForeignOfFacts pool encs facts2
-    let cs' = Boxed.zip cs1 cs2
-    let err i = firstEitherT ppShow i
-    merged <- runEitherT $ do
-      ms <- err $ mapM (uncurry $ mergeEntity pool) cs'
-      err $ mapM entityOfForeign ms
-
-    return $ counterexample (ppShow (b1,b2))
-           $ case merged of
-              Right m'
-                | Boxed.length cs1 == 1 && Boxed.length cs2 == 1
-                -> expect === m'
-                | otherwise
-                -> Boxed.empty === m'
-              Left  e' -> counterexample e' False
 
 
 -- | Merge two blocks from two different files (one block each)

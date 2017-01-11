@@ -77,7 +77,7 @@ mergeBlocks options files = do
 
   go state0 = do
     state <- gc state0
-    pop <- foreign $ mergeManyPop (stateMergeMany state)
+    pop <- foreign $ mergeManyPop (stateMempool state) (stateMergeMany state)
     case pop of
       Nothing ->
         return state
