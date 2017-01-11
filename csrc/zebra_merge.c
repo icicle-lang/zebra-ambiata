@@ -79,25 +79,8 @@ error_t zebra_merge_entities (anemone_mempool_t *pool, zebra_entity_t **ins, int
 {
     error_t err;
 
-    // TODO better error
-    if (ins_count == 0) return ZEBRA_MERGE_DIFFERENT_ENTITIES;
+    if (ins_count == 0) return ZEBRA_MERGE_NO_ENTITIES;
     const zebra_entity_t *in1 = ins[0];
-
-    // TODO should this loop and make sure they are the same?
-    // I think this is merge_many's responsibility.
-#if 0
-    if (in1->hash != in2->hash ||
-        in1->id_length != in2->id_length ||
-        in1->attribute_count != in2->attribute_count) {
-        return ZEBRA_MERGE_DIFFERENT_ENTITIES;
-    }
-    // #if PARANOID
-    // assert in1->id_length == in2->id_length
-    if (anemone_memcmp(in1->id_bytes, in2->id_bytes, in1->id_length) != 0) {
-        return ZEBRA_MERGE_DIFFERENT_ENTITIES;
-    }
-    // #endif
-#endif
 
     out_into->hash            = in1->hash;
     out_into->id_length       = in1->id_length;
