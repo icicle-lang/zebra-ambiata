@@ -77,7 +77,8 @@ error_t zebra_mm_push (anemone_mempool_t *pool, zebra_merge_many_t *merger, int6
 
 error_t zebra_mm_pop (anemone_mempool_t *pool, zebra_merge_many_t *merger, zebra_entity_t **out)
 {
-    if (merger->count == 0) {
+    int64_t count = merger->count;
+    if (count == 0) {
         *out = NULL;
         return ZEBRA_SUCCESS;
     }
@@ -85,7 +86,10 @@ error_t zebra_mm_pop (anemone_mempool_t *pool, zebra_merge_many_t *merger, zebra
     zebra_entity_t **entities = merger->entities;
 
     int64_t take = 1;
-    for (; take != merger->count && zebra_entity_compare(entities[0], entities[take]) == 0; ++take);
+    // Count how many entities have the same entity id as the top
+    while (take != count && zebra_entity_compare(entities[0], entities[take]) == 0) {
+        ++take;
+    }
 
     merger->entities += take;
     merger->count    -= take;
@@ -122,7 +126,9 @@ error_t zebra_mm_clone (
     int64_t out_ix = 0;
     while (in_ix != max_count) {
         int64_t take_ix = in_ix + 1;
-        for (; take_ix != max_count && zebra_entity_compare(old_entities[in_ix], old_entities[take_ix]) == 0; ++take_ix);
+        while (take_ix != max_count && zebra_entity_compare(old_entities[in_ix], old_entities[take_ix]) == 0) {
+            ++take_ix;
+        }
 
         int64_t take = take_ix - in_ix;
         zebra_entity_t *out_into = new_entity_values + out_ix;

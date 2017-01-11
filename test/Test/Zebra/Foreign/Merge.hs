@@ -150,5 +150,5 @@ prop_merge_2_block_2_files =
 
 return []
 tests :: IO Bool
-tests = $disorderCheckEnvAll TestRunNormal
+tests = $disorderCheckEnvAll TestRunMore
 
