@@ -55,7 +55,7 @@ data ForeignError =
   | ForeignNotEnoughBytes
   | ForeignNotEnoughRows
   | ForeignMergeDifferentColumnTypes
-  | ForeignMergeDifferentEntities
+  | ForeignMergeNoEntities
   | ForeignAppendDifferentAttributeCount
   | ForeignUnknownError !CError
     deriving (Eq, Ord, Show)
@@ -74,8 +74,8 @@ fromCError = \case
     Left ForeignNotEnoughRows
   C'ZEBRA_MERGE_DIFFERENT_COLUMN_TYPES ->
     Left ForeignMergeDifferentColumnTypes
-  C'ZEBRA_MERGE_DIFFERENT_ENTITIES ->
-    Left ForeignMergeDifferentEntities
+  C'ZEBRA_MERGE_NO_ENTITIES ->
+    Left ForeignMergeNoEntities
   C'ZEBRA_APPEND_DIFFERENT_ATTRIBUTE_COUNT ->
     Left ForeignAppendDifferentAttributeCount
   err ->
