@@ -36,6 +36,8 @@ int64_t zebra_midpoint (
         max = elem > max ? elem : max;
     }
     
+    // Commutative, overflow proof integer average/midpoint:
+    //   Source: http://stackoverflow.com/a/4844672
     return (min & max) + ((min ^ max) >> 1);
 }
 
@@ -101,10 +103,13 @@ error_t zebra_pack_array (
 
     int64_t offset = zebra_midpoint (elems, n_elems);
 
-    uint8_t *buf = *buf_inout;
-    uint8_t *nbits = buf + 8;
+    uint8_t *buf_start = *buf_inout;
+    uint32_t *header_size = (uint32_t*)buf_start;
+    uint64_t *header_offset = (uint64_t*)(header_size + 1);
+    uint8_t *nbits_start = (uint8_t*)(header_offset + 1);
+    uint8_t *nbits = nbits_start;
     uint8_t *parts = nbits + n_parts;   
-    *((uint64_t*)buf) = offset;
+    *header_offset = offset;
 
     uint64_t deltas[int_part_size];
     
@@ -139,7 +144,10 @@ error_t zebra_pack_array (
         ++remains;
     }
 
-    *buf_inout = (uint8_t*)remains;
+    uint8_t* buf_end = (uint8_t*)remains;
+    *header_size = buf_end - nbits_start;
+
+    *buf_inout = buf_end;
 
     return 0;
 }
