@@ -21,6 +21,8 @@ import           Foreign.Ptr (Ptr)
 import           Data.Word (Word8)
 import           System.IO (IO)
 
+import qualified Prelude as Savage
+
 import           P
 
 unpackArray :: ByteString -> Int -> Int -> Int -> Either ForeignError (Storable.Vector Int64)
@@ -46,8 +48,10 @@ packArray elems buf
     poke bufp buf
     let len = i64 $ Storable.length elems
     -- XXX: throwing away the error
-    _ <- Storable.unsafeWith elems $ \elemsp -> unsafe'c'zebra_pack_array bufp elemsp len
-    peek bufp
+    err <- Storable.unsafeWith elems $ \elemsp -> unsafe'c'zebra_pack_array bufp elemsp len
+    case fromCError err of
+     Left err' -> Savage.error ("Zebra.Foreign.Serial.packArray: C code returned error " <> show err')
+     Right ()  -> peek bufp
  where
   i64 :: Int -> Int64
   i64 = fromIntegral
