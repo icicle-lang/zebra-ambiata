@@ -90,7 +90,7 @@ error_t zebra_table_pop_rows (
 
     int64_t column_count = in_table->column_count;
     zebra_column_t *in_columns = in_table->columns;
-    zebra_column_t *out_columns = anemone_mempool_calloc (pool, column_count, sizeof (zebra_column_t));
+    zebra_column_t *out_columns = anemone_mempool_alloc (pool, column_count * sizeof (zebra_column_t));
 
     out_table->column_count = column_count;
     out_table->columns = out_columns;
@@ -122,7 +122,7 @@ error_t zebra_entities_of_block (
     bool64_t *block_tombstones = block->tombstones;
 
     int64_t entity_count = block->entity_count;
-    zebra_entity_t *entities = anemone_mempool_calloc (pool, entity_count, sizeof (zebra_entity_t));
+    zebra_entity_t *entities = anemone_mempool_alloc (pool, entity_count * sizeof (zebra_entity_t));
 
     for (int64_t eix = 0; eix < entity_count; eix++) {
         zebra_block_entity_t *block_entity = block->entities + eix;
@@ -135,7 +135,7 @@ error_t zebra_entities_of_block (
         int64_t attribute_count = block_entity->attribute_count;
         int64_t *attribute_ids = block_entity->attribute_ids;
         int64_t *attribute_row_counts = block_entity->attribute_row_counts;
-        zebra_attribute_t *attributes = anemone_mempool_calloc (pool, table_count, sizeof (zebra_attribute_t));
+        zebra_attribute_t *attributes = anemone_mempool_alloc (pool, table_count * sizeof (zebra_attribute_t));
 
         int64_t aix = 0;
         for (int64_t attribute_id = 0; attribute_id < table_count; attribute_id++) {
