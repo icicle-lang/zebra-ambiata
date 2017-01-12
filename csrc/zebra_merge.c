@@ -38,7 +38,7 @@ error_t zebra_merge_attributes (anemone_mempool_t *pool, zebra_attribute_t **ins
 
             if (in_ix < count) {
                 int64_t in_time = in->times[in_ix];
-                int64_t in_prio = in->times[in_ix];
+                int64_t in_prio = in->priorities[in_ix];
 
                 bool64_t take_this = (alive == 0)
                     || (in_time < min_time)
@@ -106,5 +106,16 @@ clean:
     free (in_ats);
 
     return err;
+}
+
+error_t zebra_merge_entity_pair (
+    anemone_mempool_t *pool
+  , zebra_entity_t *in1
+  , zebra_entity_t *in2
+  , zebra_entity_t *out_into
+  )
+{
+    zebra_entity_t *ins[2] = {in1, in2};
+    return zebra_merge_entities (pool, ins, 2, out_into);
 }
 

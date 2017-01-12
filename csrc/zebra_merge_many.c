@@ -51,7 +51,7 @@ error_t zebra_mm_push (anemone_mempool_t *pool, zebra_merge_many_t *merger, int6
         zebra_entity_t *e2 = add_entities[add_ix];
 
         int64_t cmp = zebra_entity_compare(e1, e2);
-        if (cmp < 0) {
+        if (cmp <= 0) {
             entities[insert_ix] = e1;
             merger_ix++;
         } else {

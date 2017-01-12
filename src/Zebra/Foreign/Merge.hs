@@ -4,6 +4,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module Zebra.Foreign.Merge (
     CMergeMany(..)
+  , mergeEntityPair
   , mergeManyInit
   , mergeManyPush
   , mergeManyPop
@@ -11,6 +12,7 @@ module Zebra.Foreign.Merge (
   ) where
 
 import           Anemone.Foreign.Mempool (Mempool)
+import qualified Anemone.Foreign.Mempool as Mempool
 
 import           Control.Monad.IO.Class (MonadIO(..))
 
@@ -28,6 +30,15 @@ import           X.Control.Monad.Trans.Either (EitherT)
 import           Zebra.Foreign.Bindings
 import           Zebra.Foreign.Entity
 import           Zebra.Foreign.Util
+
+
+mergeEntityPair :: MonadIO m => Mempool -> CEntity -> CEntity -> EitherT ForeignError m CEntity
+mergeEntityPair pool (CEntity c_entity1) (CEntity c_entity2) = do
+  merge_into <- liftIO $ Mempool.alloc pool
+  liftCError $ unsafe'c'zebra_merge_entity_pair pool c_entity1 c_entity2 merge_into
+  return $ CEntity merge_into
+
+
 
 newtype CMergeMany =
   CMergeMany {
