@@ -122,7 +122,12 @@ getByteArray = do
 bIntArray :: Storable.Vector Int64 -> Builder
 bIntArray xs =
   let len = Storable.length xs
-      ensure = 12 + len + len * 8
+      -- Worst case for size of array if packing requires full 64-bit numbers:
+      -- size (4)
+      -- offset (8)
+      -- num-bits (len * 1 byte)
+      -- packs worst case (len * 8 byte)
+      ensure = 4 + 8 + len + len * 8
       prim = BuilderPrim.boudedPrim ensure FoSerial.packArray
   in BuilderPrim.primBounded prim xs
 
