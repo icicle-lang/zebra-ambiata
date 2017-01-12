@@ -11,6 +11,11 @@ error_t zebra_unpack_array (
   , int64_t *fill
   );
 
-#endif//__ZEBRA_UNPACK_H
+error_t zebra_pack_array (
+    uint8_t **buf_inout
+  , int64_t *elems
+  , int64_t n_elems
+  );
 
+#endif//__ZEBRA_UNPACK_H
 
