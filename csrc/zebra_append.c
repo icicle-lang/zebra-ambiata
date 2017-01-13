@@ -196,7 +196,7 @@ error_t zebra_append_block_entity (anemone_mempool_t *pool, zebra_entity_t *enti
         }
     } else {
         block->table_count = entity->attribute_count;
-        block->tables = anemone_mempool_calloc (pool, block->table_count, sizeof(zebra_table_t) );
+        block->tables = anemone_mempool_alloc (pool, block->table_count * sizeof(zebra_table_t) );
         for (int64_t c = 0; c < block->table_count; ++c) {
             err = zebra_deep_clone_table (pool, &entity->attributes[c].table, block->tables + c);
             if (err) return err;

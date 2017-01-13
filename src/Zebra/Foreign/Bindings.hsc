@@ -107,4 +107,5 @@ import Anemone.Foreign.Mempool (Mempool(..))
 #ccall_unsafe zebra_mm_clone , Mempool -> Ptr (Ptr <zebra_merge_many>) -> IO CError
 
 #ccall_unsafe zebra_unpack_array , Ptr CChar -> Int64 -> Int64 -> Int64 -> Ptr Int64 -> IO CError
+#ccall_unsafe zebra_pack_array , Ptr (Ptr Word8) -> Ptr Int64 -> Int64 -> IO CError
 

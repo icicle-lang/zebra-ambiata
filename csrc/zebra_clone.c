@@ -89,7 +89,7 @@ error_t zebra_neritic_clone_columns (
 {
     error_t err;
 
-    zebra_column_t *columns = anemone_mempool_calloc (pool, column_count, sizeof (zebra_column_t));
+    zebra_column_t *columns = anemone_mempool_alloc (pool, column_count * sizeof (zebra_column_t));
 
     for (int64_t i = 0; i < column_count; i++) {
         err = zebra_neritic_clone_column (pool, in_columns + i, columns + i);

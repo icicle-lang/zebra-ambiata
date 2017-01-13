@@ -16,8 +16,6 @@ module Zebra.Serial.Array (
   ) where
 
 import qualified Zebra.Foreign.Serial as FoSerial
-import           Anemone.Foreign.Pack (Packed64(..))
-import qualified Anemone.Foreign.Pack as Anemone
 
 import           Data.Binary.Get (Get)
 import qualified Data.Binary.Get as Get
@@ -26,12 +24,11 @@ import           Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import           Data.ByteString.Builder (Builder)
 import qualified Data.ByteString.Builder as Builder
-import qualified Data.List as List
+import qualified Data.ByteString.Builder.Prim.Internal as BuilderPrim
+import qualified Data.ByteString.Builder.Prim          as BuilderPrim
 import           Data.Word (Word64)
 
 import           P
-
-import qualified Prelude as Savage
 
 import qualified Snapper as Snappy
 
@@ -124,66 +121,15 @@ getByteArray = do
 --
 bIntArray :: Storable.Vector Int64 -> Builder
 bIntArray xs =
-  let
-    offset =
-      if Storable.null xs then
-        0
-      else
-        midpoint xs
-
-    deltas =
-      Storable.map (zigZag64 . subtract offset) xs
-
-    n =
-      Storable.length xs
-
-    (n_parts, n_remains) =
-      n `quotRem` intPartSize
-
-    impossible :: Packed64
-    impossible =
-      Savage.error $
-        "Blizzard.Zebra.Header.bIntArray: " <>
-        "internal error, can only pack multiples " <>
-        "of 64, tried to pack <" <> show n <> ">"
-
-    pack :: Int -> Maybe Packed64
-    pack ix =
-      Anemone.pack64 $
-      Storable.slice ix intPartSize deltas
-
-    packs :: [Packed64]
-    packs =
-      fmap (maybe impossible id . pack) .
-      List.take n_parts $
-      List.iterate (+ intPartSize) 0
-
-    nbits :: Builder
-    nbits =
-      foldMap (Builder.word8 . fromIntegral . packedBits) packs
-
-    parts :: Builder
-    parts =
-      foldMap (Builder.byteString . packedBytes) packs
-
-    -- TODO should be vbyte, not u64
-    remains :: Builder
-    remains =
-      foldMap Builder.word64LE . Storable.toList $
-      Storable.slice (n - n_remains) n_remains deltas
-
-    size :: Builder
-    size =
-      Builder.word32LE . fromIntegral $
-        length packs +
-        intSize * sum (fmap packedBits packs) +
-        (8 * n_remains) -- TODO should be vbyte, not u64
-  in
-    size <>
-    Builder.word64LE (fromIntegral offset) <>
-    nbits <>
-    parts <>
-    remains
+  let len = Storable.length xs
+      -- Worst case for size of array if packing requires full 64-bit numbers:
+      -- size (4)
+      -- offset (8)
+      -- num-bits (len * 1 byte)
+      -- packs worst case (len * 8 byte)
+      ensure = 4 + 8 + len + len * 8
+      prim = BuilderPrim.boudedPrim ensure FoSerial.packArray
+  in BuilderPrim.primBounded prim xs
 
 getIntArray :: Int -> Get (Storable.Vector Int64)
 getIntArray elems = do
@@ -194,25 +140,6 @@ getIntArray elems = do
     case FoSerial.unpackArray bytes bufsize elems offset of
      Left err -> fail $ "Could not unpack 64-encoded words: " <> show err
      Right xs -> pure xs
-
-intPartSize :: Int
-intPartSize =
-  64
-
-intSize :: Int
-intSize =
-  8
-
--- | Find the midpoint between the minimum and maximum.
-midpoint :: Storable.Vector Int64 -> Int64
-midpoint xs =
-  let
-    loop (lo, hi) x =
-      (min lo x, max hi x)
-  in
-    uncurry mid64 $
-    Storable.foldl' loop (maxBound, minBound) xs
-{-# INLINE midpoint #-}
 
 -- | Commutative, overflow proof integer average/midpoint:
 --

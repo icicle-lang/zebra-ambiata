@@ -2,12 +2,13 @@
 {-# LANGUAGE TemplateHaskell #-}
 module Test.Zebra.Serial.Array where
 
+import qualified Data.List as List
 import qualified Data.Vector as Boxed
 import qualified Data.Vector.Storable as Storable
 
 import           Disorder.Core.Run
 import           Disorder.Jack (Property)
-import           Disorder.Jack (gamble, listOf, arbitrary, sizedBounded)
+import           Disorder.Jack (gamble, listOf, arbitrary, sizedBounded, choose)
 
 import           P
 
@@ -33,6 +34,15 @@ prop_roundtrip_ints :: Property
 prop_roundtrip_ints =
   gamble (Storable.fromList <$> listOf sizedBounded) $ \xs ->
     trippingSerial bIntArray (getIntArray $ Storable.length xs) xs
+
+-- Worst case for packing is to make sure each pack block contains an int64 min and max.
+prop_roundtrip_ints_minmax_64blocks :: Property
+prop_roundtrip_ints_minmax_64blocks =
+  gamble (choose (0,1000)) $ \x ->
+    let x' = x * 64
+        xs = Storable.fromList $ List.take x' $ List.cycle [minBound, maxBound]
+    in trippingSerial bIntArray (getIntArray $ Storable.length xs) xs
+
 
 prop_roundtrip_zigzag :: Property
 prop_roundtrip_zigzag =
