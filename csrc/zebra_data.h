@@ -5,11 +5,11 @@
 #include "anemone_base.h"
 #include "anemone_memcmp.h"
 #include "anemone_mempool.h"
-#else		
-#include "../lib/anemone/csrc/anemone_base.h"		
-#include "../lib/anemone/csrc/anemone_memcmp.h"		
-#include "../lib/anemone/csrc/anemone_mempool.h"		
-#endif		
+#else
+#include "../lib/anemone/csrc/anemone_base.h"
+#include "../lib/anemone/csrc/anemone_memcmp.h"
+#include "../lib/anemone/csrc/anemone_mempool.h"
+#endif
 
 #define ZEBRA_SUCCESS 0
 #define ZEBRA_INVALID_COLUMN_TYPE 30
