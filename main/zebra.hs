@@ -76,7 +76,7 @@ data CatOptions =
 
 data MergeOptions =
   MergeOptions {
-    mergeGcEvery :: Int
+    mergeGcGigabytes :: Double
   , mergeOutputBlockFacts :: Int
   } deriving (Eq, Show)
 
@@ -148,9 +148,9 @@ pMergeOptions :: Parser MergeOptions
 pMergeOptions =
   MergeOptions
   <$> Options.option Options.auto
-    (Options.value 200
-    <> Options.long "gc-entity-count"
-    <> Options.help "Garbage collect input after every Nth entity. Must be >1")
+    (Options.value 2
+    <> Options.long "gc-gigabytes"
+    <> Options.help "Garbage collect input blocks when pool becomes this large. Fractions allowed.")
   <*> Options.option Options.auto
     (Options.value 4096
     <> Options.long "output-block-facts"
@@ -182,7 +182,7 @@ run c = case c of
           Nothing  -> withPrintPusher
  
     withPusher $ \pusher -> do
-    let runOpts = Merge.MergeOptions (firstTshow . puller) pusher $ mergeGcEvery opts
+    let runOpts = Merge.MergeOptions (firstTshow . puller) pusher $ truncate (mergeGcGigabytes opts * 1024 * 1024 * 1024)
     joinErrors (Text.pack . show) id $ Merge.mergeBlocks runOpts pullids
 
 withPrintPusher :: ((FoEntity.CEntity -> EitherT Text IO ()) -> EitherT Text IO ())

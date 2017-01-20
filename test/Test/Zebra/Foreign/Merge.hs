@@ -93,6 +93,10 @@ jSmallFacts encodings =
   scale (`div` max 1 (length encodings)) $
   zipWithM (\e a -> listOf $ jSmallFact e a) encodings (fmap AttributeId [0..])
 
+-- Some smallish number of megabytes to garbage collect by
+jGarbageCollectEvery :: Jack Int64
+jGarbageCollectEvery = choose (0, 10 * 1024 * 1024)
+
 
 
 
@@ -199,12 +203,13 @@ prop_merge_1_block_2_files =
   gamble jEncodings $ \encs ->
   gamble (jSmallFacts encs) $ \facts1 ->
   gamble (jSmallFacts encs) $ \facts2 ->
+  gamble jGarbageCollectEvery $ \gcEvery ->
   testIO . withSegv (ppShow (encs, facts1, facts2)) $ do
     let expect = testMergeFacts encs (facts1 <> facts2)
     let Right b1 = blockOfFacts (Boxed.fromList encs) (Boxed.fromList facts1)
     let Right b2 = blockOfFacts (Boxed.fromList encs) (Boxed.fromList facts2)
     let err i = firstEitherT ppShow i
-    merged <- runEitherT $ err $ TestMerge.mergeLists [[b1], [b2]]
+    merged <- runEitherT $ err $ TestMerge.mergeLists gcEvery [[b1], [b2]]
 
     return $ counterexample (ppShow (b1,b2))
            $ case merged of
@@ -228,6 +233,7 @@ prop_merge_2_block_2_files =
   gamble jEncodings $ \encs ->
   gamble (jBlockPair evenPriorities encs) $ \(facts11, facts12) ->
   gamble (jBlockPair oddPriorities  encs) $ \(facts21, facts22) ->
+  gamble jGarbageCollectEvery $ \gcEvery ->
   testIO . withSegv (ppShow (encs, (facts11,facts12), (facts21, facts22))) $ do
     let mkBlock = blockOfFacts (Boxed.fromList encs) . Boxed.fromList
     let expect = testMergeFacts encs (facts11 <> facts12 <> facts21 <> facts22)
@@ -239,7 +245,7 @@ prop_merge_2_block_2_files =
     let allBlocks = [ [b11, b12], [b21, b22] ]
 
     let err i = firstEitherT ppShow i
-    merged <- runEitherT $ err $ TestMerge.mergeLists allBlocks
+    merged <- runEitherT $ err $ TestMerge.mergeLists gcEvery allBlocks
 
     return $ counterexample (ppShow allBlocks)
            $ case merged of

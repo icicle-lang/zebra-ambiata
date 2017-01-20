@@ -43,13 +43,12 @@ data MergeOptions c m =
   MergeOptions
   { optionPullBlock  :: c -> m (Maybe Block)
   , optionPushEntity :: CEntity -> m ()
-  , optionGCEvery    :: !Int
+  , optionGCAfterBytes :: !Int64
   }
 
 data MergeState c =
   MergeState
-  { stateEntityBlockCount   :: !Int
-  , stateEntityRefills :: !(Map.Map EntityId [c])
+  { stateEntityRefills :: !(Map.Map EntityId [c])
   , stateMempool       :: !Mempool
   , stateMergeMany     :: !CMergeMany
   -- Last seen entity id, to check
@@ -66,7 +65,7 @@ mergeBlocks :: MonadIO m
 mergeBlocks options files = do
   pool <- liftIO Mempool.create
   merger <- foreign $ mergeManyInit pool
-  let state0 = MergeState 0 Map.empty pool merger Nothing
+  let state0 = MergeState Map.empty pool merger Nothing
   -- TODO bracket/catch and clean up last memory pool on error
   -- need to convert state into an IORef for this
   state <- foldM fill state0 files
@@ -76,7 +75,7 @@ mergeBlocks options files = do
  where
 
   go state0 = do
-    state <- gc state0
+    state <- gcCheck state0
     pop <- foreign $ mergeManyPop (stateMempool state) (stateMergeMany state)
     case pop of
       Nothing ->
@@ -93,8 +92,7 @@ mergeBlocks options files = do
               left $ MergeInputEntitiesOutOfOrder last (ehash,eid)
 
         state' <- refill state eid
-        go state' { stateEntityBlockCount = stateEntityBlockCount state' + 1
-                  , stateLastEntityId = Just (ehash,eid) }
+        go state' { stateLastEntityId = Just (ehash,eid) }
 
   refill state eid =
     case Map.lookup eid $ stateEntityRefills state of
@@ -122,20 +120,19 @@ mergeBlocks options files = do
             let refills  = Map.insertWith (<>) eid [fileId]
                          $ stateEntityRefills state
             let state'   = state
-                         { stateEntityBlockCount = stateEntityBlockCount state + 1
-                         , stateEntityRefills = refills }
-            gc state'
+                         { stateEntityRefills = refills }
+            gcCheck state'
 
 
-  gc state
-   | (stateEntityBlockCount state + 1) `mod` optionGCEvery options == 0 = do
+  gcCheck state = do
+    used <- liftIO $ Mempool.totalAllocSize $ stateMempool state
+    if used > optionGCAfterBytes options then gcRun state else return state
+
+  gcRun state = do
     pool' <- liftIO Mempool.create
     merger' <- foreign $ mergeManyClone pool' $ stateMergeMany state
     liftIO $ Mempool.free $ stateMempool state
     return state { stateMempool = pool', stateMergeMany = merger' }
-
-   | otherwise
-   = return state
 
   centityId = foreign . peekEntityId . unCEntity
   centityHash = foreign . peekEntityHash . unCEntity

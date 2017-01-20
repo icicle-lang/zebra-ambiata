@@ -23,8 +23,8 @@ import           X.Control.Monad.Trans.Either (EitherT, joinEitherT)
 import           Zebra.Data.Entity
 import           Zebra.Foreign.Entity
 
-mergeLists :: [[Block]] -> EitherT MergeError IO [Entity]
-mergeLists blocks0 = do
+mergeLists :: Int64 -> [[Block]] -> EitherT MergeError IO [Entity]
+mergeLists gcEvery blocks0 = do
   blockRef <- liftIO $ Ref.newIORef blocks0
   entityRef <- liftIO $ Ref.newIORef []
   let pull ix = do
@@ -38,7 +38,7 @@ mergeLists blocks0 = do
       e' <- entityOfForeign e
       entities <- liftIO $ Ref.readIORef entityRef
       liftIO $ Ref.writeIORef entityRef (e' : entities)
-  let opts = MergeOptions pull push 2
+  let opts = MergeOptions pull push gcEvery
 
   let ixes = Boxed.enumFromN (0 :: Int) (length blocks0)
 
