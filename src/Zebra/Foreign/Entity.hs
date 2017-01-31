@@ -105,14 +105,14 @@ peekAttribute c_attribute = do
       rowsOfTable table
 
   times <- fmap timesOfForeign . peekVector n_rows $ p'zebra_attribute'times c_attribute
-  priorities <- fmap prioritiesOfForeign . peekVector n_rows $ p'zebra_attribute'priorities c_attribute
+  factsetids <- fmap factsetIdsOfForeign . peekVector n_rows $ p'zebra_attribute'factsetids c_attribute
   tombstones <- fmap tombstonesOfForeign . peekVector n_rows $ p'zebra_attribute'tombstones c_attribute
 
-  pure $ Attribute times priorities tombstones table
+  pure $ Attribute times factsetids tombstones table
 
 pokeAttribute :: MonadIO m => Mempool -> Ptr C'zebra_attribute -> Attribute -> m ()
-pokeAttribute pool c_attribute (Attribute times priorities tombstones table) = do
+pokeAttribute pool c_attribute (Attribute times factsetids tombstones table) = do
   pokeVector pool (p'zebra_attribute'times c_attribute) $ foreignOfTimes times
-  pokeVector pool (p'zebra_attribute'priorities c_attribute) $ foreignOfPriorities priorities
+  pokeVector pool (p'zebra_attribute'factsetids c_attribute) $ foreignOfFactsetIds factsetids
   pokeVector pool (p'zebra_attribute'tombstones c_attribute) $ foreignOfTombstones tombstones
   pokeTable pool (p'zebra_attribute'table c_attribute) table

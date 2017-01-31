@@ -81,7 +81,7 @@ struct zebra_column {
 
 typedef struct zebra_attribute {
     int64_t *times;
-    int64_t *priorities;
+    int64_t *factset_ids;
     bool64_t *tombstones;
     zebra_table_t table;
 } zebra_attribute_t;
@@ -111,7 +111,7 @@ typedef struct zebra_block {
 
     int64_t row_count;
     int64_t *times;
-    int64_t *priorities;
+    int64_t *factset_ids;
     bool64_t *tombstones;
 
     int64_t table_count;
@@ -130,7 +130,7 @@ error_t zebra_add_row (
   , zebra_entity_t *entity
   , int32_t attribute_id
   , int64_t time
-  , int64_t priority
+  , int64_t factset_id
   , bool64_t tombstone
   , zebra_column_t **out_columns
   , int64_t *out_index

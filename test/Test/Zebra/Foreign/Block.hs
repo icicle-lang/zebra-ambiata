@@ -119,8 +119,8 @@ check_entities_of_block convert block =
       , check "# of time rows" recordCount $
           fmap (sumAttribute $ Storable.length . attributeTime) entities
 
-      , check "# of priority rows" recordCount $
-          fmap (sumAttribute $ Storable.length . attributePriority) entities
+      , check "# of factsetid rows" recordCount $
+          fmap (sumAttribute $ Storable.length . attributeFactsetId) entities
 
       , check "# of tombstone rows" recordCount $
           fmap (sumAttribute $ Storable.length . attributeTombstone) entities

@@ -82,11 +82,11 @@ error_t zebra_grow_attribute (anemone_mempool_t *pool, zebra_attribute_t *attrib
             , new_capacity
             );
 
-        attribute->priorities =
+        attribute->factset_ids =
           zebra_grow_array (
               pool
-            , attribute->priorities
-            , sizeof (attribute->priorities[0])
+            , attribute->factset_ids
+            , sizeof (attribute->factset_ids[0])
             , old_capacity
             , new_capacity
             );

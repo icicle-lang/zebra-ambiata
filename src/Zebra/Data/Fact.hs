@@ -32,7 +32,7 @@ data Fact =
     , factEntityId :: !EntityId
     , factAttributeId :: !AttributeId
     , factTime :: !Time
-    , factPriority :: !Priority
+    , factFactsetId :: !FactsetId
     , factValue :: !(Maybe' Value)
     } deriving (Eq, Ord, Show, Generic, Typeable)
 
@@ -53,7 +53,7 @@ renderFact fact =
     , unEntityId $ factEntityId fact
     , renderAttributeId $ factAttributeId fact
     , renderTime $ factTime fact
-    , renderPriority $ factPriority fact
+    , renderFactsetId $ factFactsetId fact
     , renderMaybeValue $ factValue fact
     ]
 
@@ -69,9 +69,9 @@ renderTime :: Time -> ByteString
 renderTime =
   Char8.pack . formatTime defaultTimeLocale "%0Y-%m-%d %H:%M:%S" . toUTCTime
 
-renderPriority :: Priority -> ByteString
-renderPriority (Priority priority) =
-  Char8.pack $ printf "priority=%05d" priority
+renderFactsetId :: FactsetId -> ByteString
+renderFactsetId (FactsetId factsetid) =
+  Char8.pack $ printf "factsetid=%04x" factsetid
 
 renderMaybeValue :: Maybe' Value -> ByteString
 renderMaybeValue =

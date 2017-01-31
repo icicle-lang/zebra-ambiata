@@ -20,7 +20,7 @@ import           Zebra.Data.Table
 data Attribute =
   Attribute {
       attributeTime :: !(Storable.Vector Time)
-    , attributePriority :: !(Storable.Vector Priority)
+    , attributeFactsetId :: !(Storable.Vector FactsetId)
     , attributeTombstone :: !(Storable.Vector Tombstone)
     , attributeTable :: !Table
     } deriving (Eq, Ord, Generic, Typeable)

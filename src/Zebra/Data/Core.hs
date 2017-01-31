@@ -13,7 +13,7 @@ module Zebra.Data.Core (
   , AttributeName(..)
 
   , Time(..)
-  , Priority(..)
+  , FactsetId(..)
   , Tombstone(..)
 
   , hashEntityId
@@ -23,13 +23,13 @@ module Zebra.Data.Core (
 
   , foreignOfAttributeIds
   , foreignOfTimes
-  , foreignOfPriorities
+  , foreignOfFactsetIds
   , foreignOfTombstone
   , foreignOfTombstones
 
   , attributeIdsOfForeign
   , timesOfForeign
-  , prioritiesOfForeign
+  , factsetIdsOfForeign
   , tombstoneOfForeign
   , tombstonesOfForeign
   ) where
@@ -82,9 +82,9 @@ newtype Time =
       unTime :: Int64
     } deriving (Eq, Ord, Enum, Num, Real, Integral, Generic, Typeable, Storable)
 
-newtype Priority =
-  Priority {
-      unPriority :: Int64
+newtype FactsetId =
+  FactsetId {
+      unFactsetId :: Int64
     } deriving (Eq, Ord, Enum, Num, Real, Integral, Generic, Typeable, Storable)
 
 data Tombstone =
@@ -127,7 +127,7 @@ instance Show Time where
   showsPrec =
     gshowsPrec
 
-instance Show Priority where
+instance Show FactsetId where
   showsPrec =
     gshowsPrec
 
@@ -191,15 +191,15 @@ timesOfForeign =
   Storable.unsafeCast
 {-# INLINE timesOfForeign #-}
 
-foreignOfPriorities :: Storable.Vector Priority -> Storable.Vector Int64
-foreignOfPriorities =
+foreignOfFactsetIds :: Storable.Vector FactsetId -> Storable.Vector Int64
+foreignOfFactsetIds =
   Storable.unsafeCast
-{-# INLINE foreignOfPriorities #-}
+{-# INLINE foreignOfFactsetIds #-}
 
-prioritiesOfForeign :: Storable.Vector Int64 -> Storable.Vector Priority
-prioritiesOfForeign =
+factsetIdsOfForeign :: Storable.Vector Int64 -> Storable.Vector FactsetId
+factsetIdsOfForeign =
   Storable.unsafeCast
-{-# INLINE prioritiesOfForeign #-}
+{-# INLINE factsetIdsOfForeign #-}
 
 foreignOfTombstone :: Tombstone -> Int64
 foreignOfTombstone = \case
@@ -243,10 +243,10 @@ derivingUnbox "Time"
   [| unTime |]
   [| Time |]
 
-derivingUnbox "Priority"
-  [t| Priority -> Int64 |]
-  [| unPriority |]
-  [| Priority |]
+derivingUnbox "FactsetId"
+  [t| FactsetId -> Int64 |]
+  [| unFactsetId |]
+  [| FactsetId |]
 
 derivingUnbox "Tombstone"
   [t| Tombstone -> Int64 |]

@@ -181,7 +181,7 @@ getAttributes = do
 -- @
 --   index {
 --     time         : int
---     priority     : int
+--     factsetid    : int
 --     is_tombstone : int
 --   }
 -- @
@@ -191,7 +191,7 @@ getAttributes = do
 -- @
 --   index_count     : u32
 --   index_time      : int_array value_count
---   index_priority  : int_array value_count
+--   index_factsetid : int_array value_count
 --   index_tombstone : int_array value_count
 -- @
 --
@@ -208,9 +208,9 @@ bIndices xs =
       Unboxed.convert $
       Unboxed.map (unTime . indexTime) xs
 
-    priorities =
+    factsetids =
       Unboxed.convert $
-      Unboxed.map (unPriority . indexPriority) xs
+      Unboxed.map (unFactsetId . indexFactsetId) xs
 
     tombstones =
       Unboxed.convert $
@@ -218,14 +218,14 @@ bIndices xs =
   in
     Build.word32LE icount <>
     bIntArray times <>
-    bIntArray priorities <>
+    bIntArray factsetids <>
     bIntArray tombstones
 
 getIndices :: Get (Unboxed.Vector BlockIndex)
 getIndices = do
   icount <- fromIntegral <$> Get.getWord32le
   itimes <- getIntArray icount
-  ipriorities <- getIntArray icount
+  ifactsetids <- getIntArray icount
   itombstones <- getIntArray icount
 
   let
@@ -233,15 +233,15 @@ getIndices = do
       Unboxed.map Time $
       Unboxed.convert itimes
 
-    priorities =
-      Unboxed.map Priority $
-      Unboxed.convert ipriorities
+    factsetids =
+      Unboxed.map FactsetId $
+      Unboxed.convert ifactsetids
 
     tombstones =
       Unboxed.map tombstoneOfForeign $
       Unboxed.convert itombstones
 
-  pure $ Unboxed.zipWith3 BlockIndex times priorities tombstones
+  pure $ Unboxed.zipWith3 BlockIndex times factsetids tombstones
 
 -- | Encode the table data for a zebra block.
 --

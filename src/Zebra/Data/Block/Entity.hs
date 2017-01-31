@@ -59,7 +59,7 @@ data AttributeAcc =
 --     2. BlockEntity Id
 --     3. BlockAttribute
 --     4. Time
---     5. Priority
+--     5. FactsetId
 --
 entitiesOfFacts :: Boxed.Vector Fact -> Boxed.Vector BlockEntity
 entitiesOfFacts =

@@ -88,7 +88,7 @@ mergeEntityValues ls rs
      in  Stream.MergePullBoth e1 { evIndices = evIxs, evTables = evRcs }
 
   mergeIxs
-   = Unboxed.merge (Stream.mergePullOrd (\(i,_) -> (indexTime i, indexPriority i)))
+   = Unboxed.merge (Stream.mergePullOrd (\(i,_) -> (indexTime i, negate $ indexFactsetId i)))
 
   ordEV ev
    = let e = evEntity ev

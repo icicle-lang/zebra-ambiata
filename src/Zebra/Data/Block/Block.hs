@@ -123,8 +123,8 @@ takeFacts ehash eid aid nfacts = do
     Boxed.zipWith (mkFact ehash eid aid) ixs vs
 
 mkFact :: EntityHash -> EntityId -> AttributeId -> BlockIndex -> Value -> Fact
-mkFact ehash eid aid (BlockIndex time priority tombstone) value =
-  Fact ehash eid aid time priority $
+mkFact ehash eid aid (BlockIndex time factsetid tombstone) value =
+  Fact ehash eid aid time factsetid $
     case tombstone of
       Tombstone ->
         Nothing'
@@ -247,7 +247,7 @@ fromBlockAttribute mindices mtables (BlockAttribute aid n) = do
 
   pure $ Attribute
     (Storable.convert $ Unboxed.map indexTime indices)
-    (Storable.convert $ Unboxed.map indexPriority indices)
+    (Storable.convert $ Unboxed.map indexFactsetId indices)
     (Storable.convert $ Unboxed.map indexTombstone indices)
     table
 
