@@ -70,8 +70,8 @@ renderTime =
   Char8.pack . formatTime defaultTimeLocale "%0Y-%m-%d %H:%M:%S" . toUTCTime
 
 renderFactsetId :: FactsetId -> ByteString
-renderFactsetId (FactsetId factsetid) =
-  Char8.pack $ printf "factsetid=%04x" factsetid
+renderFactsetId (FactsetId factsetId) =
+  Char8.pack $ printf "factset=%08x" factsetId
 
 renderMaybeValue :: Maybe' Value -> ByteString
 renderMaybeValue =

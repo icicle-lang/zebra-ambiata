@@ -119,9 +119,9 @@ bisectBlockFacts split fs =
 
 -- | Generate a pair of facts that can be used as blocks in a single file
 jBlockPair :: (FactsetId -> FactsetId) -> [Encoding] -> Jack ([Fact],[Fact])
-jBlockPair factsetid_mode encs = do
+jBlockPair factsetId_mode encs = do
   fs <- jSmallFacts encs
-  let fs' = fmap (\f -> f { factFactsetId = factsetid_mode $ factFactsetId f }) fs
+  let fs' = fmap (\f -> f { factFactsetId = factsetId_mode $ factFactsetId f }) fs
   split <- choose (0, length fs')
   return $ bisectBlockFacts split fs'
 
@@ -170,7 +170,7 @@ prop_merge_1_entity_no_segfault =
            Left _ -> False
 
 -- | Merge facts for same entity. We should get the right result
--- This is stable - if two facts have the same entity, time and factsetid, favour the first
+-- This is stable - if two facts have the same entity, time and factsetId, favour the first
 prop_merge_1_entity_check_result :: Property
 prop_merge_1_entity_check_result =
   gamble jSmallEntity $ \eid ->
@@ -228,7 +228,7 @@ prop_merge_1_block_2_files =
 -- decide to read file 1 block 2, which also has values for entity Z.
 --
 -- Because this is not stable, we make sure there are no facts with the same key.
--- We do this by just generating even factsetids for the left and odd factsetids for the right.
+-- We do this by just generating even factsetIds for the left and odd factsetIds for the right.
 -- This will still give us interesting sorting cases, but ensure no duplicates.
 prop_merge_2_block_2_files :: Property
 prop_merge_2_block_2_files =

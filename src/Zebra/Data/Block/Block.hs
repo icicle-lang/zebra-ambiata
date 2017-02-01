@@ -123,8 +123,8 @@ takeFacts ehash eid aid nfacts = do
     Boxed.zipWith (mkFact ehash eid aid) ixs vs
 
 mkFact :: EntityHash -> EntityId -> AttributeId -> BlockIndex -> Value -> Fact
-mkFact ehash eid aid (BlockIndex time factsetid tombstone) value =
-  Fact ehash eid aid time factsetid $
+mkFact ehash eid aid (BlockIndex time factsetId tombstone) value =
+  Fact ehash eid aid time factsetId $
     case tombstone of
       Tombstone ->
         Nothing'

@@ -181,7 +181,7 @@ getAttributes = do
 -- @
 --   index {
 --     time         : int
---     factsetid    : int
+--     factset_id   : int
 --     is_tombstone : int
 --   }
 -- @
@@ -189,10 +189,10 @@ getAttributes = do
 --   The physical array structure is as follows:
 --
 -- @
---   index_count     : u32
---   index_time      : int_array value_count
---   index_factsetid : int_array value_count
---   index_tombstone : int_array value_count
+--   index_count      : u32
+--   index_time       : int_array value_count
+--   index_factset_id : int_array value_count
+--   index_tombstone  : int_array value_count
 -- @
 --
 --   /invariant: index_count == sum attr_id_count/
@@ -208,7 +208,7 @@ bIndices xs =
       Unboxed.convert $
       Unboxed.map (unTime . indexTime) xs
 
-    factsetids =
+    factsetIds =
       Unboxed.convert $
       Unboxed.map (unFactsetId . indexFactsetId) xs
 
@@ -218,14 +218,14 @@ bIndices xs =
   in
     Build.word32LE icount <>
     bIntArray times <>
-    bIntArray factsetids <>
+    bIntArray factsetIds <>
     bIntArray tombstones
 
 getIndices :: Get (Unboxed.Vector BlockIndex)
 getIndices = do
   icount <- fromIntegral <$> Get.getWord32le
   itimes <- getIntArray icount
-  ifactsetids <- getIntArray icount
+  ifactsetIds <- getIntArray icount
   itombstones <- getIntArray icount
 
   let
@@ -233,15 +233,15 @@ getIndices = do
       Unboxed.map Time $
       Unboxed.convert itimes
 
-    factsetids =
+    factsetIds =
       Unboxed.map FactsetId $
-      Unboxed.convert ifactsetids
+      Unboxed.convert ifactsetIds
 
     tombstones =
       Unboxed.map tombstoneOfForeign $
       Unboxed.convert itombstones
 
-  pure $ Unboxed.zipWith3 BlockIndex times factsetids tombstones
+  pure $ Unboxed.zipWith3 BlockIndex times factsetIds tombstones
 
 -- | Encode the table data for a zebra block.
 --
