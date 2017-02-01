@@ -26,7 +26,7 @@ error_t zebra_merge_attributes (anemone_mempool_t *pool, zebra_attribute_t **ins
     int64_t pending_copy_from_ix = 0;
 
     while (1) {
-        int64_t alive;
+        int64_t alive = 0;
         int64_t min_time;
         int64_t min_fsid;
         int64_t min_ix;
