@@ -60,7 +60,7 @@ import Anemone.Foreign.Mempool (Mempool(..))
 
 #starttype struct zebra_attribute
 #field times , Ptr Int64
-#field factsetids , Ptr Int64
+#field factset_ids , Ptr Int64
 #field tombstones , Ptr Int64
 #field table , <zebra_table>
 #stoptype
@@ -87,7 +87,7 @@ import Anemone.Foreign.Mempool (Mempool(..))
 #field entities , Ptr <zebra_block_entity>
 #field row_count , Int64
 #field times , Ptr Int64
-#field factsetids , Ptr Int64
+#field factset_ids , Ptr Int64
 #field tombstones , Ptr Int64
 #field table_count , Int64
 #field tables , Ptr <zebra_table>

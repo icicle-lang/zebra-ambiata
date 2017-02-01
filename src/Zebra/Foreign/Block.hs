@@ -88,14 +88,14 @@ peekBlock c_block = do
 
   n_rows <- fmap fromIntegral . peekIO $ p'zebra_block'row_count c_block
   times <- peekVector n_rows $ p'zebra_block'times c_block
-  factsetids <- peekVector n_rows $ p'zebra_block'factsetids c_block
+  factset_ids <- peekVector n_rows $ p'zebra_block'factset_ids c_block
   tombstones <- peekVector n_rows $ p'zebra_block'tombstones c_block
 
   let
     indices =
       Unboxed.zipWith3 BlockIndex
         (Storable.convert $ timesOfForeign times)
-        (Storable.convert $ factsetIdsOfForeign factsetids)
+        (Storable.convert $ factsetIdsOfForeign factset_ids)
         (Storable.convert $ tombstonesOfForeign tombstones)
 
   n_tables <- peekIO $ p'zebra_block'table_count c_block
@@ -125,7 +125,7 @@ pokeBlock pool c_block (Block entities indices tables) = do
       Storable.convert $
       Unboxed.map indexTime indices
 
-    factsetids =
+    factset_ids =
       foreignOfFactsetIds .
       Storable.convert $
       Unboxed.map indexFactsetId indices
@@ -137,7 +137,7 @@ pokeBlock pool c_block (Block entities indices tables) = do
 
   pokeIO (p'zebra_block'row_count c_block) $ fromIntegral n_rows
   pokeVector pool (p'zebra_block'times c_block) times
-  pokeVector pool (p'zebra_block'factsetids c_block) factsetids
+  pokeVector pool (p'zebra_block'factset_ids c_block) factset_ids
   pokeVector pool (p'zebra_block'tombstones c_block) tombstones
 
   let
