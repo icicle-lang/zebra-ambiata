@@ -27,9 +27,9 @@ error_t zebra_merge_attributes (anemone_mempool_t *pool, zebra_attribute_t **ins
 
     while (1) {
         int64_t alive = 0;
-        int64_t min_time;
-        int64_t min_prio;
-        int64_t min_ix;
+        int64_t min_ix = 0;
+        int64_t min_time = 0;
+        int64_t min_prio = 0;
 
         for (int64_t at_ix = 0; at_ix != ins_count; ++at_ix) {
             zebra_attribute_t *in = ins[at_ix];

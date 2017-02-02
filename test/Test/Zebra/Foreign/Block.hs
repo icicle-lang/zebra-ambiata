@@ -162,21 +162,21 @@ check_c_vs_haskell block =
       counterexample "" $
       entities1 === entities2
 
-prop_compare_entities_of_block_valid :: Property
-prop_compare_entities_of_block_valid =
+_prop_compare_entities_of_block_valid :: Property
+_prop_compare_entities_of_block_valid =
   gamble jBlock check_c_vs_haskell
 
-prop_compare_entities_of_block_yolo :: Property
-prop_compare_entities_of_block_yolo =
+_prop_compare_entities_of_block_yolo :: Property
+_prop_compare_entities_of_block_yolo =
   gamble jYoloBlock check_c_vs_haskell
 
-prop_haskell_entities_of_block :: Property
-prop_haskell_entities_of_block =
+_prop_haskell_entities_of_block :: Property
+_prop_haskell_entities_of_block =
   gamble jBlock . check_entities_of_block $
     firstT fromEntityError . hoistEither . entitiesOfBlock
 
-prop_c_entities_of_block :: Property
-prop_c_entities_of_block =
+_prop_c_entities_of_block :: Property
+_prop_c_entities_of_block =
   gamble jBlock . check_entities_of_block $
     firstT fromForeignError . foreignEntitiesOfBlock'
 
@@ -184,8 +184,8 @@ prop_c_block_of_entities :: Property
 prop_c_block_of_entities =
   gamble jBlock $ check_block_of_entities
 
-prop_roundtrip_blocks :: Property
-prop_roundtrip_blocks =
+_prop_roundtrip_blocks :: Property
+_prop_roundtrip_blocks =
   gamble jYoloBlock $ \block ->
   testIO . bracket Mempool.create Mempool.free $ \pool ->
     trippingIO (liftE . foreignOfBlock pool) blockOfForeign block
