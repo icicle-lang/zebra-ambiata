@@ -615,3 +615,18 @@ struct ThriftFact {
     4: optional i32 seconds;
 }
 ```
+
+
+Mandatory Reviewers
+-------------------
+
+Given the current state of this library, its performance sensitivity,
+and is criticality to ongoing production jobs that are still in a very
+early/tentative state. There should be some mandatory review, for
+production implications. Due to time and availability constraints this
+is currently @jystic. So any reviews should hold off on merge until he
+can sweep. Whilst this might be a bit more restrictive then we normally
+are on most libraries, it is the safest option for the short term while
+stability is low / churn is high, and it remains on critical path for
+many production tasks.
+
