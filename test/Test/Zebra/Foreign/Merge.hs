@@ -25,7 +25,6 @@ import           X.Control.Monad.Trans.Either (runEitherT, firstEitherT)
 import           Text.Show.Pretty (ppShow)
 
 import           Test.Zebra.Jack
-import qualified Test.Zebra.Merge.BlockC as TestMerge
 
 import           Zebra.Foreign.Merge
 import           Zebra.Foreign.Entity
@@ -35,6 +34,8 @@ import           Zebra.Data.Core
 import           Zebra.Data.Encoding
 import           Zebra.Data.Entity
 import           Zebra.Data.Fact
+
+import qualified Zebra.Merge.Puller.List as TestMerge
 
 
 --

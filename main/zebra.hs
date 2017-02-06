@@ -12,7 +12,7 @@ import qualified Zebra.Data.Schema as Schema
 import qualified Zebra.Serial as Serial
 import qualified Zebra.Serial.File as Serial
 import qualified Zebra.Merge.BlockC as Merge
-import qualified Zebra.Merge.Puller as MergePuller
+import qualified Zebra.Merge.Puller.File as MergePuller
 import qualified Zebra.Foreign.Block as FoBlock
 import qualified Zebra.Foreign.Entity as FoEntity
 

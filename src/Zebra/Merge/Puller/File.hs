@@ -8,7 +8,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeFamilies #-}
-module Zebra.Merge.Puller
+module Zebra.Merge.Puller.File
   ( blockChainPuller
   , pullerOfStream
   , PullerError (..)
