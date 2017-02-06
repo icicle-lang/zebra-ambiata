@@ -11,7 +11,7 @@
 error_t zebra_agile_clone_attribute (anemone_mempool_t *pool, const zebra_attribute_t *attribute, zebra_attribute_t *into)
 {
     into->times = NULL;
-    into->priorities = NULL;
+    into->factset_ids = NULL;
     into->tombstones = NULL;
     return zebra_agile_clone_table(pool, &attribute->table, &into->table);
 }
@@ -196,7 +196,7 @@ error_t zebra_deep_clone_attribute (anemone_mempool_t *pool, const zebra_attribu
 {
     int64_t capacity = attribute->table.row_capacity;
     into->times = ZEBRA_CLONE_ARRAY (pool, attribute->times, capacity );
-    into->priorities = ZEBRA_CLONE_ARRAY (pool, attribute->priorities, capacity );
+    into->factset_ids = ZEBRA_CLONE_ARRAY (pool, attribute->factset_ids, capacity );
     into->tombstones = ZEBRA_CLONE_ARRAY (pool, attribute->tombstones, capacity );
     return zebra_deep_clone_table(pool, &attribute->table, &into->table);
 }

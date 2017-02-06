@@ -28,7 +28,7 @@ error_t zebra_merge_attributes (anemone_mempool_t *pool, zebra_attribute_t **ins
     while (1) {
         int64_t alive = 0;
         int64_t min_time;
-        int64_t min_prio;
+        int64_t min_fsid;
         int64_t min_ix;
 
         for (int64_t at_ix = 0; at_ix != ins_count; ++at_ix) {
@@ -38,14 +38,14 @@ error_t zebra_merge_attributes (anemone_mempool_t *pool, zebra_attribute_t **ins
 
             if (in_ix < count) {
                 int64_t in_time = in->times[in_ix];
-                int64_t in_prio = in->priorities[in_ix];
+                int64_t in_fsid = in->factset_ids[in_ix];
 
                 bool64_t take_this = (alive == 0)
                     || (in_time < min_time)
-                    || (in_time == min_time && in_prio < min_prio);
+                    || (in_time == min_time && in_fsid > min_fsid);
                 if (take_this) {
                     min_time = in_time;
-                    min_prio = in_prio;
+                    min_fsid = in_fsid;
                     min_ix   = at_ix;
                 }
 

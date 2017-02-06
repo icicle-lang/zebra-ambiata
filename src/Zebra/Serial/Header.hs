@@ -87,11 +87,11 @@ fromBytes name parse bs =
 -- | The zebra 8-byte magic number, including version.
 --
 -- @
---   ||ZEBRA||00000||
+--   ||ZEBRA||00001||
 -- @
 magic :: ByteString
 magic =
-  "||ZEBRA||00000||"
+  "||ZEBRA||00001||"
 
 bMagic :: Builder
 bMagic =

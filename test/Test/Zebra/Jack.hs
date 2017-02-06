@@ -17,7 +17,7 @@ module Test.Zebra.Jack (
   , jAttributeName
   , jTime
   , jDay
-  , jPriority
+  , jFactsetId
 
   -- * Zebra.Data.Encoding
   , jEncoding
@@ -128,7 +128,7 @@ jFact encoding aid =
     <$> jEntityHashId
     <*> pure aid
     <*> jTime
-    <*> jPriority
+    <*> jFactsetId
     <*> (strictMaybe <$> maybeOf (jValue encoding))
 
 jValue :: Encoding -> Jack Value
@@ -189,9 +189,9 @@ jYear :: Jack Year
 jYear =
   mkJack (shrinkTowards 2000) $ QC.choose (1600, 3000)
 
-jPriority :: Jack Priority
-jPriority =
-  Priority <$> choose (0, 100000)
+jFactsetId :: Jack FactsetId
+jFactsetId =
+  FactsetId <$> choose (0, 100000)
 
 jBlock :: Jack Block
 jBlock = do
@@ -236,7 +236,7 @@ jBlockIndex :: Jack BlockIndex
 jBlockIndex =
   BlockIndex
     <$> jTime
-    <*> jPriority
+    <*> jFactsetId
     <*> jTombstone
 
 jEntity :: Jack Entity
@@ -247,7 +247,7 @@ jEntity =
 
 jAttribute :: Jack Attribute
 jAttribute = do
-  (ts, ps, bs) <- List.unzip3 <$> listOf ((,,) <$> jTime <*> jPriority <*> jTombstone)
+  (ts, ps, bs) <- List.unzip3 <$> listOf ((,,) <$> jTime <*> jFactsetId <*> jTombstone)
   Attribute
     <$> pure (Storable.fromList ts)
     <*> pure (Storable.fromList ps)

@@ -31,7 +31,7 @@ import           Zebra.Data.Fact
 data BlockIndex =
   BlockIndex {
       indexTime :: !Time
-    , indexPriority :: !Priority
+    , indexFactsetId :: !FactsetId
     , indexTombstone :: !Tombstone
     } deriving (Eq, Ord, Show, Generic, Typeable)
 
@@ -41,12 +41,12 @@ indicesOfFacts =
     fromFact fact =
       BlockIndex
         (factTime fact)
-        (factPriority fact)
+        (factFactsetId fact)
         (maybe' Tombstone (const NotTombstone) $ factValue fact)
   in
     Unboxed.convert . fmap fromFact
 
 derivingUnbox "BlockIndex"
-  [t| BlockIndex -> (Time, Priority, Tombstone) |]
+  [t| BlockIndex -> (Time, FactsetId, Tombstone) |]
   [| \(BlockIndex x y z) -> (x, y, z) |]
   [| \(x, y, z) -> BlockIndex x y z |]

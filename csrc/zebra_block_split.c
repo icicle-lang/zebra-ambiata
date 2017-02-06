@@ -118,7 +118,7 @@ error_t zebra_entities_of_block (
 
     int64_t block_rows_remaining = block->row_count;
     int64_t *block_times = block->times;
-    int64_t *block_priorities = block->priorities;
+    int64_t *block_factset_ids = block->factset_ids;
     bool64_t *block_tombstones = block->tombstones;
 
     int64_t entity_count = block->entity_count;
@@ -149,11 +149,11 @@ error_t zebra_entities_of_block (
             zebra_attribute_t *attribute = attributes + attribute_id;
 
             attribute->times = block_times;
-            attribute->priorities = block_priorities;
+            attribute->factset_ids = block_factset_ids;
             attribute->tombstones = block_tombstones;
 
             block_times += attribute_row_count;
-            block_priorities += attribute_row_count;
+            block_factset_ids += attribute_row_count;
             block_tombstones += attribute_row_count;
             block_rows_remaining -= attribute_row_count;
 

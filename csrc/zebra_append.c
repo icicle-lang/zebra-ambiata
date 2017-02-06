@@ -21,7 +21,7 @@ error_t zebra_append_attribute (anemone_mempool_t *pool, const zebra_attribute_t
     if (err) return err;
 
     memcpy (out_into->times + out_ix, in->times + ix, out_count * sizeof(int64_t));
-    memcpy (out_into->priorities + out_ix, in->priorities + ix, out_count * sizeof(int64_t));
+    memcpy (out_into->factset_ids + out_ix, in->factset_ids + ix, out_count * sizeof(int64_t));
     memcpy (out_into->tombstones + out_ix, in->tombstones + ix, out_count * sizeof(bool64_t));
 
     return 0;
@@ -171,7 +171,7 @@ error_t zebra_append_block_entity (anemone_mempool_t *pool, zebra_entity_t *enti
     }
 
     block->times = ZEBRA_ENSURE_CAPACITY (pool, block->times, block->row_count, new_row_count);
-    block->priorities = ZEBRA_ENSURE_CAPACITY (pool, block->priorities, block->row_count, new_row_count);
+    block->factset_ids = ZEBRA_ENSURE_CAPACITY (pool, block->factset_ids, block->row_count, new_row_count);
     block->tombstones = ZEBRA_ENSURE_CAPACITY (pool, block->tombstones, block->row_count, new_row_count);
     block->row_count = new_row_count;
 
@@ -181,7 +181,7 @@ error_t zebra_append_block_entity (anemone_mempool_t *pool, zebra_entity_t *enti
         int64_t row_count = attribute->table.row_count;
 
         memcpy (block->times + cur_row_count, attribute->times, row_count * sizeof(block->times[0]));
-        memcpy (block->priorities + cur_row_count, attribute->priorities, row_count * sizeof(block->priorities[0]));
+        memcpy (block->factset_ids + cur_row_count, attribute->factset_ids, row_count * sizeof(block->factset_ids[0]));
         memcpy (block->tombstones + cur_row_count, attribute->tombstones, row_count * sizeof(block->tombstones[0]));
 
         cur_row_count += row_count;

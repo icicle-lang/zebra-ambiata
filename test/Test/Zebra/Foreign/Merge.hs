@@ -47,8 +47,8 @@ jEncodings = listOfN 0 5 jEncoding
 jSmallTime :: Jack Time
 jSmallTime = Time <$> choose (0, 100)
 
-jSmallPriority :: Jack Priority
-jSmallPriority = Priority <$> choose (0, 100)
+jSmallFactsetId :: Jack FactsetId
+jSmallFactsetId = FactsetId <$> choose (0, 100)
 
 -- | Fact for a single entity
 jFactForEntity :: (EntityHash, EntityId) -> Encoding -> AttributeId -> Jack Fact
@@ -57,7 +57,7 @@ jFactForEntity eid encoding aid =
     <$> pure eid
     <*> pure aid
     <*> jSmallTime
-    <*> jSmallPriority
+    <*> jSmallFactsetId
     <*> (strictMaybe <$> maybeOf (jValue encoding))
 
 -- | Generate a bunch of facts that all have the same entity
@@ -66,7 +66,7 @@ jFactsFor :: (EntityHash, EntityId) -> [Encoding] -> Jack [Fact]
 jFactsFor eid encs = sized $ \size -> do
   let encs' = List.zip encs (fmap AttributeId [0..])
   let maxFacts = size `div` length encs
-  List.sort . List.concat <$> mapM (\(enc,aid) -> listOfN 0 maxFacts $ jFactForEntity eid enc aid) encs'
+  sortFacts . List.concat <$> mapM (\(enc,aid) -> listOfN 0 maxFacts $ jFactForEntity eid enc aid) encs'
 
 
 jSmallEntity :: Jack (EntityHash, EntityId)
@@ -83,13 +83,13 @@ jSmallFact encoding aid =
     <$> jSmallEntity
     <*> pure aid
     <*> jSmallTime
-    <*> jSmallPriority
+    <*> jSmallFactsetId
     <*> (strictMaybe <$> maybeOf (jValue encoding))
 
 
 jSmallFacts :: [Encoding] -> Jack [Fact]
 jSmallFacts encodings =
-  fmap (List.sort . List.concat) .
+  fmap (sortFacts . List.concat) .
   scale (`div` max 1 (length encodings)) $
   zipWithM (\e a -> listOf $ jSmallFact e a) encodings (fmap AttributeId [0..])
 
@@ -118,10 +118,10 @@ bisectBlockFacts split fs =
    = List.span (\f' -> factEntity f == factEntity f')
 
 -- | Generate a pair of facts that can be used as blocks in a single file
-jBlockPair :: (Priority -> Priority) -> [Encoding] -> Jack ([Fact],[Fact])
-jBlockPair priority_mode encs = do
+jBlockPair :: (FactsetId -> FactsetId) -> [Encoding] -> Jack ([Fact],[Fact])
+jBlockPair factsetId_mode encs = do
   fs <- jSmallFacts encs
-  let fs' = fmap (\f -> f { factPriority = priority_mode $ factPriority f }) fs
+  let fs' = fmap (\f -> f { factFactsetId = factsetId_mode $ factFactsetId f }) fs
   split <- choose (0, length fs')
   return $ bisectBlockFacts split fs'
 
@@ -138,16 +138,18 @@ testForeignOfFacts pool encs facts = do
 -- This must be a stable sort.
 testMergeFacts :: [Encoding] -> [Fact] -> Boxed.Vector Entity
 testMergeFacts encs facts =
-  let Right block    = blockOfFacts (Boxed.fromList encs) (Boxed.fromList $ List.sortBy cmp facts)
+  let Right block    = blockOfFacts (Boxed.fromList encs) (Boxed.fromList $ sortFacts facts)
       Right entities = entitiesOfBlock block
   in  entities
+
+sortFacts :: [Fact] -> [Fact]
+sortFacts = List.sortBy cmp
  where
   cmp a b
    = sortbits a `compare` sortbits b
   -- We are basically sorting by everything except the value
   sortbits f
-   = (factEntityHash f, factEntityId f, factAttributeId f, factTime f, factPriority f)
-
+   = (factEntityHash f, factEntityId f, factAttributeId f, factTime f, negate $ factFactsetId f)
 
 -- | Merge facts for same entity. We should not segfault
 prop_merge_1_entity_no_segfault :: Property
@@ -168,7 +170,7 @@ prop_merge_1_entity_no_segfault =
            Left _ -> False
 
 -- | Merge facts for same entity. We should get the right result
--- This is stable - if two facts have the same entity, time and priority, favour the first
+-- This is stable - if two facts have the same entity, time and factsetId, favour the first
 prop_merge_1_entity_check_result :: Property
 prop_merge_1_entity_check_result =
   gamble jSmallEntity $ \eid ->
@@ -226,13 +228,13 @@ prop_merge_1_block_2_files =
 -- decide to read file 1 block 2, which also has values for entity Z.
 --
 -- Because this is not stable, we make sure there are no facts with the same key.
--- We do this by just generating even priorities for the left and odd priorities for the right.
+-- We do this by just generating even factsetIds for the left and odd factsetIds for the right.
 -- This will still give us interesting sorting cases, but ensure no duplicates.
 prop_merge_2_block_2_files :: Property
 prop_merge_2_block_2_files =
   gamble jEncodings $ \encs ->
-  gamble (jBlockPair evenPriorities encs) $ \(facts11, facts12) ->
-  gamble (jBlockPair oddPriorities  encs) $ \(facts21, facts22) ->
+  gamble (jBlockPair evenFactsetId encs) $ \(facts11, facts12) ->
+  gamble (jBlockPair oddFactsetId  encs) $ \(facts21, facts22) ->
   gamble jGarbageCollectEvery $ \gcEvery ->
   testIO . withSegv (ppShow (encs, (facts11,facts12), (facts21, facts22))) $ do
     let mkBlock = blockOfFacts (Boxed.fromList encs) . Boxed.fromList
@@ -253,8 +255,8 @@ prop_merge_2_block_2_files =
                 -> Boxed.toList expect === m'
               Left  e' -> counterexample e' False
  where
-  evenPriorities (Priority i) = Priority (i * 2)
-  oddPriorities (Priority i) = Priority (i * 2 + 1)
+  evenFactsetId (FactsetId i) = FactsetId (i * 2)
+  oddFactsetId (FactsetId i) = FactsetId (i * 2 + 1)
 
 
 return []

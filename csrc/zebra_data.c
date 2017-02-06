@@ -83,7 +83,7 @@ error_t zebra_add_row (
   , zebra_entity_t *entity
   , int32_t attribute_id
   , int64_t time
-  , int64_t priority
+  , int64_t factset_id
   , bool64_t tombstone
   , zebra_column_t **out_columns
   , int64_t *out_index )
@@ -104,11 +104,11 @@ error_t zebra_add_row (
     *out_index = count;
 
     int64_t *times = attribute->times;
-    int64_t *priorities = attribute->priorities;
+    int64_t *factset_ids = attribute->factset_ids;
     bool64_t *tombstones = attribute->tombstones;
 
     times[count] = time;
-    priorities[count] = priority;
+    factset_ids[count] = factset_id;
     tombstones[count] = tombstone;
 
     table->row_count = count + 1;
