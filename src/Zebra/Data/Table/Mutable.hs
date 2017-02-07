@@ -52,8 +52,8 @@ import           X.Data.Vector.Grow (Grow)
 import qualified X.Data.Vector.Grow as Grow
 
 import           Zebra.Data.Core
-import           Zebra.Data.Encoding
 import           Zebra.Data.Fact
+import           Zebra.Data.Schema
 import           Zebra.Data.Table (Table(..), Column(..))
 
 
@@ -76,9 +76,9 @@ data MutableError =
   | MutableExpectedArrayColumn !FoundMColumn
   | MutableNoMoreColumns
   | MutableLeftoverColumns ![FoundMColumn]
-  | MutableEncodingMismatch !Encoding !Value
-  | MutableStructFieldsMismatch !(Boxed.Vector FieldEncoding) !(Boxed.Vector (Maybe' Value))
-  | MutableRequiredFieldMissing !Encoding
+  | MutableSchemaMismatch !Schema !Value
+  | MutableStructFieldsMismatch !(Boxed.Vector FieldSchema) !(Boxed.Vector (Maybe' Value))
+  | MutableRequiredFieldMissing !Schema
   | MutableAttributeNotFound !AttributeId
     deriving (Eq, Ord, Show)
 
@@ -103,24 +103,24 @@ renderMutableError = \case
     "Expected to find more columns in table - ran out when trying to insert."
   MutableLeftoverColumns columns ->
     "Found more columns than expected in table: " <> renderFoundMColumns columns
-  MutableEncodingMismatch encoding value ->
-    "Encoding did not match value:" <>
+  MutableSchemaMismatch schema value ->
+    "Schema did not match value:" <>
     "\n" <>
-    "\n  encoding =" <>
-    "\n    " <> T.pack (show encoding) <>
+    "\n  schema =" <>
+    "\n    " <> T.pack (show schema) <>
     "\n" <>
     "\n  value =" <>
     "\n    " <> T.pack (show value)
   MutableStructFieldsMismatch fields values ->
-    "Struct field encodings did not match their values:" <>
+    "Struct field schemas did not match their values:" <>
     "\n" <>
-    "\n  field encodings =" <>
+    "\n  field schemas =" <>
     "\n    " <> T.pack (show fields) <>
     "\n" <>
     "\n  fields values =" <>
     "\n    " <> T.pack (show values)
-  MutableRequiredFieldMissing encoding ->
-    "Struct required field missing: " <> T.pack (show encoding)
+  MutableRequiredFieldMissing schema ->
+    "Struct required field missing: " <> T.pack (show schema)
   MutableAttributeNotFound (AttributeId aid) ->
     "Attribute not found: " <> T.pack (show aid)
 
@@ -225,12 +225,12 @@ appendColumn mf = \case
 ------------------------------------------------------------------------
 
 newtype MTableBox s =
-  MTableBox (Boxed.Vector (Encoding, MTable s))
+  MTableBox (Boxed.Vector (Schema, MTable s))
 
-mkMTableBox :: PrimMonad m => Boxed.Vector Encoding -> m (MTableBox (PrimState m))
-mkMTableBox encodings = do
-  xs <- traverse newMTable encodings
-  pure . MTableBox $ Boxed.zip encodings xs
+mkMTableBox :: PrimMonad m => Boxed.Vector Schema -> m (MTableBox (PrimState m))
+mkMTableBox schemas = do
+  xs <- traverse newMTable schemas
+  pure . MTableBox $ Boxed.zip schemas xs
 
 insertFact ::
   PrimMonad m =>
@@ -242,18 +242,18 @@ insertFact (MTableBox tables) aid@(AttributeId ix) mvalue = do
   case tables Boxed.!? fromIntegral ix of
     Nothing ->
       left $ MutableAttributeNotFound aid
-    Just (encoding, table) ->
-      insertMaybeValue encoding table mvalue
+    Just (schema, table) ->
+      insertMaybeValue schema table mvalue
 
 ------------------------------------------------------------------------
 
 tablesOfFacts ::
-  Boxed.Vector Encoding ->
+  Boxed.Vector Schema ->
   Boxed.Vector Fact ->
   Either MutableError (Boxed.Vector Table)
-tablesOfFacts encodings facts =
+tablesOfFacts schemas facts =
   runST $ runEitherT $ do
-    box <- lift $ mkMTableBox encodings
+    box <- lift $ mkMTableBox schemas
 
     for_ facts $ \fact ->
       insertFact box (factAttributeId fact) (factValue fact)
@@ -262,62 +262,62 @@ tablesOfFacts encodings facts =
 
 insertMaybeValue ::
   PrimMonad m =>
-  Encoding ->
+  Schema ->
   MTable (PrimState m) ->
   Maybe' Value ->
   EitherT MutableError m ()
-insertMaybeValue encoding table = \case
+insertMaybeValue schema table = \case
   Nothing' -> do
-    withMTable table $ insertDefault encoding
+    withMTable table $ insertDefault schema
   Just' value -> do
-    withMTable table $ insertValue encoding value
+    withMTable table $ insertValue schema value
 
 insertValue ::
   PrimMonad m =>
-  Encoding ->
+  Schema ->
   Value ->
   StateT (MTable (PrimState m)) (EitherT MutableError m) ()
-insertValue encoding =
-  case encoding of
-    BoolEncoding -> \case
+insertValue schema =
+  case schema of
+    BoolSchema -> \case
       BoolValue False ->
         insertInt 0
       BoolValue True ->
         insertInt 1
       value ->
-        lift . left $ MutableEncodingMismatch encoding value
+        lift . left $ MutableSchemaMismatch schema value
 
-    Int64Encoding -> \case
+    Int64Schema -> \case
       Int64Value x ->
         insertInt $ fromIntegral x
       value ->
-        lift . left $ MutableEncodingMismatch encoding value
+        lift . left $ MutableSchemaMismatch schema value
 
-    DoubleEncoding -> \case
+    DoubleSchema -> \case
       DoubleValue x ->
         insertDouble x
       value ->
-        lift . left $ MutableEncodingMismatch encoding value
+        lift . left $ MutableSchemaMismatch schema value
 
-    StringEncoding -> \case
+    StringSchema -> \case
       StringValue x ->
         insertString $ T.encodeUtf8 x
       value ->
-        lift . left $ MutableEncodingMismatch encoding value
+        lift . left $ MutableSchemaMismatch schema value
 
-    DateEncoding -> \case
+    DateSchema -> \case
       DateValue x ->
         insertInt . fromIntegral $ fromDay x
       value ->
-        lift . left $ MutableEncodingMismatch encoding value
+        lift . left $ MutableSchemaMismatch schema value
 
-    StructEncoding fields -> \case
+    StructSchema fields -> \case
       StructValue values ->
         insertStruct (fmap snd fields) values
       value ->
-        lift . left $ MutableEncodingMismatch encoding value
+        lift . left $ MutableSchemaMismatch schema value
 
-    ListEncoding iencoding -> \case
+    ListSchema ischema -> \case
       ListValue xs ->
         withArray $ \ns -> do
           let
@@ -326,7 +326,7 @@ insertValue encoding =
 
             insertElem x = do
               table <- get
-              insertValue iencoding x
+              insertValue ischema x
               MTable columns <- get
               if Boxed.null columns then
                 put table
@@ -340,11 +340,11 @@ insertValue encoding =
           put $ MTable Boxed.empty
 
       value ->
-        lift . left $ MutableEncodingMismatch encoding value
+        lift . left $ MutableSchemaMismatch schema value
 
 insertStruct ::
   PrimMonad m =>
-  Boxed.Vector FieldEncoding ->
+  Boxed.Vector FieldSchema ->
   Boxed.Vector (Maybe' Value) ->
   StateT (MTable (PrimState m)) (EitherT MutableError m) ()
 insertStruct fields values =
@@ -357,26 +357,26 @@ insertStruct fields values =
 
 insertField ::
   PrimMonad m =>
-  FieldEncoding ->
+  FieldSchema ->
   Maybe' Value ->
   StateT (MTable (PrimState m)) (EitherT MutableError m) ()
-insertField fencoding mvalue =
-  case fencoding of
-    FieldEncoding RequiredField encoding ->
+insertField fschema mvalue =
+  case fschema of
+    FieldSchema RequiredField schema ->
       case mvalue of
         Nothing' ->
-          lift . left $ MutableRequiredFieldMissing encoding
+          lift . left $ MutableRequiredFieldMissing schema
         Just' value ->
-          insertValue encoding value
+          insertValue schema value
 
-    FieldEncoding OptionalField encoding ->
+    FieldSchema OptionalField schema ->
       case mvalue of
         Nothing' -> do
           insertInt 0
-          insertDefault encoding
+          insertDefault schema
         Just' value -> do
           insertInt 1
-          insertValue encoding value
+          insertValue schema value
 
 ------------------------------------------------------------------------
 
@@ -496,36 +496,36 @@ insertString bs = do
 
 insertDefaultColumn ::
   PrimMonad m =>
-  FieldEncoding ->
+  FieldSchema ->
   StateT (MTable (PrimState m)) (EitherT MutableError m) ()
 insertDefaultColumn = \case
-  FieldEncoding RequiredField encoding ->
-    insertDefault encoding
-  FieldEncoding OptionalField encoding -> do
+  FieldSchema RequiredField schema ->
+    insertDefault schema
+  FieldSchema OptionalField schema -> do
     insertInt 0
-    insertDefault encoding
+    insertDefault schema
 
 insertDefault ::
   PrimMonad m =>
-  Encoding ->
+  Schema ->
   StateT (MTable (PrimState m)) (EitherT MutableError m) ()
 insertDefault = \case
-  BoolEncoding ->
+  BoolSchema ->
     insertInt 0
-  Int64Encoding ->
+  Int64Schema ->
     insertInt 0
-  DoubleEncoding ->
+  DoubleSchema ->
     insertDouble 0
-  StringEncoding ->
+  StringSchema ->
     insertString B.empty
-  DateEncoding ->
+  DateSchema ->
     insertInt 0
-  StructEncoding fields ->
+  StructSchema fields ->
     if Boxed.null fields then
       insertInt 0
     else
       traverse_ (insertDefaultColumn . snd) fields
-  ListEncoding _ ->
+  ListSchema _ ->
     withArray $ \ns -> do
       Grow.add ns 0
       put $ MTable Boxed.empty
@@ -548,37 +548,37 @@ newMArrayColumn :: PrimMonad m => MTable (PrimState m) -> m (MTable (PrimState m
 newMArrayColumn vs =
   MTable . Boxed.singleton . flip MArrayColumn vs <$> Grow.new 4
 
-newMStructColumn :: PrimMonad m => FieldEncoding -> m (MTable (PrimState m))
+newMStructColumn :: PrimMonad m => FieldSchema -> m (MTable (PrimState m))
 newMStructColumn = \case
-  FieldEncoding RequiredField encoding ->
-    newMTable encoding
-  FieldEncoding OptionalField encoding -> do
+  FieldSchema RequiredField schema ->
+    newMTable schema
+  FieldSchema OptionalField schema -> do
     b <- newMIntColumn
-    x <- newMTable encoding
+    x <- newMTable schema
     pure . MTable $
       mtableColumns b <>
       mtableColumns x
 
-newMTable :: PrimMonad m => Encoding -> m (MTable (PrimState m))
+newMTable :: PrimMonad m => Schema -> m (MTable (PrimState m))
 newMTable = \case
-  BoolEncoding ->
+  BoolSchema ->
     newMIntColumn
-  Int64Encoding ->
+  Int64Schema ->
     newMIntColumn
-  DoubleEncoding ->
+  DoubleSchema ->
     newMDoubleColumn
-  StringEncoding ->
+  StringSchema ->
     newMArrayColumn =<< newMByteColumn
-  DateEncoding ->
+  DateSchema ->
     newMIntColumn
-  StructEncoding fields ->
+  StructSchema fields ->
     if Boxed.null fields then
       newMIntColumn
     else
       fmap (MTable . Boxed.concatMap mtableColumns) $
       traverse (newMStructColumn . snd) fields
-  ListEncoding encoding ->
-    newMArrayColumn =<< newMTable encoding
+  ListSchema schema ->
+    newMArrayColumn =<< newMTable schema
 
 ------------------------------------------------------------------------
 

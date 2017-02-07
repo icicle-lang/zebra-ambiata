@@ -26,7 +26,7 @@ import qualified Data.Vector as Boxed
 import           P
 
 import           Zebra.Data.Core
-import           Zebra.Data.Schema
+import           Zebra.Data.Encoding
 import           Zebra.Serial.Array
 
 
@@ -42,7 +42,7 @@ import           Zebra.Serial.Array
 --     attr_schema_string : byte_array
 --   }
 -- @
-bHeader :: Map AttributeName Schema -> Builder
+bHeader :: Map AttributeName Encoding -> Builder
 bHeader features =
   let
     n_attrs =
@@ -57,7 +57,7 @@ bHeader features =
 
     schema =
       bStrings .
-      fmap (T.encodeUtf8 . renderSchema) .
+      fmap (T.encodeUtf8 . renderEncoding) .
       Boxed.fromList $
       Map.elems features
   in
@@ -66,12 +66,12 @@ bHeader features =
     names <>
     schema
 
-getHeader :: Get (Map AttributeName Schema)
+getHeader :: Get (Map AttributeName Encoding)
 getHeader = do
   () <- getMagic
   n <- fromIntegral <$> Get.getWord32le
   ns <- fmap (AttributeName . T.decodeUtf8) <$> getStrings n
-  ss <- traverse (fromBytes "schema" parseSchema) =<< getStrings n
+  ss <- traverse (fromBytes "encoding" parseEncoding) =<< getStrings n
   pure .
     Map.fromList . toList $
     Boxed.zip ns ss

@@ -40,7 +40,7 @@ import qualified X.Data.Vector.Stream as Stream
 
 import           Zebra.Data.Block
 import           Zebra.Data.Core
-import           Zebra.Data.Schema
+import           Zebra.Data.Encoding
 import           Zebra.Data.Table
 import           Zebra.Serial.Array
 
@@ -53,11 +53,11 @@ bBlock block =
   bIndices (blockIndices block) <>
   bTables (blockTables block)
 
-getBlock :: Boxed.Vector Schema -> Get Block
-getBlock schemas = do
+getBlock :: Boxed.Vector Encoding -> Get Block
+getBlock encodings = do
   entities <- getEntities
   indices <- getIndices
-  tables <- getTables schemas
+  tables <- getTables encodings
   pure $
     Block entities indices tables
 
@@ -257,7 +257,7 @@ getIndices = do
 -- @
 --
 --   'table_data' contains flattened arrays of values, exactly how many arrays
---   and what format is described by the schema in the header.
+--   and what format is described by the format in the header.
 --
 -- @
 --   table_count     : u32
@@ -291,19 +291,19 @@ bTables xs =
     bIntArray counts <>
     foldMap bTable xs
 
-getTables :: Boxed.Vector Schema -> Get (Boxed.Vector Table)
-getTables schemas = do
+getTables :: Boxed.Vector Encoding -> Get (Boxed.Vector Table)
+getTables encodings = do
   tcount <- fromIntegral <$> Get.getWord32le
   ids <- fmap fromIntegral . Boxed.convert <$> getIntArray tcount
   counts <- fmap fromIntegral . Boxed.convert <$> getIntArray tcount
 
   let
     get aid n =
-      case schemas Boxed.!? aid of
+      case encodings Boxed.!? aid of
         Nothing ->
           fail $ "Cannot read table, unknown attribute-id: " <> show aid
-        Just schema ->
-          getTable n schema
+        Just format ->
+          getTable n format
 
   Boxed.zipWithM get ids counts
 
@@ -311,9 +311,9 @@ bTable :: Table -> Builder
 bTable =
   foldMap bColumn . tableColumns
 
-getTable :: Int -> Schema -> Get Table
-getTable n (Schema fmts) = do
-  Table . Boxed.fromList <$> traverse (getColumn n) fmts
+getTable :: Int -> Encoding -> Get Table
+getTable n (Encoding columns) = do
+  Table . Boxed.fromList <$> traverse (getColumn n) columns
 
 bColumn :: Column -> Builder
 bColumn = \case
@@ -328,17 +328,17 @@ bColumn = \case
     Build.word32LE (fromIntegral $ rowsOfTable rec) <>
     bTable rec
 
-getColumn :: Int -> Format -> Get Column
+getColumn :: Int -> ColumnEncoding -> Get Column
 getColumn n = \case
-  ByteFormat ->
+  ByteEncoding ->
     ByteColumn <$> getByteArray
-  IntFormat ->
+  IntEncoding ->
     IntColumn <$> getIntArray n
-  DoubleFormat ->
+  DoubleEncoding ->
     DoubleColumn . coerce <$> getIntArray n
-  ArrayFormat schema -> do
+  ArrayEncoding format -> do
     ns <- getIntArray n
     rows <- Get.getWord32le
-    rec <- getTable (fromIntegral rows) schema
+    rec <- getTable (fromIntegral rows) format
     pure $
       ArrayColumn ns rec

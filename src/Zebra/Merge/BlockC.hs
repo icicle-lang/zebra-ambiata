@@ -64,7 +64,7 @@ mergeBlocks :: MonadIO m
 
 mergeBlocks options files = do
   pool <- liftIO Mempool.create
-  merger <- foreign $ mergeManyInit pool
+  merger <- foreignT $ mergeManyInit pool
   let state0 = MergeState Map.empty pool merger Nothing
   -- TODO bracket/catch and clean up last memory pool on error
   -- need to convert state into an IORef for this
@@ -76,7 +76,7 @@ mergeBlocks options files = do
 
   go state0 = do
     state <- gcCheck state0
-    pop <- foreign $ mergeManyPop (stateMempool state) (stateMergeMany state)
+    pop <- foreignT $ mergeManyPop (stateMempool state) (stateMergeMany state)
     case pop of
       Nothing ->
         return state
@@ -108,8 +108,8 @@ mergeBlocks options files = do
         return state
       Just block -> do
         cblock <- lift $ foreignOfBlock (stateMempool state) block
-        entities <- foreign $ foreignEntitiesOfBlock (stateMempool state) cblock
-        foreign $ mergeManyPush (stateMempool state) (stateMergeMany state) (Boxed.convert entities)
+        entities <- foreignT $ foreignEntitiesOfBlock (stateMempool state) cblock
+        foreignT $ mergeManyPush (stateMempool state) (stateMergeMany state) (Boxed.convert entities)
 
         -- TODO do this better
         case Boxed.uncons $ Boxed.reverse entities of
@@ -130,12 +130,12 @@ mergeBlocks options files = do
 
   gcRun state = do
     pool' <- liftIO Mempool.create
-    merger' <- foreign $ mergeManyClone pool' $ stateMergeMany state
+    merger' <- foreignT $ mergeManyClone pool' $ stateMergeMany state
     liftIO $ Mempool.free $ stateMempool state
     return state { stateMempool = pool', stateMergeMany = merger' }
 
-  centityId = foreign . peekEntityId . unCEntity
-  centityHash = foreign . peekEntityHash . unCEntity
+  centityId = foreignT . peekEntityId . unCEntity
+  centityHash = foreignT . peekEntityHash . unCEntity
 
-  foreign = firstT MergeForeign
+  foreignT = firstT MergeForeign
 

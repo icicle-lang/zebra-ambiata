@@ -12,8 +12,8 @@ module Zebra.Data.Table (
   , ValueError(..)
 
   , rowsOfTable
-  , schemaOfTable
-  , schemaOfColumn
+  , encodingOfTable
+  , encodingOfColumn
 
   , tableOfMaybeValue
   , tableOfValue
@@ -69,11 +69,11 @@ data Column =
     deriving (Eq, Ord, Generic, Typeable)
 
 data TableError =
-    TableEncodingMismatch !Encoding !Value
-  | TableRequiredFieldMissing !Encoding
+    TableSchemaMismatch !Schema !Value
+  | TableRequiredFieldMissing !Schema
   | TableCannotConcatEmpty
   | TableAppendColumnsMismatch !Column !Column
-  | TableStructFieldsMismatch !(Boxed.Vector FieldEncoding) !(Boxed.Vector (Maybe' Value))
+  | TableStructFieldsMismatch !(Boxed.Vector FieldSchema) !(Boxed.Vector (Maybe' Value))
     deriving (Eq, Ord, Show, Generic, Typeable)
 
 data ValueError =
@@ -84,7 +84,7 @@ data ValueError =
   | ValueStringLengthMismatch !Int !Int
   | ValueListLengthMismatch !Int !Int
   | ValueNoMoreColumns
-  | ValueLeftoverColumns !Schema
+  | ValueLeftoverColumns !Encoding
     deriving (Eq, Ord, Show, Generic, Typeable)
 
 instance Show Table where
@@ -95,64 +95,64 @@ instance Show Column where
   showsPrec =
     gshowsPrec
 
-tableOfMaybeValue :: Encoding -> Maybe' Value -> Either TableError Table
-tableOfMaybeValue encoding = \case
+tableOfMaybeValue :: Schema -> Maybe' Value -> Either TableError Table
+tableOfMaybeValue schema = \case
   Nothing' ->
-    pure $ defaultOfEncoding encoding
+    pure $ defaultOfSchema schema
   Just' value ->
-    tableOfValue encoding value
+    tableOfValue schema value
 
-tableOfValue :: Encoding -> Value -> Either TableError Table
-tableOfValue encoding =
-  case encoding of
-    BoolEncoding -> \case
+tableOfValue :: Schema -> Value -> Either TableError Table
+tableOfValue schema =
+  case schema of
+    BoolSchema -> \case
       BoolValue False ->
         pure $ singletonInt 0
       BoolValue True ->
         pure $ singletonInt 1
       value ->
-        Left $ TableEncodingMismatch encoding value
+        Left $ TableSchemaMismatch schema value
 
-    Int64Encoding -> \case
+    Int64Schema -> \case
       Int64Value x ->
         pure . singletonInt $ fromIntegral x
       value ->
-        Left $ TableEncodingMismatch encoding value
+        Left $ TableSchemaMismatch schema value
 
-    DoubleEncoding -> \case
+    DoubleSchema -> \case
       DoubleValue x ->
         pure $ singletonDouble x
       value ->
-        Left $ TableEncodingMismatch encoding value
+        Left $ TableSchemaMismatch schema value
 
-    StringEncoding -> \case
+    StringSchema -> \case
       StringValue x ->
         pure . singletonString $ T.encodeUtf8 x
       value ->
-        Left $ TableEncodingMismatch encoding value
+        Left $ TableSchemaMismatch schema value
 
-    DateEncoding -> \case
+    DateSchema -> \case
       DateValue x ->
         pure . singletonInt . fromIntegral $ fromDay x
       value ->
-        Left $ TableEncodingMismatch encoding value
+        Left $ TableSchemaMismatch schema value
 
-    StructEncoding fields -> \case
+    StructSchema fields -> \case
       StructValue values ->
         tableOfStruct (fmap snd fields) values
       value ->
-        Left $ TableEncodingMismatch encoding value
+        Left $ TableSchemaMismatch schema value
 
-    ListEncoding iencoding -> \case
+    ListSchema ischema -> \case
       ListValue xs -> do
-        vs0 <- traverse (tableOfValue iencoding) xs
+        vs0 <- traverse (tableOfValue ischema) xs
         vs1 <- concatTables vs0
         pure . Table . Boxed.singleton $
           ArrayColumn (Storable.singleton . fromIntegral $ Boxed.length xs) vs1
       value ->
-        Left $ TableEncodingMismatch encoding value
+        Left $ TableSchemaMismatch schema value
 
-tableOfStruct :: Boxed.Vector FieldEncoding -> Boxed.Vector (Maybe' Value) -> Either TableError Table
+tableOfStruct :: Boxed.Vector FieldSchema -> Boxed.Vector (Maybe' Value) -> Either TableError Table
 tableOfStruct fields values =
   if Boxed.null fields then
     pure $ singletonInt 0
@@ -162,35 +162,35 @@ tableOfStruct fields values =
     fmap (Table . Boxed.concatMap tableColumns) $
     Boxed.zipWithM tableOfField fields values
 
-tableOfField :: FieldEncoding -> Maybe' Value -> Either TableError Table
-tableOfField fencoding mvalue =
-  case fencoding of
-    FieldEncoding RequiredField encoding ->
+tableOfField :: FieldSchema -> Maybe' Value -> Either TableError Table
+tableOfField fschema mvalue =
+  case fschema of
+    FieldSchema RequiredField schema ->
       case mvalue of
         Nothing' ->
-          Left $ TableRequiredFieldMissing encoding
+          Left $ TableRequiredFieldMissing schema
 
         Just' value ->
-          tableOfValue encoding value
+          tableOfValue schema value
 
-    FieldEncoding OptionalField encoding ->
+    FieldSchema OptionalField schema ->
       case mvalue of
         Nothing' ->
           pure . Table $
             tableColumns (singletonInt 0) <>
-            tableColumns (defaultOfEncoding encoding)
+            tableColumns (defaultOfSchema schema)
 
         Just' value -> do
-          struct <- tableOfValue encoding value
+          struct <- tableOfValue schema value
           pure . Table $
             tableColumns (singletonInt 1) <>
             tableColumns struct
 
 ------------------------------------------------------------------------
 
-valuesOfTable :: Encoding -> Table -> Either ValueError (Boxed.Vector Value)
-valuesOfTable encoding table0 =
-  withTable table0 $ takeValue encoding
+valuesOfTable :: Schema -> Table -> Either ValueError (Boxed.Vector Value)
+valuesOfTable schema table0 =
+  withTable table0 $ takeValue schema
 
 withTable :: Table -> EitherT ValueError (State Table) a -> Either ValueError a
 withTable table0 m =
@@ -201,7 +201,7 @@ withTable table0 m =
     if Boxed.null $ tableColumns table then
       result
     else
-      Left . ValueLeftoverColumns $ schemaOfTable table
+      Left . ValueLeftoverColumns $ encodingOfTable table
 
 takeNext :: EitherT ValueError (State Table) Column
 takeNext = do
@@ -251,26 +251,26 @@ takeBool :: EitherT ValueError (State Table) (Boxed.Vector Bool)
 takeBool =
   fmap (fmap (/= 0) . Boxed.convert) $ takeInt
 
-takeValue :: Encoding -> EitherT ValueError (State Table) (Boxed.Vector Value)
+takeValue :: Schema -> EitherT ValueError (State Table) (Boxed.Vector Value)
 takeValue = \case
-  BoolEncoding ->
+  BoolSchema ->
     fmap (fmap BoolValue) takeBool
 
-  Int64Encoding ->
+  Int64Schema ->
     fmap (fmap (Int64Value . fromIntegral) . Boxed.convert) takeInt
 
-  DoubleEncoding ->
+  DoubleSchema ->
     fmap (fmap DoubleValue . Boxed.convert) takeDouble
 
-  StringEncoding ->
+  StringSchema ->
     takeArray $ \ns -> do
       bs <- takeByte
       fmap (fmap $ StringValue . T.decodeUtf8) . hoistEither $ restring ns bs
 
-  DateEncoding ->
+  DateSchema ->
     fmap (fmap (DateValue . toDay . fromIntegral) . Boxed.convert) takeInt
 
-  StructEncoding fields ->
+  StructSchema fields ->
     if Boxed.null fields then do
       xs <- takeInt
       pure $ Boxed.replicate (Storable.length xs) (StructValue Boxed.empty)
@@ -278,20 +278,20 @@ takeValue = \case
       xss <- traverse (takeField . snd) fields
       pure . fmap StructValue $ Boxed.transpose xss
 
-  ListEncoding encoding ->
+  ListSchema schema ->
     takeArray $ \ns -> do
-      xs <- takeValue encoding
+      xs <- takeValue schema
       fmap (fmap ListValue) . hoistEither $ relist ns xs
 
-takeField :: FieldEncoding -> EitherT ValueError (State Table) (Boxed.Vector (Maybe' Value))
-takeField fencoding =
-  case fencoding of
-    FieldEncoding RequiredField encoding ->
-      fmap (fmap Just') $ takeValue encoding
+takeField :: FieldSchema -> EitherT ValueError (State Table) (Boxed.Vector (Maybe' Value))
+takeField fschema =
+  case fschema of
+    FieldSchema RequiredField schema ->
+      fmap (fmap Just') $ takeValue schema
 
-    FieldEncoding OptionalField encoding -> do
+    FieldSchema OptionalField schema -> do
       bs <- takeBool
-      xs <- takeValue encoding
+      xs <- takeValue schema
       pure $ Boxed.zipWith remaybe bs xs
 
 remaybe :: Bool -> a -> Maybe' a
@@ -345,24 +345,24 @@ rowsOfTable (Table columns) =
     Just (ArrayColumn xs _) ->
       Storable.length xs
 
-schemaOfTable :: Table -> Schema
-schemaOfTable =
-  schemaOfColumns . Boxed.toList . tableColumns
+encodingOfTable :: Table -> Encoding
+encodingOfTable =
+  encodingOfColumns . Boxed.toList . tableColumns
 
-schemaOfColumns :: [Column] -> Schema
-schemaOfColumns =
-  Schema . fmap schemaOfColumn
+encodingOfColumns :: [Column] -> Encoding
+encodingOfColumns =
+  Encoding . fmap encodingOfColumn
 
-schemaOfColumn :: Column -> Format
-schemaOfColumn = \case
+encodingOfColumn :: Column -> ColumnEncoding
+encodingOfColumn = \case
   ByteColumn _ ->
-    ByteFormat
+    ByteEncoding
   IntColumn _ ->
-    IntFormat
+    IntEncoding
   DoubleColumn _ ->
-    DoubleFormat
+    DoubleEncoding
   ArrayColumn _ table ->
-    ArrayFormat $ schemaOfTable table
+    ArrayEncoding $ encodingOfTable table
 
 concatTables :: Boxed.Vector Table -> Either TableError Table
 concatTables xss0 =
@@ -447,32 +447,32 @@ emptyArray :: Table -> Table
 emptyArray vs =
   Table . Boxed.singleton $ ArrayColumn Storable.empty vs
 
-emptyOfEncoding :: Encoding -> Table
-emptyOfEncoding = \case
-  BoolEncoding ->
+emptyOfSchema :: Schema -> Table
+emptyOfSchema = \case
+  BoolSchema ->
     emptyInt
-  Int64Encoding ->
+  Int64Schema ->
     emptyInt
-  DoubleEncoding ->
+  DoubleSchema ->
     emptyDouble
-  StringEncoding ->
+  StringSchema ->
     emptyArray emptyByte
-  DateEncoding ->
+  DateSchema ->
     emptyInt
-  StructEncoding fields ->
+  StructSchema fields ->
     if Boxed.null fields then
       emptyInt
     else
-      Table $ Boxed.concatMap (tableColumns . emptyOfFieldEncoding . snd) fields
-  ListEncoding encoding ->
-    emptyArray $ emptyOfEncoding encoding
+      Table $ Boxed.concatMap (tableColumns . emptyOfFieldSchema . snd) fields
+  ListSchema schema ->
+    emptyArray $ emptyOfSchema schema
 
-emptyOfFieldEncoding :: FieldEncoding -> Table
-emptyOfFieldEncoding = \case
-  FieldEncoding RequiredField encoding ->
-    emptyOfEncoding encoding
-  FieldEncoding OptionalField encoding ->
-    Table $ tableColumns emptyInt <> tableColumns (emptyOfEncoding encoding)
+emptyOfFieldSchema :: FieldSchema -> Table
+emptyOfFieldSchema = \case
+  FieldSchema RequiredField schema ->
+    emptyOfSchema schema
+  FieldSchema OptionalField schema ->
+    Table $ tableColumns emptyInt <> tableColumns (emptyOfSchema schema)
 
 singletonInt :: Int64 -> Table
 singletonInt =
@@ -494,29 +494,29 @@ singletonEmptyList :: Table -> Table
 singletonEmptyList =
   Table . Boxed.singleton . ArrayColumn (Storable.singleton 0)
 
-defaultOfEncoding :: Encoding -> Table
-defaultOfEncoding = \case
-  BoolEncoding ->
+defaultOfSchema :: Schema -> Table
+defaultOfSchema = \case
+  BoolSchema ->
     singletonInt 0
-  Int64Encoding ->
+  Int64Schema ->
     singletonInt 0
-  DoubleEncoding ->
+  DoubleSchema ->
     singletonDouble 0
-  StringEncoding ->
+  StringSchema ->
     singletonString B.empty
-  DateEncoding ->
+  DateSchema ->
     singletonInt 0
-  StructEncoding fields ->
+  StructSchema fields ->
     if Boxed.null fields then
       singletonInt 0
     else
-      Table $ Boxed.concatMap (tableColumns . defaultOfFieldEncoding . snd) fields
-  ListEncoding encoding ->
-    singletonEmptyList $ emptyOfEncoding encoding
+      Table $ Boxed.concatMap (tableColumns . defaultOfFieldSchema . snd) fields
+  ListSchema schema ->
+    singletonEmptyList $ emptyOfSchema schema
 
-defaultOfFieldEncoding :: FieldEncoding -> Table
-defaultOfFieldEncoding = \case
-  FieldEncoding RequiredField encoding ->
-    defaultOfEncoding encoding
-  FieldEncoding OptionalField encoding ->
-    Table $ tableColumns (singletonInt 0) <> tableColumns (defaultOfEncoding encoding)
+defaultOfFieldSchema :: FieldSchema -> Table
+defaultOfFieldSchema = \case
+  FieldSchema RequiredField schema ->
+    defaultOfSchema schema
+  FieldSchema OptionalField schema ->
+    Table $ tableColumns (singletonInt 0) <> tableColumns (defaultOfSchema schema)

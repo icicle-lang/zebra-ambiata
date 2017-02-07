@@ -1,36 +1,15 @@
+{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 {-# OPTIONS_GHC -funbox-strict-fields #-}
 module Zebra.Data.Schema (
-  -- * Data
     Schema(..)
-  , Format(..)
-
-  -- * Text Conversion
-  , renderSchema
-  , parseSchema
-
-  -- * Attoparsec Parsers
-  , pSchema
-  , pFormat
-
-  -- * Dictionary Translation
-  , schemaOfDictionary
-  , schemaOfEncoding
-  , schemaOfFieldEncoding
-
-  -- * Recover lossy encoding from schema
-  , recoverEncodingOfSchema
+  , FieldName(..)
+  , FieldSchema(..)
+  , FieldObligation(..)
   ) where
 
-import qualified Data.Attoparsec.Text as Atto
-import qualified Data.List as List
-import           Data.Map (Map)
-import qualified Data.Text as T
+import           Data.Typeable (Typeable)
 import qualified Data.Vector as Boxed
 
 import           GHC.Generics (Generic)
@@ -39,134 +18,33 @@ import           P
 
 import           X.Text.Show (gshowsPrec)
 
-import           Zebra.Data.Core
-import           Zebra.Data.Encoding
 
+newtype FieldName =
+  FieldName {
+      unFieldName :: Text
+    } deriving (Eq, Ord, Generic, Typeable)
 
-newtype Schema =
-  Schema {
-      unSchema :: [Format]
-    } deriving (Eq, Ord, Monoid, Generic)
-
-instance Show Schema where
+instance Show FieldName where
   showsPrec =
     gshowsPrec
 
-data Format =
-    ByteFormat
-  | IntFormat
-  | DoubleFormat
-  | ArrayFormat !Schema
-    deriving (Eq, Ord, Show)
+data FieldObligation =
+    OptionalField
+  | RequiredField
+    deriving (Eq, Ord, Read, Show, Generic, Typeable)
 
--- | Render a schema as a string. The schema string is run of characters which
---   describes the layout/format of flattened data as arrays:
---
--- @
---   b   - byte
---   i   - int
---   d   - double
---   [?] - array
--- @
---
-renderSchema :: Schema -> Text
-renderSchema =
-  let
-    go = \case
-      ByteFormat ->
-        "b"
-      IntFormat ->
-        "i"
-      DoubleFormat ->
-        "d"
-      ArrayFormat s ->
-        "[" <> renderSchema s <> "]"
-  in
-    foldMap go . unSchema
+data FieldSchema =
+  FieldSchema {
+      fieldObligation :: !FieldObligation
+    , fieldSchema :: !Schema
+    } deriving (Eq, Ord, Show, Generic, Typeable)
 
-parseSchema :: Text -> Maybe Schema
-parseSchema =
-  rightToMaybe . Atto.parseOnly (pSchema <* Atto.endOfInput)
-
-pSchema :: Atto.Parser Schema
-pSchema =
-  Schema <$> many pFormat
-
-pFormat :: Atto.Parser Format
-pFormat =
-  Atto.choice [
-      ByteFormat <$ Atto.char 'b'
-    , IntFormat <$ Atto.char 'i'
-    , DoubleFormat <$ Atto.char 'd'
-    , ArrayFormat <$> (Atto.char '[' *> pSchema <* Atto.char ']')
-    ]
-
-schemaOfDictionary :: Map AttributeName Encoding -> Map AttributeName Schema
-schemaOfDictionary =
-  fmap schemaOfEncoding
-
-schemaOfEncoding :: Encoding -> Schema
-schemaOfEncoding = \case
-  BoolEncoding ->
-    Schema (pure IntFormat)
-  Int64Encoding ->
-    Schema (pure IntFormat)
-  DoubleEncoding ->
-    Schema (pure DoubleFormat)
-  StringEncoding ->
-    Schema (pure . ArrayFormat $ Schema [ByteFormat])
-  DateEncoding ->
-    Schema (pure IntFormat)
-  StructEncoding fields ->
-    if Boxed.null fields then
-      Schema (pure IntFormat)
-    else
-      foldMap (schemaOfFieldEncoding . snd) fields
-  ListEncoding encoding ->
-    Schema (pure . ArrayFormat $ schemaOfEncoding encoding)
-
-schemaOfFieldEncoding :: FieldEncoding -> Schema
-schemaOfFieldEncoding = \case
-  FieldEncoding obligation encoding ->
-    case obligation of
-      RequiredField ->
-        schemaOfEncoding encoding
-      OptionalField ->
-        Schema (pure IntFormat) <> schemaOfEncoding encoding
-
--- Best effort to recover an encoding
-recoverEncodingOfSchema :: Schema -> Maybe Encoding
-recoverEncodingOfSchema (Schema formats) =
-  case recoverEncodingsOfFormats formats of
-    Nothing ->
-      Nothing
-    Just [] ->
-      Nothing
-    Just [x] ->
-      Just x
-    Just xs ->
-      let
-        mkField :: Int -> Encoding -> (FieldName, FieldEncoding)
-        mkField i x =
-          (FieldName . T.pack $ show i, FieldEncoding RequiredField x)
-      in
-        Just .
-          StructEncoding .
-          Boxed.fromList $
-          List.zipWith mkField [0..] xs
-
-recoverEncodingsOfFormats :: [Format] -> Maybe [Encoding]
-recoverEncodingsOfFormats = \case
-  [] ->
-    Just []
-  ByteFormat : _ ->
-    Nothing
-  IntFormat : xs ->
-    (Int64Encoding :) <$> recoverEncodingsOfFormats xs
-  DoubleFormat : xs ->
-    (DoubleEncoding :) <$> recoverEncodingsOfFormats xs
-  ArrayFormat (Schema [ByteFormat]) : xs ->
-    (StringEncoding :) <$> recoverEncodingsOfFormats xs
-  ArrayFormat schema : xs -> do
-    encoding <- recoverEncodingOfSchema schema
-    (ListEncoding encoding :) <$> recoverEncodingsOfFormats xs
+data Schema =
+    BoolSchema
+  | Int64Schema
+  | DoubleSchema
+  | StringSchema
+  | DateSchema
+  | StructSchema !(Boxed.Vector (FieldName, FieldSchema))
+  | ListSchema !Schema
+    deriving (Eq, Ord, Show, Generic, Typeable)

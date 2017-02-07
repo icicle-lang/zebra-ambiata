@@ -4,11 +4,41 @@
 import           BuildInfo_ambiata_zebra
 import           DependencyInfo_ambiata_zebra
 
+import qualified Anemone.Foreign.Mempool as Mempool
+
+import           Control.Monad.IO.Class (liftIO)
+import           Control.Monad.Trans.Class (lift)
+
+import qualified Data.ByteString.Builder as Builder
+import qualified Data.ByteString.Char8 as Char8
+import qualified Data.IORef as IORef
+import qualified Data.List as List
+import qualified Data.Map as Map
+import           Data.String (String)
+import qualified Data.Text as Text
+
+import           P
+
+import qualified System.Exit as Exit
+import           System.IO (IO, FilePath)
+import qualified System.IO as IO
+
+import           Text.Show.Pretty (ppShow)
+
+import           X.Control.Monad.Trans.Either (EitherT, joinErrors, hoistEither, bracketEitherT', left)
+import           X.Control.Monad.Trans.Either.Exit (orDie)
+import qualified X.Data.Vector as Boxed
+import qualified X.Data.Vector.Storable as Storable
+import qualified X.Data.Vector.Stream as Stream
+import qualified X.Data.Vector.Unboxed as Unboxed
+import           X.Options.Applicative (Parser, SafeCommand(..), RunType(..), Mod, CommandFields)
+import qualified X.Options.Applicative as Options
+
 import qualified Zebra.Data.Block as Block
 import qualified Zebra.Data.Core as Core
 import qualified Zebra.Data.Entity as Entity
 import qualified Zebra.Data.Fact as Fact
-import qualified Zebra.Data.Schema as Schema
+import qualified Zebra.Data.Encoding as Encoding
 import qualified Zebra.Serial as Serial
 import qualified Zebra.Serial.File as Serial
 import qualified Zebra.Merge.BlockC as Merge
@@ -16,32 +46,6 @@ import qualified Zebra.Merge.Puller.File as MergePuller
 import qualified Zebra.Foreign.Block as FoBlock
 import qualified Zebra.Foreign.Entity as FoEntity
 
-import           P
-
-import qualified Anemone.Foreign.Mempool as Mempool
-import qualified Data.ByteString.Char8 as Char8
-import qualified Data.ByteString.Builder as Builder
-import qualified Data.Map as Map
-import qualified Data.List as List
-import qualified Data.Text as Text
-import qualified X.Data.Vector as Boxed
-import qualified X.Data.Vector.Unboxed as Unboxed
-import qualified X.Data.Vector.Storable as Storable
-import qualified X.Data.Vector.Stream as Stream
-
-import           X.Control.Monad.Trans.Either (EitherT, joinErrors, hoistEither, bracketEitherT', left)
-import           X.Control.Monad.Trans.Either.Exit (orDie)
-import           Control.Monad.IO.Class (liftIO)
-import           Control.Monad.Trans.Class (lift)
-
-import           Data.String (String)
-import           System.IO (IO, FilePath)
-import qualified System.IO as IO
-import qualified Data.IORef as IORef
-import qualified System.Exit as Exit
-import           X.Options.Applicative (Parser, SafeCommand(..), RunType(..), Mod, CommandFields)
-import qualified X.Options.Applicative as Options
-import           Text.Show.Pretty (ppShow)
 
 main :: IO ()
 main = do
@@ -180,7 +184,7 @@ run c = case c of
     let withPusher = case outputPath of
           Just out -> withOutputPusher opts in1 out
           Nothing  -> withPrintPusher
- 
+
     withPusher $ \pusher -> do
     let runOpts = Merge.MergeOptions (firstTshow . puller) pusher $ truncate (mergeGcGigabytes opts * 1024 * 1024 * 1024)
     joinErrors (Text.pack . show) id $ Merge.mergeBlocks runOpts pullids
@@ -243,18 +247,18 @@ withOutputPusher opts inputfile outputfile runWith = do
   maybe (return ()) doPurge mblock
   lift $ IO.hClose outfd
 
-catFacts :: [Schema.Schema] -> Stream.Stream (EitherT Serial.DecodeError IO) Block.Block -> EitherT Text IO ()
-catFacts schemas blocks =
-  case traverse Schema.recoverEncodingOfSchema schemas of
+catFacts :: [Encoding.Encoding] -> Stream.Stream (EitherT Serial.DecodeError IO) Block.Block -> EitherT Text IO ()
+catFacts encodings blocks =
+  case traverse Encoding.recoverSchemaOfEncoding encodings of
     Nothing ->
-      left "failed to recover encodings from schemas for fact output"
-    Just encodings0 -> do
+      left "failed to recover schemas from encodings for fact output"
+    Just schemas0 -> do
       let
-        encodings =
-          Boxed.fromList encodings0
+        schemas =
+          Boxed.fromList schemas0
 
         go block = do
-          facts <- firstTshow . hoistEither $ Block.factsOfBlock encodings block
+          facts <- firstTshow . hoistEither $ Block.factsOfBlock schemas block
           Boxed.mapM_ (liftIO . Char8.putStrLn . Fact.renderFact) facts
 
         blocks' =

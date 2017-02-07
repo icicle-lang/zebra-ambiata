@@ -25,15 +25,15 @@ import           Zebra.Data
 
 prop_default_table_vs_mtable :: Property
 prop_default_table_vs_mtable =
-  gamble jEncoding $ \encoding ->
-    tableOfMaybeValue encoding Nothing' ===
-    Right (fromMaybeValue encoding [Nothing'])
+  gamble jSchema $ \schema ->
+    tableOfMaybeValue schema Nothing' ===
+    Right (fromMaybeValue schema [Nothing'])
 
 prop_roundtrip_value_mtable :: Property
 prop_roundtrip_value_mtable =
-  gamble jEncoding $ \encoding ->
-  gamble (listOf $ jValue encoding) $
-    tripping (fromMaybeValue encoding . fmap Just') (toValue encoding)
+  gamble jSchema $ \schema ->
+  gamble (listOf $ jValue schema) $
+    tripping (fromMaybeValue schema . fmap Just') (toValue schema)
 
 prop_roundtrip_table_mtable :: Property
 prop_roundtrip_table_mtable =
@@ -44,12 +44,12 @@ prop_roundtrip_table_mtable =
 
 prop_appendTable_commutes :: Property
 prop_appendTable_commutes =
-  gamble jEncoding $ \encoding ->
-  gamble (listOf $ jMaybe' $ jValue encoding) $ \values1 ->
-  gamble (listOf $ jMaybe' $ jValue encoding) $ \values2 -> runST $ do
-    let rec1 = fromMaybeValue encoding values1
-    let rec2 = fromMaybeValue encoding values2
-    let rec3 = fromMaybeValue encoding (values1 <> values2)
+  gamble jSchema $ \schema ->
+  gamble (listOf $ jMaybe' $ jValue schema) $ \values1 ->
+  gamble (listOf $ jMaybe' $ jValue schema) $ \values2 -> runST $ do
+    let rec1 = fromMaybeValue schema values1
+    let rec2 = fromMaybeValue schema values2
+    let rec3 = fromMaybeValue schema (values1 <> values2)
     mtable <- thawTable rec1
     Right () <- runEitherT $ appendTable mtable rec2
     rec3' <- unsafeFreezeTable mtable
@@ -57,22 +57,22 @@ prop_appendTable_commutes =
 
 
 
-fromMaybeValue :: Encoding -> [Maybe' Value] -> Table
-fromMaybeValue encoding mvalues =
+fromMaybeValue :: Schema -> [Maybe' Value] -> Table
+fromMaybeValue schema mvalues =
   runST $ do
-    table <- newMTable encoding
+    table <- newMTable schema
     result <- runEitherT $
-      traverse_ (insertMaybeValue encoding table) mvalues
+      traverse_ (insertMaybeValue schema table) mvalues
     case result of
       Left err ->
         Savage.error $ show err
       Right () ->
         unsafeFreezeTable table
 
-toValue :: Encoding -> Table -> Either ValueError [Value]
-toValue encoding table =
+toValue :: Schema -> Table -> Either ValueError [Value]
+toValue schema table =
   fmap Boxed.toList $
-  valuesOfTable encoding table
+  valuesOfTable schema table
 
 return []
 tests :: IO Bool

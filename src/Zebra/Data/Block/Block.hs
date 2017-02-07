@@ -38,7 +38,7 @@ import qualified X.Data.Vector.Unboxed as Unboxed
 import           Zebra.Data.Block.Entity
 import           Zebra.Data.Block.Index
 import           Zebra.Data.Core
-import           Zebra.Data.Encoding
+import           Zebra.Data.Schema
 import           Zebra.Data.Entity
 import           Zebra.Data.Fact
 import           Zebra.Data.Table
@@ -64,12 +64,12 @@ data FactError =
   | FactLeftoverValues !(Boxed.Vector (Boxed.Vector Value))
     deriving (Eq, Ord, Show, Generic, Typeable)
 
-blockOfFacts :: Boxed.Vector Encoding -> Boxed.Vector Fact -> Either MutableError Block
-blockOfFacts encodings facts =
-  Block (entitiesOfFacts facts) (indicesOfFacts facts) <$> tablesOfFacts encodings facts
+blockOfFacts :: Boxed.Vector Schema -> Boxed.Vector Fact -> Either MutableError Block
+blockOfFacts schemas facts =
+  Block (entitiesOfFacts facts) (indicesOfFacts facts) <$> tablesOfFacts schemas facts
 
-factsOfBlock :: Boxed.Vector Encoding -> Block -> Either FactError (Boxed.Vector Fact)
-factsOfBlock encodings block = do
+factsOfBlock :: Boxed.Vector Schema -> Block -> Either FactError (Boxed.Vector Fact)
+factsOfBlock schemas block = do
   let
     entities =
       blockEntities block
@@ -78,7 +78,7 @@ factsOfBlock encodings block = do
     tables =
       blockTables block
 
-  values <- first FactValueError $ Boxed.zipWithM valuesOfTable encodings tables
+  values <- first FactValueError $ Boxed.zipWithM valuesOfTable schemas tables
 
   let
     (result, ValueState indices' values') =

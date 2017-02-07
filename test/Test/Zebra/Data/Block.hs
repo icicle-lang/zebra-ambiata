@@ -22,18 +22,18 @@ import           Zebra.Data.Table.Mutable
 
 prop_roundtrip_facts :: Property
 prop_roundtrip_facts =
-  gamble jEncoding $ \encoding ->
-  gamble (listOf $ jFact encoding (AttributeId 0)) $ \facts ->
+  gamble jSchema $ \schema ->
+  gamble (listOf $ jFact schema (AttributeId 0)) $ \facts ->
     let
-      encodings =
-        Boxed.singleton encoding
+      schemas =
+        Boxed.singleton schema
 
       input =
         Boxed.fromList facts
     in
       trippingBoth
-        (first TableError . blockOfFacts encodings)
-        (first FactError . factsOfBlock encodings)
+        (first TableError . blockOfFacts schemas)
+        (first FactError . factsOfBlock schemas)
         input
 
 data SomeError =
