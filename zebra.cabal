@@ -10,6 +10,10 @@ cabal-version:         >= 1.8
 build-type:            Custom
 description:           zebra
 
+flag LessCcOpt
+  Description: Avoid a gcc-6 optimizer bug when using -O3
+  Default:     False
+
 library
   build-depends:
                       base                            >= 3          && < 5
@@ -116,8 +120,10 @@ library
                        csrc/zebra_merge_many.c
                        csrc/zebra_unpack.c
 
-  cc-options:
-                       -std=c99 -O3 -g -msse4.2 -Wall -Werror -Wuninitialized -DCABAL=1
+  if flag(LessCcOpt)
+    cc-options:        -std=c99 -O2 -g -msse4.2 -Wall -Werror -Wuninitialized -DCABAL=1
+  else
+    cc-options:        -std=c99 -O3 -g -msse4.2 -Wall -Werror -Wuninitialized -DCABAL=1
 
 executable zebra
   if impl(ghc >= 8.0)
