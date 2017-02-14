@@ -19,9 +19,9 @@ module Test.Zebra.Jack (
   , jDay
   , jFactsetId
 
-  -- * Zebra.Data.Encoding
-  , jEncoding
-  , jFieldEncoding
+  -- * Zebra.Data.Schema
+  , jSchema
+  , jFieldSchema
   , jFieldName
   , jFieldObligation
 
@@ -39,9 +39,9 @@ module Test.Zebra.Jack (
   , jTable'
   , jColumn
 
-  -- * Zebra.Data.Schema
-  , jSchema
-  , jFormat
+  -- * Zebra.Data.Encoding
+  , jEncoding
+  , jColumnEncoding
 
   , jMaybe'
   ) where
@@ -77,83 +77,83 @@ import           Zebra.Data.Schema
 import           Zebra.Data.Table
 
 
-jSchema :: Jack Schema
-jSchema =
-  Schema <$> listOf jFormat
-
-jFormat :: Jack Format
-jFormat =
-  oneOfRec [
-      pure IntFormat
-    , pure ByteFormat
-    , pure DoubleFormat
-    ] [
-      ArrayFormat <$> jSchema
-    ]
-
 jEncoding :: Jack Encoding
 jEncoding =
+  Encoding <$> listOf jColumnEncoding
+
+jColumnEncoding :: Jack ColumnEncoding
+jColumnEncoding =
   oneOfRec [
-      pure BoolEncoding
-    , pure Int64Encoding
+      pure IntEncoding
+    , pure ByteEncoding
     , pure DoubleEncoding
-    , pure StringEncoding
-    , pure DateEncoding
     ] [
-      StructEncoding . Boxed.fromList <$> listOfN 0 10 ((,) <$> jFieldName <*> jFieldEncoding)
-    , ListEncoding <$> jEncoding
+      ArrayEncoding <$> jEncoding
+    ]
+
+jSchema :: Jack Schema
+jSchema =
+  oneOfRec [
+      pure BoolSchema
+    , pure Int64Schema
+    , pure DoubleSchema
+    , pure StringSchema
+    , pure DateSchema
+    ] [
+      StructSchema . Boxed.fromList <$> listOfN 0 10 ((,) <$> jFieldName <*> jFieldSchema)
+    , ListSchema <$> jSchema
     ]
 
 jFieldName :: Jack FieldName
 jFieldName =
   FieldName <$> elements boats
 
-jFieldEncoding :: Jack FieldEncoding
-jFieldEncoding =
-  FieldEncoding <$> jFieldObligation <*> jEncoding
+jFieldSchema :: Jack FieldSchema
+jFieldSchema =
+  FieldSchema <$> jFieldObligation <*> jSchema
 
 jFieldObligation :: Jack FieldObligation
 jFieldObligation =
   elements [RequiredField, OptionalField]
 
-jFacts :: [Encoding] -> Jack [Fact]
-jFacts encodings =
+jFacts :: [Schema] -> Jack [Fact]
+jFacts schemas =
   fmap (List.sort . List.concat) .
-  scale (`div` max 1 (length encodings)) $
-  zipWithM (\e a -> listOf $ jFact e a) encodings (fmap AttributeId [0..])
+  scale (`div` max 1 (length schemas)) $
+  zipWithM (\e a -> listOf $ jFact e a) schemas (fmap AttributeId [0..])
 
-jFact :: Encoding -> AttributeId -> Jack Fact
-jFact encoding aid =
+jFact :: Schema -> AttributeId -> Jack Fact
+jFact schema aid =
   uncurry Fact
     <$> jEntityHashId
     <*> pure aid
     <*> jTime
     <*> jFactsetId
-    <*> (strictMaybe <$> maybeOf (jValue encoding))
+    <*> (strictMaybe <$> maybeOf (jValue schema))
 
-jValue :: Encoding -> Jack Value
+jValue :: Schema -> Jack Value
 jValue = \case
-  BoolEncoding ->
+  BoolSchema ->
     BoolValue <$> elements [False, True]
-  Int64Encoding ->
+  Int64Schema ->
     Int64Value <$> sizedBounded
-  DoubleEncoding ->
+  DoubleSchema ->
     DoubleValue <$> arbitrary
-  StringEncoding ->
+  StringSchema ->
     StringValue <$> arbitrary
-  DateEncoding ->
+  DateSchema ->
     DateValue <$> jDay
-  ListEncoding encoding ->
-    ListValue . Boxed.fromList <$> listOfN 0 10 (jValue encoding)
-  StructEncoding fields ->
+  ListSchema schema ->
+    ListValue . Boxed.fromList <$> listOfN 0 10 (jValue schema)
+  StructSchema fields ->
     StructValue <$> traverse (jFieldValue . snd) fields
 
-jFieldValue :: FieldEncoding -> Jack (Maybe' Value)
+jFieldValue :: FieldSchema -> Jack (Maybe' Value)
 jFieldValue = \case
-  FieldEncoding RequiredField encoding ->
-    Just' <$> jValue encoding
-  FieldEncoding OptionalField encoding ->
-    strictMaybe <$> maybeOf (jValue encoding)
+  FieldSchema RequiredField schema ->
+    Just' <$> jValue schema
+  FieldSchema OptionalField schema ->
+    strictMaybe <$> maybeOf (jValue schema)
 
 jEntityId :: Jack EntityId
 jEntityId =
@@ -195,10 +195,10 @@ jFactsetId =
 
 jBlock :: Jack Block
 jBlock = do
-  encodings <- listOfN 0 5 jEncoding
-  facts <- jFacts encodings
+  schemas <- listOfN 0 5 jSchema
+  facts <- jFacts schemas
   pure $
-    case blockOfFacts (Boxed.fromList encodings) (Boxed.fromList facts) of
+    case blockOfFacts (Boxed.fromList schemas) (Boxed.fromList facts) of
       Left x ->
         Savage.error $ "Test.Zebra.Jack.jBlock: invariant failed: " <> show x
       Right x ->

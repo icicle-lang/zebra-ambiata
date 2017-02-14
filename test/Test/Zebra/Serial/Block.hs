@@ -21,34 +21,34 @@ import           Text.Show.Pretty (ppShow)
 
 import           Zebra.Data.Block
 import           Zebra.Data.Core
-import           Zebra.Data.Schema
+import           Zebra.Data.Encoding
 import           Zebra.Data.Table
 import           Zebra.Serial.Block
 
 
 prop_roundtrip_from_facts :: Property
 prop_roundtrip_from_facts =
-  gamble jEncoding $ \encoding ->
-  gamble (listOf $ jFact encoding (AttributeId 0)) $ \facts ->
+  gamble jSchema $ \schema ->
+  gamble (listOf $ jFact schema (AttributeId 0)) $ \facts ->
     let
-      encodings =
-        Boxed.singleton encoding
+      schemas =
+        Boxed.singleton schema
 
-      schema =
-        fmap schemaOfEncoding encodings
+      encoding =
+        fmap encodingOfSchema schemas
 
       block =
         either (Savage.error . show) id .
-        blockOfFacts encodings $
+        blockOfFacts schemas $
         Boxed.fromList facts
     in
       counterexample (ppShow schema) $
-      trippingSerial bBlock (getBlock schema) block
+      trippingSerial bBlock (getBlock encoding) block
 
 prop_roundtrip_block :: Property
 prop_roundtrip_block =
   gamble jYoloBlock $ \block ->
-    trippingSerial bBlock (getBlock . fmap schemaOfTable $ blockTables block) block
+    trippingSerial bBlock (getBlock . fmap encodingOfTable $ blockTables block) block
 
 prop_roundtrip_entities :: Property
 prop_roundtrip_entities =
@@ -68,17 +68,17 @@ prop_roundtrip_indices =
 prop_roundtrip_tables :: Property
 prop_roundtrip_tables =
   gamble (Boxed.fromList <$> listOf jTable) $ \xs ->
-    trippingSerial bTables (getTables $ fmap schemaOfTable xs) xs
+    trippingSerial bTables (getTables $ fmap encodingOfTable xs) xs
 
 prop_roundtrip_table :: Property
 prop_roundtrip_table =
   gamble (jTable' 1) $ \table ->
-    trippingSerial bTable (getTable 1 $ schemaOfTable table) table
+    trippingSerial bTable (getTable 1 $ encodingOfTable table) table
 
 prop_roundtrip_column :: Property
 prop_roundtrip_column =
   gamble (jColumn 1) $ \column ->
-    trippingSerial bColumn (getColumn 1 $ schemaOfColumn column) column
+    trippingSerial bColumn (getColumn 1 $ encodingOfColumn column) column
 
 return []
 tests :: IO Bool

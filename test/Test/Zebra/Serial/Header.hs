@@ -20,7 +20,7 @@ import           Zebra.Serial.Header
 
 prop_roundtrip_schema :: Property
 prop_roundtrip_schema =
-  gamble (mapOf jAttributeName jSchema) $
+  gamble (mapOf jAttributeName jEncoding) $
     trippingSerial bHeader getHeader
 
 mapOf :: Ord k => Jack k -> Jack v -> Jack (Map k v)

@@ -4,25 +4,29 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 module Test.Zebra.Merge.Entity where
 
+import qualified Data.List as List
+import qualified Data.Map as Map
+
 import           Disorder.Jack
 import           Disorder.Core.Run
 
 import           P
 
+import qualified Prelude as Savage
+
 import           System.IO (IO)
 
 import           Test.Zebra.Jack
+
+import           Text.Show.Pretty (ppShow)
+
+import qualified X.Data.Vector as Boxed
+import qualified X.Data.Vector.Stream as Stream
 
 import           Zebra.Data
 import           Zebra.Merge.Base
 import           Zebra.Merge.Entity
 
-import qualified X.Data.Vector as Boxed
-import qualified X.Data.Vector.Stream as Stream
-import qualified Data.List as List
-import qualified Data.Map as Map
-import qualified Prelude as Savage
-import           Text.Show.Pretty (ppShow)
 
 fakeBlockId :: BlockDataId
 fakeBlockId = BlockDataId 0
@@ -36,12 +40,12 @@ ppCounter heading thing prop
  $ counterexample (ppShow thing) prop
 
 
-jEncodings :: Jack [Encoding]
-jEncodings = listOfN 0 5 jEncoding
+jSchemas :: Jack [Schema]
+jSchemas = listOfN 0 5 jSchema
 
-blockOfFacts' :: [Encoding] -> [Fact] -> Block
-blockOfFacts' encs facts =
-  case blockOfFacts (Boxed.fromList encs) (Boxed.fromList facts) of
+blockOfFacts' :: [Schema] -> [Fact] -> Block
+blockOfFacts' schemas facts =
+  case blockOfFacts (Boxed.fromList schemas) (Boxed.fromList facts) of
    Left e -> Savage.error
               ("jBlockFromFacts: invariant failed\n"
               <> "\tgenerated facts cannot be converted to block\n"
@@ -69,12 +73,12 @@ prop_entitiesOfBlock_indices =
 
 prop_entitiesOfBlock_tables_1_entity :: Property
 prop_entitiesOfBlock_tables_1_entity =
-  gamble jEncodings $ \encs ->
-  gamble (jFacts encs) $ \facts ->
+  gamble jSchemas $ \schemas ->
+  gamble (jFacts schemas) $ \facts ->
   gamble jEntityHashId $ \(ehash,eid) ->
   let fixFact f = f { factEntityHash = ehash, factEntityId = eid }
       facts'    = List.sort $ fmap fixFact facts
-      block     = blockOfFacts' encs facts'
+      block     = blockOfFacts' schemas facts'
       es        = entityValuesOfBlock' fakeBlockId block
   in  ppCounter "Block" block
     $ ppCounter "Entities" es
@@ -96,12 +100,12 @@ prop_mergeEntityTables_1_block =
 
 prop_mergeEntityTables_2_blocks :: Property
 prop_mergeEntityTables_2_blocks =
-  gamble jEncodings $ \encs ->
-  gamble (jFacts encs) $ \f1 ->
-  gamble (jFacts encs) $ \f2 ->
-  let b1 = blockOfFacts' encs f1
-      b2 = blockOfFacts' encs f2
-      bMerge = blockOfFacts' encs $ List.sort (f1 <> f2)
+  gamble jSchemas $ \schemas ->
+  gamble (jFacts schemas) $ \f1 ->
+  gamble (jFacts schemas) $ \f2 ->
+  let b1 = blockOfFacts' schemas f1
+      b2 = blockOfFacts' schemas f2
+      bMerge = blockOfFacts' schemas $ List.sort (f1 <> f2)
 
       entsOf bid bk = entityValuesOfBlock (BlockDataId bid) bk
       es = Stream.vectorOfStream $ mergeEntityValues (entsOf 1 b1) (entsOf 2 b2)
