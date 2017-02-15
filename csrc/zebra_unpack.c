@@ -35,7 +35,7 @@ int64_t zebra_midpoint (
         min = elem < min ? elem : min;
         max = elem > max ? elem : max;
     }
-    
+
     // Commutative, overflow proof integer average/midpoint:
     //   Source: http://stackoverflow.com/a/4844672
     return (min & max) + ((min ^ max) >> 1);
@@ -73,12 +73,7 @@ error_t zebra_unpack_array (
         parts += nbit * 8;
     }
 
-    int64_t *remains = (int64_t*)parts;
-    for (int64_t ix = 0; ix != n_remains; ++ix) {
-        *fill = *remains;
-        ++fill;
-        ++remains;
-    }
+    memcpy(fill, parts, n_remains * sizeof (int64_t));
 
     for (int64_t ix = 0; ix != n_elems; ++ix) {
         fill_start[ix] = zebra_unzigzag64(fill_start[ix]) + offset;
@@ -108,11 +103,11 @@ error_t zebra_pack_array (
     uint64_t *header_offset = (uint64_t*)(header_size + 1);
     uint8_t *nbits_start = (uint8_t*)(header_offset + 1);
     uint8_t *nbits = nbits_start;
-    uint8_t *parts = nbits + n_parts;   
+    uint8_t *parts = nbits + n_parts;
     *header_offset = offset;
 
     uint64_t deltas[int_part_size];
-    
+
     for (int64_t part_ix = 0; part_ix != n_parts; ++part_ix) {
 
         uint64_t max_delta = 0;
