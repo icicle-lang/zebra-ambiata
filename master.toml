@@ -1,13 +1,14 @@
 [master]
-  runner = "s3://ambiata-dispensary-v2/dist/master/master-haskell/linux/x86_64/20160614225955-a2cc8b9/master-haskell-20160614225955-a2cc8b9"
+  runner = "s3://ambiata-dispensary-v2/dist/master/master-haskell/linux/x86_64/20170104233312-ee8addd/master-haskell-20170104233312-ee8addd"
   version = 1
-  sha1 = "f827e1ff43bcaa325d128662391d95a8b4d65525"
+  sha1 = "3b707a2ba2d74ee13fe81a658bed191a5808e6f5"
 
 [build.dist-7-10]
   GHC_VERSION = "7.10.2"
   CABAL_VERSION = "1.22.4.0"
   HADDOCK = "true"
   HADDOCK_S3 = "$AMBIATA_HADDOCK_MASTER"
+  HADDOCK_URL = "$AMBIATA_HADDOCK_MASTER_URL"
   PUBLISH = "true"
   PUBLISH_S3 = "$AMBIATA_ARTEFACTS_MASTER"
   PUBLISH_EXECUTABLES = "zebra"
@@ -21,6 +22,7 @@
   CABAL_VERSION = "1.22.4.0"
   HADDOCK = "true"
   HADDOCK_S3 = "$AMBIATA_HADDOCK_BRANCHES"
+  HADDOCK_URL = "$AMBIATA_HADDOCK_BRANCHES_URL"
   PUBLISH = "true"
   PUBLISH_S3 = "$AMBIATA_ARTEFACTS_BRANCHES"
   PUBLISH_EXECUTABLES = "zebra"
