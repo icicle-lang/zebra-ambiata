@@ -18,7 +18,6 @@ module Zebra.Data.Table (
   , tableOfMaybeValue
   , tableOfValue
   , tableOfStruct
-  , tableOfField
 
   , valuesOfTable
 
@@ -69,11 +68,12 @@ data Column =
     deriving (Eq, Ord, Generic, Typeable)
 
 data TableError =
-    TableSchemaMismatch !Schema !Value
+    TableSchemaMismatch !Value !Schema
   | TableRequiredFieldMissing !Schema
   | TableCannotConcatEmpty
   | TableAppendColumnsMismatch !Column !Column
-  | TableStructFieldsMismatch !(Boxed.Vector FieldSchema) !(Boxed.Vector (Maybe' Value))
+  | TableStructFieldsMismatch !(Boxed.Vector Value) !(Boxed.Vector FieldSchema)
+  | TableEnumVariantMismatch !Int !Value !(Boxed.Vector VariantSchema)
     deriving (Eq, Ord, Show, Generic, Typeable)
 
 data ValueError =
@@ -83,6 +83,7 @@ data ValueError =
   | ValueExpectedArrayColumn !Column
   | ValueStringLengthMismatch !Int !Int
   | ValueListLengthMismatch !Int !Int
+  | ValueEnumVariantMismatch !Int !(Boxed.Vector VariantSchema)
   | ValueNoMoreColumns
   | ValueLeftoverColumns !Encoding
     deriving (Eq, Ord, Show, Generic, Typeable)
@@ -111,37 +112,31 @@ tableOfValue schema =
       BoolValue True ->
         pure $ singletonInt 1
       value ->
-        Left $ TableSchemaMismatch schema value
+        Left $ TableSchemaMismatch value schema
 
     Int64Schema -> \case
       Int64Value x ->
         pure . singletonInt $ fromIntegral x
       value ->
-        Left $ TableSchemaMismatch schema value
+        Left $ TableSchemaMismatch value schema
 
     DoubleSchema -> \case
       DoubleValue x ->
         pure $ singletonDouble x
       value ->
-        Left $ TableSchemaMismatch schema value
+        Left $ TableSchemaMismatch value schema
 
     StringSchema -> \case
       StringValue x ->
         pure . singletonString $ T.encodeUtf8 x
       value ->
-        Left $ TableSchemaMismatch schema value
+        Left $ TableSchemaMismatch value schema
 
     DateSchema -> \case
       DateValue x ->
         pure . singletonInt . fromIntegral $ fromDay x
       value ->
-        Left $ TableSchemaMismatch schema value
-
-    StructSchema fields -> \case
-      StructValue values ->
-        tableOfStruct (fmap snd fields) values
-      value ->
-        Left $ TableSchemaMismatch schema value
+        Left $ TableSchemaMismatch value schema
 
     ListSchema ischema -> \case
       ListValue xs -> do
@@ -150,41 +145,33 @@ tableOfValue schema =
         pure . Table . Boxed.singleton $
           ArrayColumn (Storable.singleton . fromIntegral $ Boxed.length xs) vs1
       value ->
-        Left $ TableSchemaMismatch schema value
+        Left $ TableSchemaMismatch value schema
 
-tableOfStruct :: Boxed.Vector FieldSchema -> Boxed.Vector (Maybe' Value) -> Either TableError Table
+    StructSchema fields -> \case
+      StructValue values ->
+        tableOfStruct fields values
+      value ->
+        Left $ TableSchemaMismatch value schema
+
+    EnumSchema variant0 variants -> \case
+      EnumValue tag x -> do
+        VariantSchema _ variant <- maybeToRight (TableEnumVariantMismatch tag x variants) $ lookupVariant tag variant0 variants
+        xtable <- tableOfValue variant x
+        pure . Table $
+          tableColumns (singletonInt $ fromIntegral tag) <>
+          tableColumns xtable
+      value ->
+        Left $ TableSchemaMismatch value schema
+
+tableOfStruct :: Boxed.Vector FieldSchema -> Boxed.Vector Value -> Either TableError Table
 tableOfStruct fields values =
   if Boxed.null fields then
     pure $ singletonInt 0
   else if Boxed.length fields /= Boxed.length values then
-    Left $ TableStructFieldsMismatch fields values
+    Left $ TableStructFieldsMismatch values fields
   else
     fmap (Table . Boxed.concatMap tableColumns) $
-    Boxed.zipWithM tableOfField fields values
-
-tableOfField :: FieldSchema -> Maybe' Value -> Either TableError Table
-tableOfField fschema mvalue =
-  case fschema of
-    FieldSchema RequiredField schema ->
-      case mvalue of
-        Nothing' ->
-          Left $ TableRequiredFieldMissing schema
-
-        Just' value ->
-          tableOfValue schema value
-
-    FieldSchema OptionalField schema ->
-      case mvalue of
-        Nothing' ->
-          pure . Table $
-            tableColumns (singletonInt 0) <>
-            tableColumns (defaultOfSchema schema)
-
-        Just' value -> do
-          struct <- tableOfValue schema value
-          pure . Table $
-            tableColumns (singletonInt 1) <>
-            tableColumns struct
+    Boxed.zipWithM tableOfValue (fmap fieldSchema fields) values
 
 ------------------------------------------------------------------------
 
@@ -270,36 +257,31 @@ takeValue = \case
   DateSchema ->
     fmap (fmap (DateValue . toDay . fromIntegral) . Boxed.convert) takeInt
 
-  StructSchema fields ->
-    if Boxed.null fields then do
-      xs <- takeInt
-      pure $ Boxed.replicate (Storable.length xs) (StructValue Boxed.empty)
-    else do
-      xss <- traverse (takeField . snd) fields
-      pure . fmap StructValue $ Boxed.transpose xss
-
   ListSchema schema ->
     takeArray $ \ns -> do
       xs <- takeValue schema
       fmap (fmap ListValue) . hoistEither $ relist ns xs
 
-takeField :: FieldSchema -> EitherT ValueError (State Table) (Boxed.Vector (Maybe' Value))
-takeField fschema =
-  case fschema of
-    FieldSchema RequiredField schema ->
-      fmap (fmap Just') $ takeValue schema
+  StructSchema fields ->
+    if Boxed.null fields then do
+      xs <- takeInt
+      pure $ Boxed.replicate (Storable.length xs) (StructValue Boxed.empty)
+    else do
+      xss <- traverse (takeValue . fieldSchema) fields
+      pure . fmap StructValue $ Boxed.transpose xss
 
-    FieldSchema OptionalField schema -> do
-      bs <- takeBool
-      xs <- takeValue schema
-      pure $ Boxed.zipWith remaybe bs xs
+  EnumSchema variant0 variants -> do
+    tags <- takeInt
+    -- TODO is this transpose correct?
+    xss <- Boxed.transpose <$> traverse (takeValue . variantSchema) (Boxed.cons variant0 variants)
 
-remaybe :: Bool -> a -> Maybe' a
-remaybe b x =
-  if b then
-    Just' x
-  else
-    Nothing'
+    let
+      takeTag tag xs = do
+        x <- maybeToRight (ValueEnumVariantMismatch tag $ Boxed.cons variant0 variants) $ xs Boxed.!? tag
+        pure $ EnumValue tag x
+
+    hoistEither $
+      Boxed.zipWithM takeTag (fmap fromIntegral $ Boxed.convert tags) xss
 
 restring :: Storable.Vector Int64 -> ByteString -> Either ValueError (Boxed.Vector ByteString)
 restring ns bs =
@@ -459,20 +441,17 @@ emptyOfSchema = \case
     emptyArray emptyByte
   DateSchema ->
     emptyInt
+  ListSchema schema ->
+    emptyArray $ emptyOfSchema schema
   StructSchema fields ->
     if Boxed.null fields then
       emptyInt
     else
-      Table $ Boxed.concatMap (tableColumns . emptyOfFieldSchema . snd) fields
-  ListSchema schema ->
-    emptyArray $ emptyOfSchema schema
-
-emptyOfFieldSchema :: FieldSchema -> Table
-emptyOfFieldSchema = \case
-  FieldSchema RequiredField schema ->
-    emptyOfSchema schema
-  FieldSchema OptionalField schema ->
-    Table $ tableColumns emptyInt <> tableColumns (emptyOfSchema schema)
+      Table $ Boxed.concatMap (tableColumns . emptyOfSchema . fieldSchema) fields
+  EnumSchema variant0 variants ->
+    Table $
+      tableColumns emptyInt <>
+      Boxed.concatMap (tableColumns . emptyOfSchema . variantSchema) (Boxed.cons variant0 variants)
 
 singletonInt :: Int64 -> Table
 singletonInt =
@@ -506,17 +485,21 @@ defaultOfSchema = \case
     singletonString B.empty
   DateSchema ->
     singletonInt 0
+  ListSchema schema ->
+    singletonEmptyList $ emptyOfSchema schema
   StructSchema fields ->
     if Boxed.null fields then
       singletonInt 0
     else
-      Table $ Boxed.concatMap (tableColumns . defaultOfFieldSchema . snd) fields
-  ListSchema schema ->
-    singletonEmptyList $ emptyOfSchema schema
+      Table $ Boxed.concatMap (tableColumns . defaultOfSchema . fieldSchema) fields
+  EnumSchema variant0 variants ->
+    Table $
+      tableColumns (singletonInt 0) <>
+      Boxed.concatMap (tableColumns . defaultOfSchema . variantSchema) (Boxed.cons variant0 variants)
 
-defaultOfFieldSchema :: FieldSchema -> Table
-defaultOfFieldSchema = \case
-  FieldSchema RequiredField schema ->
-    defaultOfSchema schema
-  FieldSchema OptionalField schema ->
-    Table $ tableColumns (singletonInt 0) <> tableColumns (defaultOfSchema schema)
+--defaultOfFieldSchema :: FieldSchema -> Table
+--defaultOfFieldSchema = \case
+--  FieldSchema RequiredField schema ->
+--    defaultOfSchema schema
+--  FieldSchema OptionalField schema ->
+--    Table $ tableColumns (singletonInt 0) <> tableColumns (defaultOfSchema schema)

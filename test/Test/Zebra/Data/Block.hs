@@ -41,20 +41,26 @@ data SomeError =
   | FactError !FactError
     deriving (Eq, Show)
 
-trippingBoth :: (Monad m, Show (m a), Eq (m a)) => (a -> m b) -> (b -> m a) -> a -> Property
+trippingBoth :: (Monad m, Show (m a), Show (m b), Eq (m a)) => (a -> m b) -> (b -> m a) -> a -> Property
 trippingBoth to from x =
   let
-    roundtrip =
-      from =<< to x
-
     original =
       pure x
+
+    intermediate =
+      to x
+
+    roundtrip =
+      from =<< intermediate
   in
     counterexample "" .
     counterexample "Roundtrip failed." .
     counterexample "" .
     counterexample "=== Original ===" .
     counterexample (ppShow original) .
+    counterexample "" .
+    counterexample "=== Intermediate ===" .
+    counterexample (ppShow intermediate) .
     counterexample "" .
     counterexample "=== Roundtrip ===" .
     counterexample (ppShow roundtrip) $

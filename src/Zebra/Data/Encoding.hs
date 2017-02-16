@@ -23,7 +23,6 @@ module Zebra.Data.Encoding (
   -- * Dictionary Translation
   , encodingOfDictionary
   , encodingOfSchema
-  , encodingOfFieldSchema
 
   -- * Recover lossy schema from encoding
   , recoverSchemaOfEncoding
@@ -123,22 +122,16 @@ encodingOfSchema = \case
     Encoding (pure . ArrayEncoding $ Encoding [ByteEncoding])
   DateSchema ->
     Encoding (pure IntEncoding)
+  ListSchema schema ->
+    Encoding (pure . ArrayEncoding $ encodingOfSchema schema)
   StructSchema fields ->
     if Boxed.null fields then
       Encoding (pure IntEncoding)
     else
-      foldMap (encodingOfFieldSchema . snd) fields
-  ListSchema schema ->
-    Encoding (pure . ArrayEncoding $ encodingOfSchema schema)
-
-encodingOfFieldSchema :: FieldSchema -> Encoding
-encodingOfFieldSchema = \case
-  FieldSchema obligation schema ->
-    case obligation of
-      RequiredField ->
-        encodingOfSchema schema
-      OptionalField ->
-        Encoding (pure IntEncoding) <> encodingOfSchema schema
+      foldMap (encodingOfSchema . fieldSchema) fields
+  EnumSchema variant0 variants ->
+    Encoding (pure IntEncoding) <>
+    foldMap (encodingOfSchema . variantSchema) (Boxed.cons variant0 variants)
 
 -- Best effort to recover an schema
 recoverSchemaOfEncoding :: Encoding -> Maybe Schema
@@ -152,9 +145,9 @@ recoverSchemaOfEncoding (Encoding encodings) =
       Just x
     Just xs ->
       let
-        mkField :: Int -> Schema -> (FieldName, FieldSchema)
+        mkField :: Int -> Schema -> FieldSchema
         mkField i x =
-          (FieldName . T.pack $ show i, FieldSchema RequiredField x)
+          FieldSchema (FieldName . T.pack $ show i) x
       in
         Just .
           StructSchema .

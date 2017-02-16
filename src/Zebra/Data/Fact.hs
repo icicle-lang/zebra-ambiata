@@ -43,7 +43,8 @@ data Value =
   | StringValue !Text
   | DateValue !Day
   | ListValue !(Boxed.Vector Value)
-  | StructValue !(Boxed.Vector (Maybe' Value))
+  | StructValue !(Boxed.Vector Value)
+  | EnumValue !Int !Value
     deriving (Eq, Ord, Show, Generic, Typeable)
 
 renderFact :: Fact -> ByteString
@@ -98,4 +99,6 @@ renderValue = \case
     if Boxed.null x then
       "{}"
     else
-      "{ " <> (Char8.intercalate "; " . Boxed.toList $ fmap renderMaybeValue x) <> " }"
+      "{ " <> (Char8.intercalate ", " . Boxed.toList $ fmap renderValue x) <> " }"
+  EnumValue tag x ->
+    Char8.pack (show tag) <> ": " <> renderValue x
