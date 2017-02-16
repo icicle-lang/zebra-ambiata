@@ -126,7 +126,7 @@ check_entities_of_block convert block =
           fmap (sumAttribute $ Storable.length . attributeTombstone) entities
 
       , check "# of table rows" recordCount $
-          fmap (sumAttribute $ rowsOfTable . attributeTable) entities
+          fmap (sumAttribute $ tableRowCount . attributeTable) entities
       ]
 
 

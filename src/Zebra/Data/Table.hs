@@ -11,7 +11,6 @@ module Zebra.Data.Table (
   , TableError(..)
   , ValueError(..)
 
-  , rowsOfTable
   , encodingOfTable
   , encodingOfColumn
 
@@ -34,7 +33,6 @@ import           Control.Monad.Trans.State.Strict (State, runState)
 
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString as B
-import           Data.Coerce (coerce)
 import qualified Data.Text.Encoding as T
 import           Data.Typeable (Typeable)
 
@@ -55,9 +53,10 @@ import           Zebra.Data.Fact
 import           Zebra.Data.Schema
 
 
-newtype Table =
+data Table =
   Table {
-      tableColumns :: Boxed.Vector Column
+      tableRowCount :: !Int
+    , tableColumns :: !(Boxed.Vector Column)
     } deriving (Eq, Ord, Generic, Typeable)
 
 data Column =
@@ -142,7 +141,7 @@ tableOfValue schema =
       ListValue xs -> do
         vs0 <- traverse (tableOfValue ischema) xs
         vs1 <- concatTables vs0
-        pure . Table . Boxed.singleton $
+        pure . Table 1 . Boxed.singleton $
           ArrayColumn (Storable.singleton . fromIntegral $ Boxed.length xs) vs1
       value ->
         Left $ TableSchemaMismatch value schema
@@ -157,7 +156,7 @@ tableOfValue schema =
       EnumValue tag x -> do
         VariantSchema _ variant <- maybeToRight (TableEnumVariantMismatch tag x variants) $ lookupVariant tag variant0 variants
         xtable <- tableOfValue variant x
-        pure . Table $
+        pure . Table 1 $
           tableColumns (singletonInt $ fromIntegral tag) <>
           tableColumns xtable
       value ->
@@ -165,12 +164,10 @@ tableOfValue schema =
 
 tableOfStruct :: Boxed.Vector FieldSchema -> Boxed.Vector Value -> Either TableError Table
 tableOfStruct fields values =
-  if Boxed.null fields then
-    pure $ singletonInt 0
-  else if Boxed.length fields /= Boxed.length values then
+  if Boxed.length fields /= Boxed.length values then
     Left $ TableStructFieldsMismatch values fields
   else
-    fmap (Table . Boxed.concatMap tableColumns) $
+    fmap (Table 1 . Boxed.concatMap tableColumns) $
     Boxed.zipWithM tableOfValue (fmap fieldSchema fields) values
 
 ------------------------------------------------------------------------
@@ -192,10 +189,10 @@ withTable table0 m =
 
 takeNext :: EitherT ValueError (State Table) Column
 takeNext = do
-  Table xs <- get
+  Table n xs <- get
   case xs Boxed.!? 0 of
     Just x -> do
-      put . Table $ Boxed.drop 1 xs
+      put . Table n $ Boxed.drop 1 xs
       pure x
     Nothing ->
       left ValueNoMoreColumns
@@ -264,8 +261,8 @@ takeValue = \case
 
   StructSchema fields ->
     if Boxed.null fields then do
-      xs <- takeInt
-      pure $ Boxed.replicate (Storable.length xs) (StructValue Boxed.empty)
+      Table n _ <- get
+      pure . Boxed.replicate n $ StructValue Boxed.empty
     else do
       xss <- traverse (takeValue . fieldSchema) fields
       pure . fmap StructValue $ Boxed.transpose xss
@@ -313,20 +310,6 @@ relist ns xs =
 
 ------------------------------------------------------------------------
 
-rowsOfTable :: Table -> Int
-rowsOfTable (Table columns) =
-  case columns Boxed.!? 0 of
-    Nothing ->
-      0
-    Just (ByteColumn xs) ->
-      B.length xs
-    Just (IntColumn xs) ->
-      Storable.length xs
-    Just (DoubleColumn xs) ->
-      Storable.length xs
-    Just (ArrayColumn xs _) ->
-      Storable.length xs
-
 encodingOfTable :: Table -> Encoding
 encodingOfTable =
   encodingOfColumns . Boxed.toList . tableColumns
@@ -348,20 +331,27 @@ encodingOfColumn = \case
 
 concatTables :: Boxed.Vector Table -> Either TableError Table
 concatTables xss0 =
-  let
-    xss :: Boxed.Vector (Boxed.Vector Column)
-    xss =
-      coerce xss0
+  if Boxed.null xss0 then
+    Left TableCannotConcatEmpty
+  else
+    let
+      n :: Int
+      n =
+        Boxed.sum $ fmap tableRowCount xss0
 
-    yss =
-      Boxed.transpose xss
-  in
-    fmap Table $
-    traverse concatColumns yss
+      xss :: Boxed.Vector (Boxed.Vector Column)
+      xss =
+        fmap tableColumns xss0
+
+      yss =
+        Boxed.transpose xss
+    in
+      fmap (Table n) $
+      traverse concatColumns yss
 
 appendTables :: Table -> Table -> Either TableError Table
-appendTables (Table xs) (Table ys) =
-  Table <$> Boxed.zipWithM appendColumns xs ys
+appendTables (Table n xs) (Table m ys) =
+  Table (n + m) <$> Boxed.zipWithM appendColumns xs ys
 
 concatColumns :: Boxed.Vector Column -> Either TableError Column
 concatColumns xs =
@@ -390,9 +380,15 @@ appendColumns x y =
       Left $ TableAppendColumnsMismatch x y
 
 splitAtTable :: Int -> Table -> (Table, Table)
-splitAtTable i (Table fs) =
-  let (as,bs) = Boxed.unzip $ Boxed.map (splitAtColumn i) fs
-  in  (Table as, Table bs)
+splitAtTable i0 (Table n fs) =
+  let
+    i =
+      min n (max 0 i0)
+
+    (as, bs) =
+      Boxed.unzip $ Boxed.map (splitAtColumn i) fs
+  in
+    (Table i as, Table (n - i) bs)
 
 splitAtColumn :: Int -> Column -> (Column, Column)
 splitAtColumn i =
@@ -415,19 +411,19 @@ splitAtColumn i =
 
 emptyByte :: Table
 emptyByte =
-  Table . Boxed.singleton $ ByteColumn B.empty
+  Table 0 . Boxed.singleton $ ByteColumn B.empty
 
 emptyInt :: Table
 emptyInt =
-  Table . Boxed.singleton $ IntColumn Storable.empty
+  Table 0 . Boxed.singleton $ IntColumn Storable.empty
 
 emptyDouble :: Table
 emptyDouble =
-  Table . Boxed.singleton $ DoubleColumn Storable.empty
+  Table 0 . Boxed.singleton $ DoubleColumn Storable.empty
 
 emptyArray :: Table -> Table
 emptyArray vs =
-  Table . Boxed.singleton $ ArrayColumn Storable.empty vs
+  Table 0 . Boxed.singleton $ ArrayColumn Storable.empty vs
 
 emptyOfSchema :: Schema -> Table
 emptyOfSchema = \case
@@ -444,34 +440,31 @@ emptyOfSchema = \case
   ListSchema schema ->
     emptyArray $ emptyOfSchema schema
   StructSchema fields ->
-    if Boxed.null fields then
-      emptyInt
-    else
-      Table $ Boxed.concatMap (tableColumns . emptyOfSchema . fieldSchema) fields
+    Table 0 $ Boxed.concatMap (tableColumns . emptyOfSchema . fieldSchema) fields
   EnumSchema variant0 variants ->
-    Table $
+    Table 0 $
       tableColumns emptyInt <>
       Boxed.concatMap (tableColumns . emptyOfSchema . variantSchema) (Boxed.cons variant0 variants)
 
 singletonInt :: Int64 -> Table
 singletonInt =
-  Table . Boxed.singleton . IntColumn . Storable.singleton
+  Table 1 . Boxed.singleton . IntColumn . Storable.singleton
 
 singletonDouble :: Double -> Table
 singletonDouble =
-  Table . Boxed.singleton . DoubleColumn . Storable.singleton
+  Table 1 . Boxed.singleton . DoubleColumn . Storable.singleton
 
 singletonString :: ByteString -> Table
 singletonString bs =
-  Table .
+  Table 1 .
   Boxed.singleton $
   ArrayColumn
     (Storable.singleton . fromIntegral $ B.length bs)
-    (Table . Boxed.singleton $ ByteColumn bs)
+    (Table (B.length bs) . Boxed.singleton $ ByteColumn bs)
 
 singletonEmptyList :: Table -> Table
 singletonEmptyList =
-  Table . Boxed.singleton . ArrayColumn (Storable.singleton 0)
+  Table 1 . Boxed.singleton . ArrayColumn (Storable.singleton 0)
 
 defaultOfSchema :: Schema -> Table
 defaultOfSchema = \case
@@ -488,18 +481,8 @@ defaultOfSchema = \case
   ListSchema schema ->
     singletonEmptyList $ emptyOfSchema schema
   StructSchema fields ->
-    if Boxed.null fields then
-      singletonInt 0
-    else
-      Table $ Boxed.concatMap (tableColumns . defaultOfSchema . fieldSchema) fields
+    Table 1 $ Boxed.concatMap (tableColumns . defaultOfSchema . fieldSchema) fields
   EnumSchema variant0 variants ->
-    Table $
+    Table 1 $
       tableColumns (singletonInt 0) <>
       Boxed.concatMap (tableColumns . defaultOfSchema . variantSchema) (Boxed.cons variant0 variants)
-
---defaultOfFieldSchema :: FieldSchema -> Table
---defaultOfFieldSchema = \case
---  FieldSchema RequiredField schema ->
---    defaultOfSchema schema
---  FieldSchema OptionalField schema ->
---    Table $ tableColumns (singletonInt 0) <> tableColumns (defaultOfSchema schema)

@@ -55,14 +55,11 @@ peekTable c_table = do
   n_cols <- fromIntegral <$> peekIO (p'zebra_table'column_count c_table)
   c_columns <- peekIO (p'zebra_table'columns c_table)
 
-  fmap Table . peekMany c_columns n_cols $ peekColumn n_rows
+  fmap (Table n_rows) . peekMany c_columns n_cols $ peekColumn n_rows
 
 pokeTable :: MonadIO m => Mempool -> Ptr C'zebra_table -> Table -> m ()
-pokeTable pool c_table table@(Table columns) = do
+pokeTable pool c_table (Table n_rows columns) = do
   let
-    n_rows =
-      rowsOfTable table
-
     n_cols =
       Boxed.length columns
 

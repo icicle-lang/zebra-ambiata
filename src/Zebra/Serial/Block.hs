@@ -284,7 +284,7 @@ bTables xs =
 
     counts =
       Storable.convert $
-      fmap (fromIntegral . rowsOfTable) xs
+      fmap (fromIntegral . tableRowCount) xs
   in
     Build.word32LE tcount <>
     bIntArray ids <>
@@ -313,7 +313,7 @@ bTable =
 
 getTable :: Int -> Encoding -> Get Table
 getTable n (Encoding columns) = do
-  Table . Boxed.fromList <$> traverse (getColumn n) columns
+  Table n . Boxed.fromList <$> traverse (getColumn n) columns
 
 bColumn :: Column -> Builder
 bColumn = \case
@@ -325,7 +325,7 @@ bColumn = \case
     bIntArray $ coerce xs
   ArrayColumn ns rec ->
     bIntArray ns <>
-    Build.word32LE (fromIntegral $ rowsOfTable rec) <>
+    Build.word32LE (fromIntegral $ tableRowCount rec) <>
     bTable rec
 
 getColumn :: Int -> ColumnEncoding -> Get Column

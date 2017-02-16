@@ -296,7 +296,7 @@ jTable =
 jTable' :: Int -> Jack Table
 jTable' n =
   sized $ \size ->
-    Table . Boxed.fromList <$> listOfN 1 (max 1 (size `div` 10)) (jColumn n)
+    Table n . Boxed.fromList <$> listOfN 1 (max 1 (size `div` 10)) (jColumn n)
 
 jColumn :: Int -> Jack Column
 jColumn n =
