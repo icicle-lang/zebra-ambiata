@@ -15,7 +15,7 @@ module Zebra.Data.Table.Mutable (
   , insertMaybeValue
   , insertValue
   , insertDefault
-  , withMTable
+  , evalStateTable
   , unsafeFreezeTable
 
   , thawTable
@@ -186,7 +186,6 @@ thawTable (Table n columns) =
     <$> Ref.newRef n
     <*> Boxed.mapM thawColumn columns
 
-
 thawColumn :: PrimMonad m => Column -> m (MColumn (PrimState m))
 thawColumn = \case
   ByteColumn bs -> do
@@ -285,12 +284,12 @@ insertMaybeValue ::
   EitherT MutableError m ()
 insertMaybeValue schema table = \case
   Nothing' -> do
-    withMTable table $ do
+    evalStateTable table $ do
       insertDefault schema
       MTable nref _ <- get
       Ref.modifyRef nref (+ 1)
   Just' value -> do
-    withMTable table $ do
+    evalStateTable table $ do
       insertValue schema value
       MTable nref _ <- get
       Ref.modifyRef nref (+ 1)
@@ -342,7 +341,7 @@ insertValue schema value =
     ListSchema ischema ->
       case value of
         ListValue xs ->
-          withArray $ \ns -> do
+          popArrayColumn $ \ns -> do
             let
               n =
                 fromIntegral $ Boxed.length xs
@@ -363,9 +362,7 @@ insertValue schema value =
             MTable nref _ <- get
             Ref.modifyRef nref (+ Boxed.length xs)
 
-            -- TODO wtf?
-            nref0 <- Ref.newRef 0
-            put $ MTable nref0 Boxed.empty
+            put =<< newEmptyMTable
 
         _ ->
           lift . left $ MutableSchemaMismatch value schema
@@ -415,10 +412,22 @@ insertStruct fields values =
 
 ------------------------------------------------------------------------
 
-takeNext ::
+evalStateTable ::
+  PrimMonad m =>
+  MTable (PrimState m) ->
+  StateT (MTable (PrimState m)) (EitherT MutableError m) a ->
+  EitherT MutableError m a
+evalStateTable table0 m = do
+  (result, MTable _ columns) <- runStateT m table0
+  if Boxed.null columns then
+    pure result
+  else
+    left . MutableLeftoverColumns . Boxed.toList $ fmap describeColumn columns
+
+popColumn ::
   PrimMonad m =>
   StateT (MTable (PrimState m)) (EitherT MutableError m) (MColumn (PrimState m))
-takeNext = do
+popColumn = do
   MTable nref xs <- get
   case xs Boxed.!? 0 of
     Just x -> do
@@ -427,69 +436,56 @@ takeNext = do
     Nothing ->
       lift $ left MutableNoMoreColumns
 
-takeByte ::
+popByteColumn ::
   PrimMonad m =>
   StateT
     (MTable (PrimState m))
     (EitherT MutableError m)
     (Grow MStorable.MVector (PrimState m) Word8)
-takeByte =
-  takeNext >>= \case
+popByteColumn =
+  popColumn >>= \case
     MByteColumn xs ->
       pure xs
     x ->
       lift . left . MutableExpectedByteColumn $ describeColumn x
 
-takeInt ::
+popIntColumn ::
   PrimMonad m =>
   StateT
     (MTable (PrimState m))
     (EitherT MutableError m)
     (Grow MStorable.MVector (PrimState m) Int64)
-takeInt =
-  takeNext >>= \case
+popIntColumn =
+  popColumn >>= \case
     MIntColumn xs ->
       pure xs
     x ->
       lift . left . MutableExpectedIntColumn $ describeColumn x
 
-takeDouble ::
+popDoubleColumn ::
   PrimMonad m =>
   StateT
     (MTable (PrimState m))
     (EitherT MutableError m)
     (Grow MStorable.MVector (PrimState m) Double)
-takeDouble =
-  takeNext >>= \case
+popDoubleColumn =
+  popColumn >>= \case
     MDoubleColumn xs ->
       pure xs
     x ->
       lift . left . MutableExpectedDoubleColumn $ describeColumn x
 
-withMTable ::
-  PrimMonad m =>
-  MTable (PrimState m) ->
-  StateT (MTable (PrimState m)) (EitherT MutableError m) a ->
-  EitherT MutableError m a
-withMTable table0 m = do
-  (result, MTable _ xs) <- runStateT m table0
-  if Boxed.null xs then
-    pure result
-  else
-    left . MutableLeftoverColumns . Boxed.toList $ fmap describeColumn xs
-
-withArray ::
+popArrayColumn ::
   PrimMonad m =>
   (Grow MStorable.MVector (PrimState m) Int64 ->
     StateT (MTable (PrimState m)) (EitherT MutableError m) a) ->
   StateT (MTable (PrimState m)) (EitherT MutableError m) a
-withArray f =
-  takeNext >>= \case
+popArrayColumn f =
+  popColumn >>= \case
     MArrayColumn ns table0 ->
-      lift . withMTable table0 $ do
+      lift . evalStateTable table0 $ do
         x <- f ns
 
-        -- TODO this makes me sad
         n <- fromIntegral . Storable.sum <$> Grow.unsafeFreeze ns
         MTable nref _ <- get
         Ref.writeRef nref n
@@ -516,7 +512,7 @@ insertInt ::
   Int64 ->
   StateT (MTable (PrimState m)) (EitherT MutableError m) ()
 insertInt w = do
-  xs <- takeInt
+  xs <- popIntColumn
   Grow.add xs w
 
 insertDouble ::
@@ -524,7 +520,7 @@ insertDouble ::
   Double ->
   StateT (MTable (PrimState m)) (EitherT MutableError m) ()
 insertDouble d = do
-  xs <- takeDouble
+  xs <- popDoubleColumn
   Grow.add xs d
 
 insertString ::
@@ -532,9 +528,9 @@ insertString ::
   ByteString ->
   StateT (MTable (PrimState m)) (EitherT MutableError m) ()
 insertString bs = do
-  withArray $ \ns -> do
+  popArrayColumn $ \ns -> do
     Grow.add ns (fromIntegral $ B.length bs)
-    xs <- takeByte
+    xs <- popByteColumn
     Grow.append xs (unsafeFromByteString bs)
 
 insertDefault ::
@@ -553,12 +549,9 @@ insertDefault = \case
   DateSchema ->
     insertInt 0
   ListSchema _ ->
-    withArray $ \ns -> do
+    popArrayColumn $ \ns -> do
       Grow.add ns 0
-
-      -- TODO wtf?
-      nref <- Ref.newRef 0
-      put $ MTable nref Boxed.empty
+      put =<< newEmptyMTable
   StructSchema fields ->
     traverse_ (insertDefault . fieldSchema) fields
   EnumSchema variant0 variants -> do
@@ -566,6 +559,12 @@ insertDefault = \case
     traverse_ (insertDefault . variantSchema) (Boxed.cons variant0 variants)
 
 ------------------------------------------------------------------------
+
+newEmptyMTable :: PrimMonad m => m (MTable (PrimState m))
+newEmptyMTable =
+  MTable
+    <$> Ref.newRef 0
+    <*> pure Boxed.empty
 
 newMByteColumn :: PrimMonad m => m (MTable (PrimState m))
 newMByteColumn =

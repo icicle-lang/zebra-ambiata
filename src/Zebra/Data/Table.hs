@@ -174,10 +174,10 @@ tableOfStruct fields values =
 
 valuesOfTable :: Schema -> Table -> Either ValueError (Boxed.Vector Value)
 valuesOfTable schema table0 =
-  withTable table0 $ takeValue schema
+  evalStateTable table0 $ popValueColumn schema
 
-withTable :: Table -> EitherT ValueError (State Table) a -> Either ValueError a
-withTable table0 m =
+evalStateTable :: Table -> EitherT ValueError (State Table) a -> Either ValueError a
+evalStateTable table0 m =
   let
     (result, table) =
       runState (runEitherT m) table0
@@ -187,8 +187,8 @@ withTable table0 m =
     else
       Left . ValueLeftoverColumns $ encodingOfTable table
 
-takeNext :: EitherT ValueError (State Table) Column
-takeNext = do
+popColumn :: EitherT ValueError (State Table) Column
+popColumn = do
   Table n xs <- get
   case xs Boxed.!? 0 of
     Just x -> do
@@ -197,66 +197,66 @@ takeNext = do
     Nothing ->
       left ValueNoMoreColumns
 
-takeByte :: EitherT ValueError (State Table) ByteString
-takeByte =
-  takeNext >>= \case
+popByteColumn :: EitherT ValueError (State Table) ByteString
+popByteColumn =
+  popColumn >>= \case
     ByteColumn xs ->
       pure xs
     x ->
       left $ ValueExpectedByteColumn x
 
-takeInt :: EitherT ValueError (State Table) (Storable.Vector Int64)
-takeInt =
-  takeNext >>= \case
+popIntColumn :: EitherT ValueError (State Table) (Storable.Vector Int64)
+popIntColumn =
+  popColumn >>= \case
     IntColumn xs ->
       pure xs
     x ->
       left $ ValueExpectedIntColumn x
 
-takeDouble :: EitherT ValueError (State Table) (Storable.Vector Double)
-takeDouble =
-  takeNext >>= \case
+popDoubleColumn :: EitherT ValueError (State Table) (Storable.Vector Double)
+popDoubleColumn =
+  popColumn >>= \case
     DoubleColumn xs ->
       pure xs
     x ->
       left $ ValueExpectedDoubleColumn x
 
-takeArray ::
+popArrayColumn ::
   (Storable.Vector Int64 -> EitherT ValueError (State Table) a) ->
   EitherT ValueError (State Table) a
-takeArray f =
-  takeNext >>= \case
+popArrayColumn f =
+  popColumn >>= \case
     ArrayColumn ns table0 ->
-      hoistEither $ withTable table0 $ f ns
+      hoistEither . evalStateTable table0 $ f ns
     x ->
       left $ ValueExpectedArrayColumn x
 
-takeBool :: EitherT ValueError (State Table) (Boxed.Vector Bool)
-takeBool =
-  fmap (fmap (/= 0) . Boxed.convert) $ takeInt
+popBoolColumn :: EitherT ValueError (State Table) (Boxed.Vector Bool)
+popBoolColumn =
+  fmap (fmap (/= 0) . Boxed.convert) $ popIntColumn
 
-takeValue :: Schema -> EitherT ValueError (State Table) (Boxed.Vector Value)
-takeValue = \case
+popValueColumn :: Schema -> EitherT ValueError (State Table) (Boxed.Vector Value)
+popValueColumn = \case
   BoolSchema ->
-    fmap (fmap BoolValue) takeBool
+    fmap (fmap BoolValue) popBoolColumn
 
   Int64Schema ->
-    fmap (fmap (Int64Value . fromIntegral) . Boxed.convert) takeInt
+    fmap (fmap (Int64Value . fromIntegral) . Boxed.convert) popIntColumn
 
   DoubleSchema ->
-    fmap (fmap DoubleValue . Boxed.convert) takeDouble
+    fmap (fmap DoubleValue . Boxed.convert) popDoubleColumn
 
   StringSchema ->
-    takeArray $ \ns -> do
-      bs <- takeByte
+    popArrayColumn $ \ns -> do
+      bs <- popByteColumn
       fmap (fmap $ StringValue . T.decodeUtf8) . hoistEither $ restring ns bs
 
   DateSchema ->
-    fmap (fmap (DateValue . toDay . fromIntegral) . Boxed.convert) takeInt
+    fmap (fmap (DateValue . toDay . fromIntegral) . Boxed.convert) popIntColumn
 
   ListSchema schema ->
-    takeArray $ \ns -> do
-      xs <- takeValue schema
+    popArrayColumn $ \ns -> do
+      xs <- popValueColumn schema
       fmap (fmap ListValue) . hoistEither $ relist ns xs
 
   StructSchema fields ->
@@ -264,13 +264,12 @@ takeValue = \case
       Table n _ <- get
       pure . Boxed.replicate n $ StructValue Boxed.empty
     else do
-      xss <- traverse (takeValue . fieldSchema) fields
+      xss <- traverse (popValueColumn . fieldSchema) fields
       pure . fmap StructValue $ Boxed.transpose xss
 
   EnumSchema variant0 variants -> do
-    tags <- takeInt
-    -- TODO is this transpose correct?
-    xss <- Boxed.transpose <$> traverse (takeValue . variantSchema) (Boxed.cons variant0 variants)
+    tags <- popIntColumn
+    xss <- Boxed.transpose <$> traverse (popValueColumn . variantSchema) (Boxed.cons variant0 variants)
 
     let
       takeTag tag xs = do
