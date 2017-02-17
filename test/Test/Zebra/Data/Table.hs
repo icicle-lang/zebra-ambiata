@@ -17,7 +17,7 @@ import           Zebra.Data.Table
 prop_roundtrip_splitAt :: Property
 prop_roundtrip_splitAt =
   gamble arbitrary $ \ix ->
-  gamble jTable $
+  gamble jAnyTable $
     tripping (splitAtTable ix) (uncurry appendTables)
 
 return []

@@ -28,7 +28,7 @@ import P
 
 
 
-entityValuesOfBlock :: Monad m => BlockDataId -> Block -> Stream.Stream m EntityValues
+entityValuesOfBlock :: Monad m => BlockDataId -> Block a -> Stream.Stream m (EntityValues a)
 entityValuesOfBlock blockId (Block entities indices tables) =
   Stream.streamOfVectorM $
   Boxed.mapAccumulate go (indices,tables) entities
@@ -60,7 +60,7 @@ entityValuesOfBlock blockId (Block entities indices tables) =
 -- >    [ BlockAttribute (AttributeId 1) 10 , BlockAttribute (AttributeId 3) 20 ]
 -- > = [ 0, 10, 0, 20, 0 ]
 --
-denseAttributeCount :: Boxed.Vector Table -> Unboxed.Vector BlockAttribute -> Unboxed.Vector Int
+denseAttributeCount :: Boxed.Vector (Table a) -> Unboxed.Vector BlockAttribute -> Unboxed.Vector Int
 denseAttributeCount rs attr =
   Unboxed.mapAccumulate go attr $
   Unboxed.enumFromN 0 $ Boxed.length rs
@@ -77,7 +77,7 @@ denseAttributeCount rs attr =
      = (attrs, 0)
 
 
-mergeEntityValues :: Monad m => Stream.Stream m EntityValues -> Stream.Stream m EntityValues -> Stream.Stream m EntityValues
+mergeEntityValues :: Monad m => Stream.Stream m (EntityValues a) -> Stream.Stream m (EntityValues a) -> Stream.Stream m (EntityValues a)
 mergeEntityValues ls rs
  = Stream.merge (Stream.mergePullJoin joinEV ordEV) ls rs
  where
@@ -97,14 +97,14 @@ mergeEntityValues ls rs
 -- mergeTables: gather and concatenate all the tables from different blocks.
 -- This should be done after all the indices have been merged, so that it only has to
 -- slice and concat the actual data once, instead of for each pair of merges.
-mergeEntityTables :: EntityValues -> Either MergeError (Boxed.Vector Table)
+mergeEntityTables :: EntityValues a -> Either (MergeError a) (Boxed.Vector (Table a))
 mergeEntityTables (EntityValues _ aixs recs) =
   Boxed.mapM go (Boxed.zip (Boxed.indexed aixs) recs)
   where
     go ((aid, aix), rec)
      = mergeEntityTable (AttributeId $ fromIntegral aid) aix rec
 
-mergeEntityTable :: AttributeId -> Unboxed.Vector (BlockIndex, BlockDataId) -> Map.Map BlockDataId Table -> Either MergeError Table
+mergeEntityTable :: AttributeId -> Unboxed.Vector (BlockIndex, BlockDataId) -> Map.Map BlockDataId (Table a) -> Either (MergeError a) (Table a)
 mergeEntityTable aid aixs tables = do
   i <- init
   fst <$> Unboxed.foldM go (i, tables) aixs
@@ -137,7 +137,7 @@ mergeEntityTable aid aixs tables = do
      = first MergeTableError $ appendTables a b
 
 
-entityMergedOfEntityValues :: EntityValues -> Either MergeError EntityMerged
+entityMergedOfEntityValues :: EntityValues a -> Either (MergeError a) (EntityMerged a)
 entityMergedOfEntityValues ev@(EntityValues e aixs _) = do
   recs <- mergeEntityTables ev
   return $ EntityMerged (entityHash e) (entityId e) (Boxed.map (Unboxed.map fst) aixs) recs

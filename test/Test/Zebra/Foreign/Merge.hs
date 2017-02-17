@@ -130,7 +130,7 @@ jBlockPair factsetId_mode schemas = do
   return $ bisectBlockFacts split fs'
 
 -- | Construct a C Block from a bunch of facts
-testForeignOfFacts :: Mempool.Mempool -> [Schema] -> [Fact] -> IO (Block, Boxed.Vector CEntity)
+testForeignOfFacts :: Mempool.Mempool -> [Schema] -> [Fact] -> IO (Block Schema, Boxed.Vector CEntity)
 testForeignOfFacts pool schemas facts = do
   let Right block    = blockOfFacts (Boxed.fromList schemas) (Boxed.fromList facts)
   let Right entities = entitiesOfBlock block
@@ -140,7 +140,7 @@ testForeignOfFacts pool schemas facts = do
 -- | This is the slow obvious implementation to check against.
 -- It sorts all the facts by entity and turns them into entities.
 -- This must be a stable sort.
-testMergeFacts :: [Schema] -> [Fact] -> Boxed.Vector Entity
+testMergeFacts :: [Schema] -> [Fact] -> Boxed.Vector (Entity Schema)
 testMergeFacts schemas facts =
   let Right block    = blockOfFacts (Boxed.fromList schemas) (Boxed.fromList $ sortFacts facts)
       Right entities = entitiesOfBlock block
@@ -195,7 +195,7 @@ prop_merge_1_entity_check_result =
            $ case merged of
               Right m'
                 | Boxed.length cs1 == 1 && Boxed.length cs2 == 1
-                -> expect === m'
+                -> fmap (() <$) expect === m'
                 | otherwise
                 -> Boxed.empty === m'
               Left  e' -> counterexample e' False
@@ -211,11 +211,11 @@ prop_merge_1_block_2_files =
   gamble (jSmallFacts schemas) $ \facts2 ->
   gamble jGarbageCollectEvery $ \gcEvery ->
   testIO . withSegv (ppShow (schemas, facts1, facts2)) $ do
-    let expect = testMergeFacts schemas (facts1 <> facts2)
+    let expect = fmap (() <$) $ testMergeFacts schemas (facts1 <> facts2)
     let Right b1 = blockOfFacts (Boxed.fromList schemas) (Boxed.fromList facts1)
     let Right b2 = blockOfFacts (Boxed.fromList schemas) (Boxed.fromList facts2)
     let err i = firstEitherT ppShow i
-    merged <- runEitherT $ err $ TestMerge.mergeLists gcEvery [[b1], [b2]]
+    merged <- runEitherT $ err $ TestMerge.mergeLists gcEvery [[() <$ b1], [() <$ b2]]
 
     return $ counterexample (ppShow (b1,b2))
            $ case merged of
@@ -242,7 +242,7 @@ prop_merge_2_block_2_files =
   gamble jGarbageCollectEvery $ \gcEvery ->
   testIO . withSegv (ppShow (schemas, (facts11,facts12), (facts21, facts22))) $ do
     let mkBlock = blockOfFacts (Boxed.fromList schemas) . Boxed.fromList
-    let expect = testMergeFacts schemas (facts11 <> facts12 <> facts21 <> facts22)
+    let expect = fmap (() <$) $ testMergeFacts schemas (facts11 <> facts12 <> facts21 <> facts22)
 
     let Right b11 = mkBlock facts11
     let Right b12 = mkBlock facts12
@@ -251,7 +251,7 @@ prop_merge_2_block_2_files =
     let allBlocks = [ [b11, b12], [b21, b22] ]
 
     let err i = firstEitherT ppShow i
-    merged <- runEitherT $ err $ TestMerge.mergeLists gcEvery allBlocks
+    merged <- runEitherT $ err $ TestMerge.mergeLists gcEvery $ fmap (fmap (() <$)) allBlocks
 
     return $ counterexample (ppShow allBlocks)
            $ case merged of

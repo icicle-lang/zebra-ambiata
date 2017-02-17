@@ -24,6 +24,8 @@ import qualified X.Data.Vector as Boxed
 import qualified X.Data.Vector.Stream as Stream
 
 import           Zebra.Data
+import           Zebra.Data.Fact (Fact(..))
+import           Zebra.Data.Schema (Schema)
 import           Zebra.Merge.Base
 import           Zebra.Merge.Entity
 
@@ -31,7 +33,7 @@ import           Zebra.Merge.Entity
 fakeBlockId :: BlockDataId
 fakeBlockId = BlockDataId 0
 
-entityValuesOfBlock' :: BlockDataId -> Block -> Boxed.Vector EntityValues
+entityValuesOfBlock' :: BlockDataId -> Block a -> Boxed.Vector (EntityValues a)
 entityValuesOfBlock' blockId block = Stream.vectorOfStream $ entityValuesOfBlock blockId block
 
 ppCounter :: (Show a, Testable p) => Savage.String -> a -> p -> Property
@@ -43,7 +45,7 @@ ppCounter heading thing prop
 jSchemas :: Jack [Schema]
 jSchemas = listOfN 0 5 jSchema
 
-blockOfFacts' :: [Schema] -> [Fact] -> Block
+blockOfFacts' :: [Schema] -> [Fact] -> Block Schema
 blockOfFacts' schemas facts =
   case blockOfFacts (Boxed.fromList schemas) (Boxed.fromList facts) of
    Left e -> Savage.error
@@ -85,7 +87,7 @@ prop_entitiesOfBlock_tables_1_entity =
     ( length facts > 0
     ==> Boxed.concatMap id (getFakeTableValues es) === blockTables block )
 
-getFakeTableValues :: Boxed.Vector EntityValues -> Boxed.Vector (Boxed.Vector Table)
+getFakeTableValues :: Boxed.Vector (EntityValues a) -> Boxed.Vector (Boxed.Vector (Table a))
 getFakeTableValues = fmap (fmap (Map.! fakeBlockId) . evTables)
 
 prop_mergeEntityTables_1_block :: Property

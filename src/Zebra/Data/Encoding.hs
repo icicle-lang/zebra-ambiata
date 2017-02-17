@@ -112,57 +112,49 @@ encodingOfDictionary =
 
 encodingOfSchema :: Schema -> Encoding
 encodingOfSchema = \case
-  BoolSchema ->
-    Encoding (pure IntEncoding)
-  Int64Schema ->
-    Encoding (pure IntEncoding)
-  DoubleSchema ->
-    Encoding (pure DoubleEncoding)
-  StringSchema ->
-    Encoding (pure . ArrayEncoding $ Encoding [ByteEncoding])
-  DateSchema ->
-    Encoding (pure IntEncoding)
-  ListSchema schema ->
-    Encoding (pure . ArrayEncoding $ encodingOfSchema schema)
-  StructSchema fields ->
-    foldMap (encodingOfSchema . fieldSchema) fields
-  EnumSchema variant0 variants ->
+  Bool ->
+    Encoding $ pure IntEncoding
+  Byte ->
+    Encoding $ pure ByteEncoding
+  Int ->
+    Encoding $ pure IntEncoding
+  Double ->
+    Encoding $ pure DoubleEncoding
+  Enum variant0 variants ->
     Encoding (pure IntEncoding) <>
     foldMap (encodingOfSchema . variantSchema) (Boxed.cons variant0 variants)
+  Struct fields ->
+    foldMap (encodingOfSchema . fieldSchema) fields
+  Array schema ->
+    Encoding (pure . ArrayEncoding $ encodingOfSchema schema)
 
 -- Best effort to recover an schema
-recoverSchemaOfEncoding :: Encoding -> Maybe Schema
+recoverSchemaOfEncoding :: Encoding -> Schema
 recoverSchemaOfEncoding (Encoding encodings) =
   case recoverSchemaOfColumns encodings of
-    Nothing ->
-      Nothing
-    Just [] ->
-      Nothing
-    Just [x] ->
-      Just x
-    Just xs ->
+    [] ->
+      Struct Boxed.empty
+    [x] ->
+      x
+    xs ->
       let
-        mkField :: Int -> Schema -> FieldSchema
+        mkField :: Int -> Schema -> Field
         mkField i x =
-          FieldSchema (FieldName . T.pack $ show i) x
+          Field (FieldName . T.pack $ show i) x
       in
-        Just .
-          StructSchema .
-          Boxed.fromList $
-          List.zipWith mkField [0..] xs
+        Struct .
+        Boxed.fromList $
+        List.zipWith mkField [0..] xs
 
-recoverSchemaOfColumns :: [ColumnEncoding] -> Maybe [Schema]
+recoverSchemaOfColumns :: [ColumnEncoding] -> [Schema]
 recoverSchemaOfColumns = \case
   [] ->
-    Just []
-  ByteEncoding : _ ->
-    Nothing
+    []
+  ByteEncoding : xs ->
+    Byte : recoverSchemaOfColumns xs
   IntEncoding : xs ->
-    (Int64Schema :) <$> recoverSchemaOfColumns xs
+    Int : recoverSchemaOfColumns xs
   DoubleEncoding : xs ->
-    (DoubleSchema :) <$> recoverSchemaOfColumns xs
-  ArrayEncoding (Encoding [ByteEncoding]) : xs ->
-    (StringSchema :) <$> recoverSchemaOfColumns xs
+    Double : recoverSchemaOfColumns xs
   ArrayEncoding encoding : xs -> do
-    schema <- recoverSchemaOfEncoding encoding
-    (ListSchema schema :) <$> recoverSchemaOfColumns xs
+    Array (recoverSchemaOfEncoding encoding) : recoverSchemaOfColumns xs

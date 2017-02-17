@@ -57,7 +57,7 @@ renderDecodeError = \case
   DecodeErrorBadParserExpectsMoreAfterEnd ->
     "Decode error: the parser asked for more input after telling it the stream has ended. This means there is a bug in the parser."
 
-fileOfBytes :: Monad m => Stream.Stream m B.ByteString -> EitherT DecodeError m (Map AttributeName Encoding, Stream.Stream (EitherT DecodeError m) Block)
+fileOfBytes :: Monad m => Stream.Stream m B.ByteString -> EitherT DecodeError m (Map AttributeName Encoding, Stream.Stream (EitherT DecodeError m) (Block ()))
 fileOfBytes input = EitherT $ do
   (header, rest) <- runStreamOne getHeader input
   case header of
@@ -67,7 +67,7 @@ fileOfBytes input = EitherT $ do
         blocks = runStreamMany (getBlock encoding) rest
     in  return $ Right (header', blocks)
 
-blocksOfBytes :: Monad m => Boxed.Vector Encoding -> Stream.Stream m B.ByteString -> Stream.Stream (EitherT DecodeError m) Block
+blocksOfBytes :: Monad m => Boxed.Vector Encoding -> Stream.Stream m B.ByteString -> Stream.Stream (EitherT DecodeError m) (Block ())
 blocksOfBytes formats inp = runStreamMany (getBlock formats) inp
 
 
@@ -144,7 +144,7 @@ runStreamMany g (Stream.Stream s'go s'init) =
          -> return $ Stream.Yield ret (s, str', Nothing)
 
 
-fileOfFilePath :: MonadIO m => FilePath -> EitherT DecodeError m (Map AttributeName Encoding, Stream.Stream (EitherT DecodeError m) Block)
+fileOfFilePath :: MonadIO m => FilePath -> EitherT DecodeError m (Map AttributeName Encoding, Stream.Stream (EitherT DecodeError m) (Block ()))
 fileOfFilePath path = do
   bytes <- lift $ streamOfFile path
   fileOfBytes bytes

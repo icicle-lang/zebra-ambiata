@@ -17,7 +17,8 @@ import           Text.Show.Pretty (ppShow)
 
 import           Zebra.Data.Block
 import           Zebra.Data.Core
-import           Zebra.Data.Table.Mutable
+import           Zebra.Data.Schema (Schema)
+import           Zebra.Data.Table.Mutable (MutableError)
 
 
 prop_roundtrip_facts :: Property
@@ -38,7 +39,7 @@ prop_roundtrip_facts =
 
 data SomeError =
     TableError !MutableError
-  | FactError !FactError
+  | FactError !(FactError Schema)
     deriving (Eq, Show)
 
 trippingBoth :: (Monad m, Show (m a), Show (m b), Eq (m a)) => (a -> m b) -> (b -> m a) -> a -> Property

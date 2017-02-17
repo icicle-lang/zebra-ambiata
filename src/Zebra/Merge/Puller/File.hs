@@ -42,7 +42,7 @@ newtype PullId =
 
 blockChainPuller :: MonadIO m
   => Boxed.Vector FilePath
-  -> EitherT PullerError m (PullId -> EitherT DecodeError m (Maybe Block), Boxed.Vector PullId)
+  -> EitherT PullerError m (PullId -> EitherT DecodeError m (Maybe (Block ())), Boxed.Vector PullId)
 blockChainPuller files
  | Just (file0, _) <- Boxed.uncons files
  = do

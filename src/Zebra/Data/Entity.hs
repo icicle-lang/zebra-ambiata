@@ -1,5 +1,8 @@
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE DeriveFoldable #-}
+{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 module Zebra.Data.Entity where
 
@@ -17,25 +20,25 @@ import           Zebra.Data.Core
 import           Zebra.Data.Table
 
 
-data Attribute =
+data Attribute a =
   Attribute {
       attributeTime :: !(Storable.Vector Time)
     , attributeFactsetId :: !(Storable.Vector FactsetId)
     , attributeTombstone :: !(Storable.Vector Tombstone)
-    , attributeTable :: !Table
-    } deriving (Eq, Ord, Generic, Typeable)
+    , attributeTable :: !(Table a)
+    } deriving (Eq, Ord, Generic, Typeable, Functor, Foldable, Traversable)
 
-data Entity =
+data Entity a =
   Entity {
       entityHash :: !EntityHash
     , entityId :: !EntityId
-    , entityAttributes :: !(Boxed.Vector Attribute)
-    } deriving (Eq, Ord, Generic, Typeable)
+    , entityAttributes :: !(Boxed.Vector (Attribute a))
+    } deriving (Eq, Ord, Generic, Typeable, Functor, Foldable, Traversable)
 
-instance Show Attribute where
+instance Show a => Show (Attribute a) where
   showsPrec =
     gshowsPrec
 
-instance Show Entity where
+instance Show a => Show (Entity a) where
   showsPrec =
     gshowsPrec

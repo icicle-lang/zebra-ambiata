@@ -35,17 +35,17 @@ newtype CTable =
       unCTable :: Ptr C'zebra_table
     }
 
-tableOfForeign :: MonadIO m => CTable -> EitherT ForeignError m Table
+tableOfForeign :: MonadIO m => CTable -> EitherT ForeignError m (Table ())
 tableOfForeign (CTable c_table) =
   peekTable c_table
 
-foreignOfTable :: MonadIO m => Mempool -> Table -> m CTable
+foreignOfTable :: MonadIO m => Mempool -> Table a -> m CTable
 foreignOfTable pool table = do
   c_table <- liftIO $ alloc pool
   pokeTable pool c_table table
   pure $ CTable c_table
 
-peekTable :: MonadIO m => Ptr C'zebra_table -> EitherT ForeignError m Table
+peekTable :: MonadIO m => Ptr C'zebra_table -> EitherT ForeignError m (Table ())
 peekTable c_table = do
   n_rows <- fromIntegral <$> peekIO (p'zebra_table'row_count c_table)
   n_cap <- fromIntegral <$> peekIO (p'zebra_table'row_capacity c_table)
@@ -55,10 +55,10 @@ peekTable c_table = do
   n_cols <- fromIntegral <$> peekIO (p'zebra_table'column_count c_table)
   c_columns <- peekIO (p'zebra_table'columns c_table)
 
-  fmap (Table n_rows) . peekMany c_columns n_cols $ peekColumn n_rows
+  fmap (Table () n_rows) . peekMany c_columns n_cols $ peekColumn n_rows
 
-pokeTable :: MonadIO m => Mempool -> Ptr C'zebra_table -> Table -> m ()
-pokeTable pool c_table (Table n_rows columns) = do
+pokeTable :: MonadIO m => Mempool -> Ptr C'zebra_table -> Table a -> m ()
+pokeTable pool c_table (Table _ n_rows columns) = do
   let
     n_cols =
       Boxed.length columns
@@ -72,7 +72,7 @@ pokeTable pool c_table (Table n_rows columns) = do
 
   pokeMany c_columns columns $ pokeColumn pool
 
-peekColumn :: MonadIO m => Int -> Ptr C'zebra_column -> EitherT ForeignError m Column
+peekColumn :: MonadIO m => Int -> Ptr C'zebra_column -> EitherT ForeignError m (Column ())
 peekColumn n_rows c_column = do
   typ <- peekIO (p'zebra_column'type c_column)
   case typ of
@@ -96,7 +96,7 @@ peekColumn n_rows c_column = do
     _ ->
       left ForeignInvalidColumnType
 
-pokeColumn :: MonadIO m => Mempool -> Ptr C'zebra_column -> Column -> m ()
+pokeColumn :: MonadIO m => Mempool -> Ptr C'zebra_column -> Column a -> m ()
 pokeColumn pool c_column = \case
   ByteColumn bs -> do
     pokeIO (p'zebra_column'type c_column) C'ZEBRA_BYTE
