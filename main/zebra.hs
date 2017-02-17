@@ -31,7 +31,7 @@ import qualified X.Data.Vector as Boxed
 import qualified X.Data.Vector.Storable as Storable
 import qualified X.Data.Vector.Stream as Stream
 import qualified X.Data.Vector.Unboxed as Unboxed
-import           X.Options.Applicative (Parser, SafeCommand(..), RunType(..), Mod, CommandFields)
+import           X.Options.Applicative (Parser, Mod, CommandFields)
 import qualified X.Options.Applicative as Options
 
 import qualified Zebra.Data.Block as Block
@@ -51,16 +51,7 @@ main :: IO ()
 main = do
   IO.hSetBuffering IO.stdout IO.LineBuffering
   IO.hSetBuffering IO.stderr IO.LineBuffering
-  Options.dispatch parser >>= \sc ->
-    case sc of
-      VersionCommand ->
-        IO.putStrLn buildInfoVersion >> Exit.exitSuccess
-      DependencyCommand ->
-        mapM_ IO.putStrLn dependencyInfo
-      RunCommand DryRun c ->
-        IO.print c >> Exit.exitSuccess
-      RunCommand RealRun c ->
-        run c
+  Options.cli "zebra" buildInfoVersion dependencyInfo parser run
 
 data Command =
     FileCat [FilePath] CatOptions
@@ -84,9 +75,9 @@ data MergeOptions =
   , mergeOutputBlockFacts :: Int
   } deriving (Eq, Show)
 
-parser :: Parser (SafeCommand Command)
+parser :: Parser Command
 parser =
-  Options.safeCommand . Options.subparser $ mconcat commands
+  Options.subparser $ mconcat commands
 
 cmd :: Parser a -> String -> String -> Mod CommandFields a
 cmd p name desc =
