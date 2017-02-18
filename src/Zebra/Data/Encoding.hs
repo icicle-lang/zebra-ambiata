@@ -125,10 +125,7 @@ encodingOfSchema = \case
   ListSchema schema ->
     Encoding (pure . ArrayEncoding $ encodingOfSchema schema)
   StructSchema fields ->
-    if Boxed.null fields then
-      Encoding (pure IntEncoding)
-    else
-      foldMap (encodingOfSchema . fieldSchema) fields
+    foldMap (encodingOfSchema . fieldSchema) fields
   EnumSchema variant0 variants ->
     Encoding (pure IntEncoding) <>
     foldMap (encodingOfSchema . variantSchema) (Boxed.cons variant0 variants)
