@@ -23,7 +23,8 @@ module Test.Zebra.Jack (
   , jSchema
   , jFieldSchema
   , jFieldName
-  , jFieldObligation
+  , jVariantSchema
+  , jVariantName
 
   -- * Zebra.Data.Entity
   , jEntity
@@ -54,8 +55,8 @@ import qualified Data.Vector as Boxed
 import qualified Data.Vector.Storable as Storable
 import qualified Data.Vector.Unboxed as Unboxed
 
-import           Disorder.Corpus (muppets, southpark, boats)
-import           Disorder.Jack (Jack, mkJack, shrinkTowards, sized, scale)
+import           Disorder.Corpus (muppets, southpark, boats, weather)
+import           Disorder.Jack (Jack, mkJack, reshrink, shrinkTowards, sized, scale)
 import           Disorder.Jack (elements, arbitrary, choose, chooseInt, sizedBounded)
 import           Disorder.Jack (oneOf, oneOfRec, listOf, listOfN, vectorOf, justOf, maybeOf)
 
@@ -91,8 +92,28 @@ jColumnEncoding =
       ArrayEncoding <$> jEncoding
     ]
 
+schemaSubterms :: Schema -> [Schema]
+schemaSubterms = \case
+  BoolSchema ->
+    []
+  Int64Schema ->
+    []
+  DoubleSchema ->
+    []
+  StringSchema ->
+    []
+  DateSchema ->
+    []
+  ListSchema s ->
+    [s]
+  StructSchema ss ->
+    fmap fieldSchema $ Boxed.toList ss
+  EnumSchema s0 ss ->
+    fmap variantSchema $ s0 : Boxed.toList ss
+
 jSchema :: Jack Schema
 jSchema =
+  reshrink schemaSubterms $
   oneOfRec [
       pure BoolSchema
     , pure Int64Schema
@@ -100,21 +121,26 @@ jSchema =
     , pure StringSchema
     , pure DateSchema
     ] [
-      StructSchema . Boxed.fromList <$> listOfN 0 10 ((,) <$> jFieldName <*> jFieldSchema)
-    , ListSchema <$> jSchema
+      ListSchema <$> jSchema
+    , StructSchema . Boxed.fromList <$> listOfN 0 10 jFieldSchema
+    , EnumSchema <$> jVariantSchema <*> (Boxed.fromList <$> listOfN 0 9 jVariantSchema)
     ]
+
+jFieldSchema :: Jack FieldSchema
+jFieldSchema =
+  FieldSchema <$> jFieldName <*> jSchema
 
 jFieldName :: Jack FieldName
 jFieldName =
   FieldName <$> elements boats
 
-jFieldSchema :: Jack FieldSchema
-jFieldSchema =
-  FieldSchema <$> jFieldObligation <*> jSchema
+jVariantSchema :: Jack VariantSchema
+jVariantSchema =
+  VariantSchema <$> jVariantName <*> jSchema
 
-jFieldObligation :: Jack FieldObligation
-jFieldObligation =
-  elements [RequiredField, OptionalField]
+jVariantName :: Jack VariantName
+jVariantName =
+  VariantName <$> elements weather
 
 jFacts :: [Schema] -> Jack [Fact]
 jFacts schemas =
@@ -146,14 +172,14 @@ jValue = \case
   ListSchema schema ->
     ListValue . Boxed.fromList <$> listOfN 0 10 (jValue schema)
   StructSchema fields ->
-    StructValue <$> traverse (jFieldValue . snd) fields
-
-jFieldValue :: FieldSchema -> Jack (Maybe' Value)
-jFieldValue = \case
-  FieldSchema RequiredField schema ->
-    Just' <$> jValue schema
-  FieldSchema OptionalField schema ->
-    strictMaybe <$> maybeOf (jValue schema)
+    StructValue <$> traverse (jValue . fieldSchema) fields
+  EnumSchema variant0 variants -> do
+    tag <- choose (0, Boxed.length variants)
+    case tag of
+      0 ->
+        EnumValue tag <$> jValue (variantSchema variant0)
+      _ ->
+        EnumValue tag <$> jValue (variantSchema $ variants Boxed.! (tag - 1))
 
 jEntityId :: Jack EntityId
 jEntityId =
@@ -270,7 +296,7 @@ jTable =
 jTable' :: Int -> Jack Table
 jTable' n =
   sized $ \size ->
-    Table . Boxed.fromList <$> listOfN 1 (max 1 (size `div` 10)) (jColumn n)
+    Table n . Boxed.fromList <$> listOfN 1 (max 1 (size `div` 10)) (jColumn n)
 
 jColumn :: Int -> Jack Column
 jColumn n =

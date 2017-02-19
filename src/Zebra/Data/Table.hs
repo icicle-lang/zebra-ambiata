@@ -11,14 +11,12 @@ module Zebra.Data.Table (
   , TableError(..)
   , ValueError(..)
 
-  , rowsOfTable
   , encodingOfTable
   , encodingOfColumn
 
   , tableOfMaybeValue
   , tableOfValue
   , tableOfStruct
-  , tableOfField
 
   , valuesOfTable
 
@@ -35,7 +33,6 @@ import           Control.Monad.Trans.State.Strict (State, runState)
 
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString as B
-import           Data.Coerce (coerce)
 import qualified Data.Text.Encoding as T
 import           Data.Typeable (Typeable)
 
@@ -56,9 +53,10 @@ import           Zebra.Data.Fact
 import           Zebra.Data.Schema
 
 
-newtype Table =
+data Table =
   Table {
-      tableColumns :: Boxed.Vector Column
+      tableRowCount :: !Int
+    , tableColumns :: !(Boxed.Vector Column)
     } deriving (Eq, Ord, Generic, Typeable)
 
 data Column =
@@ -69,11 +67,12 @@ data Column =
     deriving (Eq, Ord, Generic, Typeable)
 
 data TableError =
-    TableSchemaMismatch !Schema !Value
+    TableSchemaMismatch !Value !Schema
   | TableRequiredFieldMissing !Schema
   | TableCannotConcatEmpty
   | TableAppendColumnsMismatch !Column !Column
-  | TableStructFieldsMismatch !(Boxed.Vector FieldSchema) !(Boxed.Vector (Maybe' Value))
+  | TableStructFieldsMismatch !(Boxed.Vector Value) !(Boxed.Vector FieldSchema)
+  | TableEnumVariantMismatch !Int !Value !(Boxed.Vector VariantSchema)
     deriving (Eq, Ord, Show, Generic, Typeable)
 
 data ValueError =
@@ -83,6 +82,7 @@ data ValueError =
   | ValueExpectedArrayColumn !Column
   | ValueStringLengthMismatch !Int !Int
   | ValueListLengthMismatch !Int !Int
+  | ValueEnumVariantMismatch !Int !(Boxed.Vector VariantSchema)
   | ValueNoMoreColumns
   | ValueLeftoverColumns !Encoding
     deriving (Eq, Ord, Show, Generic, Typeable)
@@ -111,89 +111,73 @@ tableOfValue schema =
       BoolValue True ->
         pure $ singletonInt 1
       value ->
-        Left $ TableSchemaMismatch schema value
+        Left $ TableSchemaMismatch value schema
 
     Int64Schema -> \case
       Int64Value x ->
         pure . singletonInt $ fromIntegral x
       value ->
-        Left $ TableSchemaMismatch schema value
+        Left $ TableSchemaMismatch value schema
 
     DoubleSchema -> \case
       DoubleValue x ->
         pure $ singletonDouble x
       value ->
-        Left $ TableSchemaMismatch schema value
+        Left $ TableSchemaMismatch value schema
 
     StringSchema -> \case
       StringValue x ->
         pure . singletonString $ T.encodeUtf8 x
       value ->
-        Left $ TableSchemaMismatch schema value
+        Left $ TableSchemaMismatch value schema
 
     DateSchema -> \case
       DateValue x ->
         pure . singletonInt . fromIntegral $ fromDay x
       value ->
-        Left $ TableSchemaMismatch schema value
-
-    StructSchema fields -> \case
-      StructValue values ->
-        tableOfStruct (fmap snd fields) values
-      value ->
-        Left $ TableSchemaMismatch schema value
+        Left $ TableSchemaMismatch value schema
 
     ListSchema ischema -> \case
       ListValue xs -> do
         vs0 <- traverse (tableOfValue ischema) xs
         vs1 <- concatTables vs0
-        pure . Table . Boxed.singleton $
+        pure . Table 1 . Boxed.singleton $
           ArrayColumn (Storable.singleton . fromIntegral $ Boxed.length xs) vs1
       value ->
-        Left $ TableSchemaMismatch schema value
+        Left $ TableSchemaMismatch value schema
 
-tableOfStruct :: Boxed.Vector FieldSchema -> Boxed.Vector (Maybe' Value) -> Either TableError Table
+    StructSchema fields -> \case
+      StructValue values ->
+        tableOfStruct fields values
+      value ->
+        Left $ TableSchemaMismatch value schema
+
+    EnumSchema variant0 variants -> \case
+      EnumValue tag x -> do
+        VariantSchema _ variant <- maybeToRight (TableEnumVariantMismatch tag x variants) $ lookupVariant tag variant0 variants
+        xtable <- tableOfValue variant x
+        pure . Table 1 $
+          tableColumns (singletonInt $ fromIntegral tag) <>
+          tableColumns xtable
+      value ->
+        Left $ TableSchemaMismatch value schema
+
+tableOfStruct :: Boxed.Vector FieldSchema -> Boxed.Vector Value -> Either TableError Table
 tableOfStruct fields values =
-  if Boxed.null fields then
-    pure $ singletonInt 0
-  else if Boxed.length fields /= Boxed.length values then
-    Left $ TableStructFieldsMismatch fields values
+  if Boxed.length fields /= Boxed.length values then
+    Left $ TableStructFieldsMismatch values fields
   else
-    fmap (Table . Boxed.concatMap tableColumns) $
-    Boxed.zipWithM tableOfField fields values
-
-tableOfField :: FieldSchema -> Maybe' Value -> Either TableError Table
-tableOfField fschema mvalue =
-  case fschema of
-    FieldSchema RequiredField schema ->
-      case mvalue of
-        Nothing' ->
-          Left $ TableRequiredFieldMissing schema
-
-        Just' value ->
-          tableOfValue schema value
-
-    FieldSchema OptionalField schema ->
-      case mvalue of
-        Nothing' ->
-          pure . Table $
-            tableColumns (singletonInt 0) <>
-            tableColumns (defaultOfSchema schema)
-
-        Just' value -> do
-          struct <- tableOfValue schema value
-          pure . Table $
-            tableColumns (singletonInt 1) <>
-            tableColumns struct
+    fmap (Table 1 . Boxed.concatMap tableColumns) $
+    Boxed.zipWithM tableOfValue (fmap fieldSchema fields) values
 
 ------------------------------------------------------------------------
 
 valuesOfTable :: Schema -> Table -> Either ValueError (Boxed.Vector Value)
 valuesOfTable schema table0 =
-  withTable table0 $ takeValue schema
+  evalStateTable table0 $ popValueColumn schema
 
-withTable :: Table -> EitherT ValueError (State Table) a -> Either ValueError a
-withTable table0 m =
+evalStateTable :: Table -> EitherT ValueError (State Table) a -> Either ValueError a
+evalStateTable table0 m =
   let
     (result, table) =
       runState (runEitherT m) table0
@@ -203,103 +187,97 @@ withTable table0 m =
     else
       Left . ValueLeftoverColumns $ encodingOfTable table
 
-takeNext :: EitherT ValueError (State Table) Column
-takeNext = do
-  Table xs <- get
+popColumn :: EitherT ValueError (State Table) Column
+popColumn = do
+  Table n xs <- get
   case xs Boxed.!? 0 of
     Just x -> do
-      put . Table $ Boxed.drop 1 xs
+      put . Table n $ Boxed.drop 1 xs
       pure x
     Nothing ->
       left ValueNoMoreColumns
 
-takeByte :: EitherT ValueError (State Table) ByteString
-takeByte =
-  takeNext >>= \case
+popByteColumn :: EitherT ValueError (State Table) ByteString
+popByteColumn =
+  popColumn >>= \case
     ByteColumn xs ->
       pure xs
     x ->
       left $ ValueExpectedByteColumn x
 
-takeInt :: EitherT ValueError (State Table) (Storable.Vector Int64)
-takeInt =
-  takeNext >>= \case
+popIntColumn :: EitherT ValueError (State Table) (Storable.Vector Int64)
+popIntColumn =
+  popColumn >>= \case
     IntColumn xs ->
       pure xs
     x ->
       left $ ValueExpectedIntColumn x
 
-takeDouble :: EitherT ValueError (State Table) (Storable.Vector Double)
-takeDouble =
-  takeNext >>= \case
+popDoubleColumn :: EitherT ValueError (State Table) (Storable.Vector Double)
+popDoubleColumn =
+  popColumn >>= \case
     DoubleColumn xs ->
       pure xs
     x ->
       left $ ValueExpectedDoubleColumn x
 
-takeArray ::
+popArrayColumn ::
   (Storable.Vector Int64 -> EitherT ValueError (State Table) a) ->
   EitherT ValueError (State Table) a
-takeArray f =
-  takeNext >>= \case
+popArrayColumn f =
+  popColumn >>= \case
     ArrayColumn ns table0 ->
-      hoistEither $ withTable table0 $ f ns
+      hoistEither . evalStateTable table0 $ f ns
     x ->
       left $ ValueExpectedArrayColumn x
 
-takeBool :: EitherT ValueError (State Table) (Boxed.Vector Bool)
-takeBool =
-  fmap (fmap (/= 0) . Boxed.convert) $ takeInt
+popBoolColumn :: EitherT ValueError (State Table) (Boxed.Vector Bool)
+popBoolColumn =
+  fmap (fmap (/= 0) . Boxed.convert) $ popIntColumn
 
-takeValue :: Schema -> EitherT ValueError (State Table) (Boxed.Vector Value)
-takeValue = \case
+popValueColumn :: Schema -> EitherT ValueError (State Table) (Boxed.Vector Value)
+popValueColumn = \case
   BoolSchema ->
-    fmap (fmap BoolValue) takeBool
+    fmap (fmap BoolValue) popBoolColumn
 
   Int64Schema ->
-    fmap (fmap (Int64Value . fromIntegral) . Boxed.convert) takeInt
+    fmap (fmap (Int64Value . fromIntegral) . Boxed.convert) popIntColumn
 
   DoubleSchema ->
-    fmap (fmap DoubleValue . Boxed.convert) takeDouble
+    fmap (fmap DoubleValue . Boxed.convert) popDoubleColumn
 
   StringSchema ->
-    takeArray $ \ns -> do
-      bs <- takeByte
+    popArrayColumn $ \ns -> do
+      bs <- popByteColumn
       fmap (fmap $ StringValue . T.decodeUtf8) . hoistEither $ restring ns bs
 
   DateSchema ->
-    fmap (fmap (DateValue . toDay . fromIntegral) . Boxed.convert) takeInt
+    fmap (fmap (DateValue . toDay . fromIntegral) . Boxed.convert) popIntColumn
+
+  ListSchema schema ->
+    popArrayColumn $ \ns -> do
+      xs <- popValueColumn schema
+      fmap (fmap ListValue) . hoistEither $ relist ns xs
 
   StructSchema fields ->
     if Boxed.null fields then do
-      xs <- takeInt
-      pure $ Boxed.replicate (Storable.length xs) (StructValue Boxed.empty)
+      Table n _ <- get
+      pure . Boxed.replicate n $ StructValue Boxed.empty
     else do
-      xss <- traverse (takeField . snd) fields
+      xss <- traverse (popValueColumn . fieldSchema) fields
       pure . fmap StructValue $ Boxed.transpose xss
 
-  ListSchema schema ->
-    takeArray $ \ns -> do
-      xs <- takeValue schema
-      fmap (fmap ListValue) . hoistEither $ relist ns xs
+  EnumSchema variant0 variants -> do
+    tags <- popIntColumn
+    xss <- Boxed.transpose <$> traverse (popValueColumn . variantSchema) (Boxed.cons variant0 variants)
 
-takeField :: FieldSchema -> EitherT ValueError (State Table) (Boxed.Vector (Maybe' Value))
-takeField fschema =
-  case fschema of
-    FieldSchema RequiredField schema ->
-      fmap (fmap Just') $ takeValue schema
+    let
+      takeTag tag xs = do
+        x <- maybeToRight (ValueEnumVariantMismatch tag $ Boxed.cons variant0 variants) $ xs Boxed.!? tag
+        pure $ EnumValue tag x
 
-    FieldSchema OptionalField schema -> do
-      bs <- takeBool
-      xs <- takeValue schema
-      pure $ Boxed.zipWith remaybe bs xs
-
-remaybe :: Bool -> a -> Maybe' a
-remaybe b x =
-  if b then
-    Just' x
-  else
-    Nothing'
+    hoistEither $
+      Boxed.zipWithM takeTag (fmap fromIntegral $ Boxed.convert tags) xss
 
 restring :: Storable.Vector Int64 -> ByteString -> Either ValueError (Boxed.Vector ByteString)
 restring ns bs =
@@ -331,20 +309,6 @@ relist ns xs =
 
 ------------------------------------------------------------------------
 
-rowsOfTable :: Table -> Int
-rowsOfTable (Table columns) =
-  case columns Boxed.!? 0 of
-    Nothing ->
-      0
-    Just (ByteColumn xs) ->
-      B.length xs
-    Just (IntColumn xs) ->
-      Storable.length xs
-    Just (DoubleColumn xs) ->
-      Storable.length xs
-    Just (ArrayColumn xs _) ->
-      Storable.length xs
-
 encodingOfTable :: Table -> Encoding
 encodingOfTable =
   encodingOfColumns . Boxed.toList . tableColumns
@@ -366,20 +330,27 @@ encodingOfColumn = \case
 
 concatTables :: Boxed.Vector Table -> Either TableError Table
 concatTables xss0 =
-  let
-    xss :: Boxed.Vector (Boxed.Vector Column)
-    xss =
-      coerce xss0
+  if Boxed.null xss0 then
+    Left TableCannotConcatEmpty
+  else
+    let
+      n :: Int
+      n =
+        Boxed.sum $ fmap tableRowCount xss0
 
-    yss =
-      Boxed.transpose xss
-  in
-    fmap Table $
-    traverse concatColumns yss
+      xss :: Boxed.Vector (Boxed.Vector Column)
+      xss =
+        fmap tableColumns xss0
+
+      yss =
+        Boxed.transpose xss
+    in
+      fmap (Table n) $
+      traverse concatColumns yss
 
 appendTables :: Table -> Table -> Either TableError Table
-appendTables (Table xs) (Table ys) =
-  Table <$> Boxed.zipWithM appendColumns xs ys
+appendTables (Table n xs) (Table m ys) =
+  Table (n + m) <$> Boxed.zipWithM appendColumns xs ys
 
 concatColumns :: Boxed.Vector Column -> Either TableError Column
 concatColumns xs =
@@ -408,9 +379,15 @@ appendColumns x y =
       Left $ TableAppendColumnsMismatch x y
 
 splitAtTable :: Int -> Table -> (Table, Table)
-splitAtTable i (Table fs) =
-  let (as,bs) = Boxed.unzip $ Boxed.map (splitAtColumn i) fs
-  in  (Table as, Table bs)
+splitAtTable i0 (Table n fs) =
+  let
+    i =
+      min n (max 0 i0)
+
+    (as, bs) =
+      Boxed.unzip $ Boxed.map (splitAtColumn i) fs
+  in
+    (Table i as, Table (n - i) bs)
 
 splitAtColumn :: Int -> Column -> (Column, Column)
 splitAtColumn i =
@@ -433,19 +410,19 @@ splitAtColumn i =
 
 emptyByte :: Table
 emptyByte =
-  Table . Boxed.singleton $ ByteColumn B.empty
+  Table 0 . Boxed.singleton $ ByteColumn B.empty
 
 emptyInt :: Table
 emptyInt =
-  Table . Boxed.singleton $ IntColumn Storable.empty
+  Table 0 . Boxed.singleton $ IntColumn Storable.empty
 
 emptyDouble :: Table
 emptyDouble =
-  Table . Boxed.singleton $ DoubleColumn Storable.empty
+  Table 0 . Boxed.singleton $ DoubleColumn Storable.empty
 
 emptyArray :: Table -> Table
 emptyArray vs =
-  Table . Boxed.singleton $ ArrayColumn Storable.empty vs
+  Table 0 . Boxed.singleton $ ArrayColumn Storable.empty vs
 
 emptyOfSchema :: Schema -> Table
 emptyOfSchema = \case
@@ -459,40 +436,34 @@ emptyOfSchema = \case
     emptyArray emptyByte
   DateSchema ->
     emptyInt
-  StructSchema fields ->
-    if Boxed.null fields then
-      emptyInt
-    else
-      Table $ Boxed.concatMap (tableColumns . emptyOfFieldSchema . snd) fields
   ListSchema schema ->
     emptyArray $ emptyOfSchema schema
-
-emptyOfFieldSchema :: FieldSchema -> Table
-emptyOfFieldSchema = \case
-  FieldSchema RequiredField schema ->
-    emptyOfSchema schema
-  FieldSchema OptionalField schema ->
-    Table $ tableColumns emptyInt <> tableColumns (emptyOfSchema schema)
+  StructSchema fields ->
+    Table 0 $ Boxed.concatMap (tableColumns . emptyOfSchema . fieldSchema) fields
+  EnumSchema variant0 variants ->
+    Table 0 $
+      tableColumns emptyInt <>
+      Boxed.concatMap (tableColumns . emptyOfSchema . variantSchema) (Boxed.cons variant0 variants)
 
 singletonInt :: Int64 -> Table
 singletonInt =
-  Table . Boxed.singleton . IntColumn . Storable.singleton
+  Table 1 . Boxed.singleton . IntColumn . Storable.singleton
 
 singletonDouble :: Double -> Table
 singletonDouble =
-  Table . Boxed.singleton . DoubleColumn . Storable.singleton
+  Table 1 . Boxed.singleton . DoubleColumn . Storable.singleton
 
 singletonString :: ByteString -> Table
 singletonString bs =
-  Table .
+  Table 1 .
   Boxed.singleton $
   ArrayColumn
     (Storable.singleton . fromIntegral $ B.length bs)
-    (Table . Boxed.singleton $ ByteColumn bs)
+    (Table (B.length bs) . Boxed.singleton $ ByteColumn bs)
 
 singletonEmptyList :: Table -> Table
 singletonEmptyList =
-  Table . Boxed.singleton . ArrayColumn (Storable.singleton 0)
+  Table 1 . Boxed.singleton . ArrayColumn (Storable.singleton 0)
 
 defaultOfSchema :: Schema -> Table
 defaultOfSchema = \case
@@ -506,17 +477,11 @@ defaultOfSchema = \case
     singletonString B.empty
   DateSchema ->
     singletonInt 0
-  StructSchema fields ->
-    if Boxed.null fields then
-      singletonInt 0
-    else
-      Table $ Boxed.concatMap (tableColumns . defaultOfFieldSchema . snd) fields
   ListSchema schema ->
     singletonEmptyList $ emptyOfSchema schema
-
-defaultOfFieldSchema :: FieldSchema -> Table
-defaultOfFieldSchema = \case
-  FieldSchema RequiredField schema ->
-    defaultOfSchema schema
-  FieldSchema OptionalField schema ->
-    Table $ tableColumns (singletonInt 0) <> tableColumns (defaultOfSchema schema)
+  StructSchema fields ->
+    Table 1 $ Boxed.concatMap (tableColumns . defaultOfSchema . fieldSchema) fields
+  EnumSchema variant0 variants ->
+    Table 1 $
+      tableColumns (singletonInt 0) <>
+      Boxed.concatMap (tableColumns . defaultOfSchema . variantSchema) (Boxed.cons variant0 variants)

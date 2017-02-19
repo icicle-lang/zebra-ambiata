@@ -17,6 +17,7 @@ module Zebra.Data.Core (
   , Tombstone(..)
 
   , hashEntityId
+  , hashSeed
   , fromDay
   , toDay
   , toUTCTime
@@ -43,7 +44,7 @@ import           Data.Thyme.Time.Core (mkUTCTime, addUTCTime, fromMicroseconds)
 import           Data.Typeable (Typeable)
 import qualified Data.Vector.Storable as Storable
 import           Data.Vector.Unboxed.Deriving (derivingUnbox)
-import           Data.Word (Word32)
+import           Data.Word (Word32, Word64)
 
 import           Foreign.Ptr (castPtr)
 import           Foreign.Storable (Storable(..))
@@ -53,8 +54,6 @@ import           GHC.Generics (Generic)
 import           P
 
 import           X.Text.Show (gshowsPrec)
-
-import           Zebra.Foreign.Bindings (pattern C'ZEBRA_HASH_SEED)
 
 
 newtype EntityId =
@@ -133,8 +132,13 @@ instance Show FactsetId where
 
 hashEntityId :: EntityId -> EntityHash
 hashEntityId =
-  EntityHash . fasthash32' C'ZEBRA_HASH_SEED . unEntityId
+  EntityHash . fasthash32' hashSeed . unEntityId
 {-# INLINE hashEntityId #-}
+
+hashSeed :: Word64
+hashSeed =
+  0xf7a646480e5a3c0f
+{-# INLINE hashSeed #-}
 
 fromDay :: Day -> Time
 fromDay day =

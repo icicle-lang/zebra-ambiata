@@ -98,12 +98,7 @@ peekEntityId c_entity = do
 
 peekAttribute :: MonadIO m => Ptr C'zebra_attribute -> EitherT ForeignError m Attribute
 peekAttribute c_attribute = do
-  table <- peekTable (p'zebra_attribute'table c_attribute)
-
-  let
-    n_rows =
-      rowsOfTable table
-
+  table@(Table n_rows _) <- peekTable (p'zebra_attribute'table c_attribute)
   times <- fmap timesOfForeign . peekVector n_rows $ p'zebra_attribute'times c_attribute
   factset_ids <- fmap factsetIdsOfForeign . peekVector n_rows $ p'zebra_attribute'factset_ids c_attribute
   tombstones <- fmap tombstonesOfForeign . peekVector n_rows $ p'zebra_attribute'tombstones c_attribute

@@ -4,9 +4,11 @@
 {-# OPTIONS_GHC -funbox-strict-fields #-}
 module Zebra.Data.Schema (
     Schema(..)
-  , FieldName(..)
   , FieldSchema(..)
-  , FieldObligation(..)
+  , FieldName(..)
+  , VariantSchema(..)
+  , VariantName(..)
+  , lookupVariant
   ) where
 
 import           Data.Typeable (Typeable)
@@ -28,16 +30,34 @@ instance Show FieldName where
   showsPrec =
     gshowsPrec
 
-data FieldObligation =
-    OptionalField
-  | RequiredField
-    deriving (Eq, Ord, Read, Show, Generic, Typeable)
-
 data FieldSchema =
   FieldSchema {
-      fieldObligation :: !FieldObligation
+      fieldName :: !FieldName
     , fieldSchema :: !Schema
-    } deriving (Eq, Ord, Show, Generic, Typeable)
+    } deriving (Eq, Ord, Generic, Typeable)
+
+instance Show FieldSchema where
+  showsPrec =
+    gshowsPrec
+
+newtype VariantName =
+  VariantName {
+      unVariantName :: Text
+    } deriving (Eq, Ord, Generic, Typeable)
+
+instance Show VariantName where
+  showsPrec =
+    gshowsPrec
+
+data VariantSchema =
+  VariantSchema {
+      variantName :: !VariantName
+    , variantSchema :: !Schema
+    } deriving (Eq, Ord, Generic, Typeable)
+
+instance Show VariantSchema where
+  showsPrec =
+    gshowsPrec
 
 data Schema =
     BoolSchema
@@ -45,6 +65,15 @@ data Schema =
   | DoubleSchema
   | StringSchema
   | DateSchema
-  | StructSchema !(Boxed.Vector (FieldName, FieldSchema))
   | ListSchema !Schema
+  | StructSchema !(Boxed.Vector FieldSchema)
+  | EnumSchema !VariantSchema !(Boxed.Vector VariantSchema)
     deriving (Eq, Ord, Show, Generic, Typeable)
+
+lookupVariant :: Int -> VariantSchema -> Boxed.Vector VariantSchema -> Maybe VariantSchema
+lookupVariant ix variant0 variants =
+  case ix of
+    0 ->
+      Just variant0
+    _ ->
+      variants Boxed.!? (ix + 1)
