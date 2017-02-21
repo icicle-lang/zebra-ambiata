@@ -22,9 +22,10 @@ import           Text.Show.Pretty (ppShow)
 
 import           X.Control.Monad.Trans.Either (runEitherT)
 
-import           Zebra.Data
 import           Zebra.Data.Fact (Value)
 import           Zebra.Data.Schema (Schema)
+import           Zebra.Data.Table (Table, ValueError)
+import qualified Zebra.Data.Table as Table
 import qualified Zebra.Data.Table.Mutable as MTable
 
 
@@ -33,7 +34,7 @@ prop_default_table_vs_mtable =
   gamble jSchema $ \schema ->
   let
     table =
-      tableOfMaybeValue schema Nothing'
+      Table.fromRowOrDefault schema Nothing'
   in
     counterexample (either ppShow ppShow table) $
     table === Right (fromMaybeValue schema [Nothing'])
@@ -60,7 +61,7 @@ prop_appendTable_commutes =
     let rec2 = fromMaybeValue schema values2
     let rec3 = fromMaybeValue schema (values1 <> values2)
     mtable <- MTable.thaw rec1
-    Right () <- runEitherT $ MTable.appendTable mtable rec2
+    Right () <- runEitherT $ MTable.append mtable rec2
     rec3' <- MTable.unsafeFreeze mtable
     return (rec3 === rec3')
 
@@ -69,7 +70,7 @@ fromMaybeValue schema mvalues =
   runST $ do
     table <- MTable.new schema
     result <- runEitherT $
-      traverse_ (MTable.insertMaybeValue schema table) mvalues
+      traverse_ (MTable.insertRowOrDefault table) mvalues
     case result of
       Left err ->
         Savage.error $ show err
@@ -79,7 +80,7 @@ fromMaybeValue schema mvalues =
 toValue :: Schema -> Table a -> Either (ValueError a) [Value]
 toValue schema table =
   fmap Boxed.toList $
-  valuesOfTable schema table
+    Table.rows schema table
 
 return []
 tests :: IO Bool

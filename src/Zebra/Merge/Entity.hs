@@ -14,18 +14,19 @@ module Zebra.Merge.Entity
   , entityMergedOfEntityValues
   ) where
 
-import Zebra.Data
-import Zebra.Merge.Base
-
 import qualified Data.Map as Map
+
+import           P
 
 import qualified X.Data.Vector as Boxed
 import qualified X.Data.Vector.Unboxed as Unboxed
 import qualified X.Data.Vector.Generic as Generic
 import qualified X.Data.Vector.Stream as Stream
 
-import P
-
+import           Zebra.Data
+import           Zebra.Data.Table (Table)
+import qualified Zebra.Data.Table as Table
+import           Zebra.Merge.Base
 
 
 entityValuesOfBlock :: Monad m => BlockDataId -> Block a -> Stream.Stream m (EntityValues a)
@@ -41,7 +42,7 @@ entityValuesOfBlock blockId (Block entities indices tables) =
            dense_attrs       = denseAttributeCount rx attrs
            ix_attrs          = Generic.unsafeSplits id ix_here dense_attrs
            dense_counts      = Boxed.map Unboxed.length ix_attrs
-           (rx_here,rx_rest) = Boxed.unzip $ Boxed.zipWith splitAtTable dense_counts rx
+           (rx_here,rx_rest) = Boxed.unzip $ Boxed.zipWith Table.splitAt dense_counts rx
 
            acc'              = (ix_rest, rx_rest)
            ix_blockId        = Boxed.map (Unboxed.map (,blockId)) ix_attrs
@@ -116,25 +117,25 @@ mergeEntityTable aid aixs tables = do
     init =
       case Map.minView tables of
         Just (r,_) ->
-          return $ fst $ splitAtTable 0 r
+          return $ fst $ Table.splitAt 0 r
         Nothing ->
           Left $ MergeAttributeWithoutTable aid
 
     go (build,recs) (_,blockid) = do
       (rec,recs') <- splitLookup blockid recs
-      rec' <- appendTables' build rec
+      rec' <- appendTables build rec
       return (rec', recs')
 
     splitLookup blockid recs =
       case Map.lookup blockid recs of
         Just r -> do
-          let (this,that) = splitAtTable 1 r
+          let (this,that) = Table.splitAt 1 r
           return (this, Map.insert blockid that recs)
         Nothing ->
           Left $ MergeBlockDataWithoutTable aid blockid
 
-    appendTables' a b
-     = first MergeTableError $ appendTables a b
+    appendTables a b
+     = first MergeTableError $ Table.append a b
 
 
 entityMergedOfEntityValues :: EntityValues a -> Either (MergeError a) (EntityMerged a)

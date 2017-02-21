@@ -41,7 +41,8 @@ import qualified X.Data.Vector.Stream as Stream
 import           Zebra.Data.Block
 import           Zebra.Data.Core
 import           Zebra.Data.Encoding
-import           Zebra.Data.Table
+import           Zebra.Data.Table (Table(..), Column(..))
+import qualified Zebra.Data.Table as Table
 import           Zebra.Serial.Array
 
 
@@ -284,7 +285,7 @@ bTables xs =
 
     counts =
       Storable.convert $
-      fmap (fromIntegral . tableRowCount) xs
+      fmap (fromIntegral . Table.rowCount) xs
   in
     Build.word32LE tcount <>
     bIntArray ids <>
@@ -309,7 +310,7 @@ getTables encodings = do
 
 bTable :: Table a -> Builder
 bTable =
-  foldMap bColumn . tableColumns
+  foldMap bColumn . Table.columns
 
 getTable :: Int -> Encoding -> Get (Table ())
 getTable n (Encoding columns) = do
@@ -325,7 +326,7 @@ bColumn = \case
     bIntArray $ coerce xs
   ArrayColumn ns rec ->
     bIntArray ns <>
-    Build.word32LE (fromIntegral $ tableRowCount rec) <>
+    Build.word32LE (fromIntegral $ Table.rowCount rec) <>
     bTable rec
 
 getColumn :: Int -> ColumnEncoding -> Get (Column ())

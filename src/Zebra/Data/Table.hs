@@ -14,20 +14,21 @@ module Zebra.Data.Table (
   , TableError(..)
   , ValueError(..)
 
-  , encodingOfTable
-  , encodingOfColumn
+  , annotation
+  , rowCount
+  , columns
 
-  , tableOfMaybeValue
-  , tableOfValue
-  , tableOfStruct
+  , encoding
+  , encodingColumn
 
-  , valuesOfTable
+  , rows
+  , fromRow
+  , fromRowOrDefault
 
-  , concatTables
-  , concatColumns
-  , appendTables
-  , appendColumns
-  , splitAtTable
+  , concat
+  , append
+  , appendColumn
+  , splitAt
   , splitAtColumn
   ) where
 
@@ -41,34 +42,30 @@ import           Data.Word (Word8)
 
 import           GHC.Generics (Generic)
 
-import           P
+import           P hiding (concat, splitAt)
 
 import           X.Control.Monad.Trans.Either (EitherT, runEitherT, hoistEither, left)
 import qualified X.Data.ByteString.Unsafe as B
 import qualified X.Data.Vector as Boxed
 import qualified X.Data.Vector.Generic as Generic
-import qualified X.Data.Vector.Storable as Storable
-import           X.Text.Show (gshowsPrec)
 
 import           Zebra.Data.Encoding
 import           Zebra.Data.Fact
 import           Zebra.Data.Schema (Schema, Field(..), Variant(..))
 import qualified Zebra.Data.Schema as Schema
+import qualified Zebra.Data.Vector.Storable as Storable
 
 
 data Table a =
-  Table {
-      tableAnnotation :: !a
-    , tableRowCount :: !Int
-    , tableColumns :: !(Boxed.Vector (Column a))
-    } deriving (Eq, Ord, Generic, Typeable, Functor, Foldable, Traversable)
+  Table !a !Int !(Boxed.Vector (Column a))
+  deriving (Eq, Ord, Show, Generic, Typeable, Functor, Foldable, Traversable)
 
 data Column a =
     ByteColumn !ByteString
   | IntColumn !(Storable.Vector Int64)
   | DoubleColumn !(Storable.Vector Double)
   | ArrayColumn !(Storable.Vector Int64) !(Table a)
-    deriving (Eq, Ord, Generic, Typeable, Functor, Foldable, Traversable)
+    deriving (Eq, Ord, Show, Generic, Typeable, Functor, Foldable, Traversable)
 
 data TableError a =
     TableSchemaMismatch !Value !Schema
@@ -91,23 +88,27 @@ data ValueError a =
   | ValueLeftoverColumns !Encoding
     deriving (Eq, Ord, Show, Generic, Typeable, Functor, Foldable, Traversable)
 
-instance Show a => Show (Table a) where
-  showsPrec =
-    gshowsPrec
+annotation :: Table a -> a
+annotation (Table x _ _) =
+  x
 
-instance Show a => Show (Column a) where
-  showsPrec =
-    gshowsPrec
+rowCount :: Table a -> Int
+rowCount (Table _ x _) =
+  x
 
-tableOfMaybeValue :: Schema -> Maybe' Value -> Either (TableError Schema) (Table Schema)
-tableOfMaybeValue schema = \case
+columns :: Table a -> Boxed.Vector (Column a)
+columns (Table _ _ x) =
+  x
+
+fromRowOrDefault :: Schema -> Maybe' Value -> Either (TableError Schema) (Table Schema)
+fromRowOrDefault schema = \case
   Nothing' ->
     pure $ defaultTable schema
   Just' value ->
-    tableOfValue schema value
+    fromRow schema value
 
-tableOfValue :: Schema -> Value -> Either (TableError Schema) (Table Schema)
-tableOfValue schema =
+fromRow :: Schema -> Value -> Either (TableError Schema) (Table Schema)
+fromRow schema =
   case schema of
     Schema.Bool -> \case
       Bool x ->
@@ -136,16 +137,16 @@ tableOfValue schema =
     Schema.Enum variant0 variants -> \case
       Enum tag x -> do
         Variant _ variant <- maybeToRight (TableEnumVariantMismatch tag x variants) $ Schema.lookupVariant tag variant0 variants
-        xtable <- tableOfValue variant x
+        xtable <- fromRow variant x
         pure . Table schema 1 $
-          tableColumns (singletonInt $ fromIntegral tag) <>
-          tableColumns xtable
+          columns (singletonInt $ fromIntegral tag) <>
+          columns xtable
       value ->
         Left $ TableSchemaMismatch value schema
 
     Schema.Struct fields -> \case
-      Struct values ->
-        tableOfStruct fields values
+      Struct xs ->
+        fromStruct fields xs
       value ->
         Left $ TableSchemaMismatch value schema
 
@@ -157,25 +158,25 @@ tableOfValue schema =
 
     Schema.Array ischema -> \case
       Array xs -> do
-        vs0 <- traverse (tableOfValue ischema) xs
-        vs1 <- concatTables vs0
+        vs0 <- traverse (fromRow ischema) xs
+        vs1 <- concat vs0
         pure . Table schema 1 . Boxed.singleton $
           ArrayColumn (Storable.singleton . fromIntegral $ Boxed.length xs) vs1
       value ->
         Left $ TableSchemaMismatch value schema
 
-tableOfStruct :: Boxed.Vector Field -> Boxed.Vector Value -> Either (TableError Schema) (Table Schema)
-tableOfStruct fields values =
+fromStruct :: Boxed.Vector Field -> Boxed.Vector Value -> Either (TableError Schema) (Table Schema)
+fromStruct fields values =
   if Boxed.length fields /= Boxed.length values then
     Left $ TableStructFieldsMismatch values fields
   else
-    fmap (Table (Schema.Struct fields) 1 . Boxed.concatMap tableColumns) $
-      Boxed.zipWithM tableOfValue (fmap fieldSchema fields) values
+    fmap (Table (Schema.Struct fields) 1 . Boxed.concatMap columns) $
+      Boxed.zipWithM fromRow (fmap fieldSchema fields) values
 
 ------------------------------------------------------------------------
 
-valuesOfTable :: Schema -> Table a -> Either (ValueError a) (Boxed.Vector Value)
-valuesOfTable schema table0 =
+rows :: Schema -> Table a -> Either (ValueError a) (Boxed.Vector Value)
+rows schema table0 =
   evalStateTable table0 $ popValueColumn schema
 
 evalStateTable :: Table a -> EitherT (ValueError a) (State (Table a)) b -> Either (ValueError a) b
@@ -184,10 +185,10 @@ evalStateTable table0 m =
     (result, table) =
       runState (runEitherT m) table0
   in
-    if Boxed.null $ tableColumns table then
+    if Boxed.null $ columns table then
       result
     else
-      Left . ValueLeftoverColumns $ encodingOfTable table
+      Left . ValueLeftoverColumns $ encoding table
 
 popColumn :: EitherT (ValueError a) (State (Table a)) (Column a)
 popColumn = do
@@ -243,7 +244,7 @@ popValueColumn = \case
     fmap (fmap Bool) popBoolColumn
 
   Schema.Byte ->
-    fmap (fmap (Byte . fromIntegral) . Boxed.convert . unsafeFromByteString) popByteColumn
+    fmap (fmap (Byte . fromIntegral) . Boxed.convert . Storable.unsafeFromByteString) popByteColumn
 
   Schema.Int ->
     fmap (fmap (Int . fromIntegral) . Boxed.convert) popIntColumn
@@ -311,16 +312,12 @@ relist ns xs =
 
 ------------------------------------------------------------------------
 
-encodingOfTable :: Table a -> Encoding
-encodingOfTable =
-  encodingOfColumns . Boxed.toList . tableColumns
+encoding :: Table a -> Encoding
+encoding =
+  Encoding . fmap encodingColumn . Boxed.toList . columns
 
-encodingOfColumns :: [Column a] -> Encoding
-encodingOfColumns =
-  Encoding . fmap encodingOfColumn
-
-encodingOfColumn :: Column a -> ColumnEncoding
-encodingOfColumn = \case
+encodingColumn :: Column a -> ColumnEncoding
+encodingColumn = \case
   ByteColumn _ ->
     ByteEncoding
   IntColumn _ ->
@@ -328,46 +325,38 @@ encodingOfColumn = \case
   DoubleColumn _ ->
     DoubleEncoding
   ArrayColumn _ table ->
-    ArrayEncoding $ encodingOfTable table
+    ArrayEncoding $ encoding table
 
-concatTables :: Boxed.Vector (Table Schema) -> Either (TableError Schema) (Table Schema)
-concatTables xss0 =
+concat :: Boxed.Vector (Table Schema) -> Either (TableError Schema) (Table Schema)
+concat xss0 =
   if Boxed.null xss0 then
     Left TableCannotConcatEmpty
   else
     let
       schema :: Schema
       schema =
-        tableAnnotation $ Boxed.head xss0 -- FIXME check schema
+        annotation $ Boxed.head xss0 -- FIXME check schema
 
       n :: Int
       n =
-        Boxed.sum $ fmap tableRowCount xss0
+        Boxed.sum $ fmap rowCount xss0
 
       xss :: Boxed.Vector (Boxed.Vector (Column Schema))
       xss =
-        fmap tableColumns xss0
+        fmap columns xss0
 
       yss =
         Boxed.transpose xss
     in
       fmap (Table schema n) $
-      traverse concatColumns yss
+        traverse (Boxed.fold1M' appendColumn) yss
 
-appendTables :: Table a -> Table a -> Either (TableError a) (Table a)
-appendTables (Table schema n xs) (Table _schema m ys) =
-  -- FIXME check schema?
-  Table schema (n + m) <$> Boxed.zipWithM appendColumns xs ys
+append :: Table a -> Table a -> Either (TableError a) (Table a)
+append (Table schema n xs) (Table _schema m ys) =
+  Table schema (n + m) <$> Boxed.zipWithM appendColumn xs ys
 
-concatColumns :: Boxed.Vector (Column a) -> Either (TableError a) (Column a)
-concatColumns xs =
-  if Boxed.null xs then
-    Left TableCannotConcatEmpty
-  else
-    Boxed.fold1M' appendColumns xs
-
-appendColumns :: Column a -> Column a -> Either (TableError a) (Column a)
-appendColumns x y =
+appendColumn :: Column a -> Column a -> Either (TableError a) (Column a)
+appendColumn x y =
   case (x, y) of
     (ByteColumn xs, ByteColumn ys) ->
       pure $ ByteColumn (xs <> ys)
@@ -379,13 +368,13 @@ appendColumns x y =
       pure $ DoubleColumn (xs <> ys)
 
     (ArrayColumn n xs, ArrayColumn m ys) ->
-      ArrayColumn (n <> m) <$> appendTables xs ys
+      ArrayColumn (n <> m) <$> append xs ys
 
     (_, _) ->
       Left $ TableAppendColumnsMismatch x y
 
-splitAtTable :: Int -> Table a -> (Table a, Table a)
-splitAtTable i0 (Table schema n fs) =
+splitAt :: Int -> Table a -> (Table a, Table a)
+splitAt i0 (Table schema n fs) =
   let
     i =
       min n (max 0 i0)
@@ -407,7 +396,7 @@ splitAtColumn i =
     ArrayColumn len rec
      -> let (len1, len2) = Storable.splitAt i len
             nested_count = fromIntegral $ Storable.sum len1
-            (rec1, rec2) = splitAtTable nested_count rec
+            (rec1, rec2) = splitAt nested_count rec
         in  (ArrayColumn len1 rec1, ArrayColumn len2 rec2)
   where
    bye f = bimap f f
@@ -449,11 +438,11 @@ emptyTable schema =
       emptyArray $ emptyTable item
     Schema.Struct fields ->
       Table schema 0 $
-        Boxed.concatMap (tableColumns . emptyTable . fieldSchema) fields
+        Boxed.concatMap (columns . emptyTable . fieldSchema) fields
     Schema.Enum variant0 variants ->
       Table schema 0 $
-        tableColumns emptyInt <>
-        Boxed.concatMap (tableColumns . emptyTable . variantSchema) (Boxed.cons variant0 variants)
+        columns emptyInt <>
+        Boxed.concatMap (columns . emptyTable . variantSchema) (Boxed.cons variant0 variants)
 
 singletonBool :: Bool -> Table Schema
 singletonBool b =
@@ -498,15 +487,10 @@ defaultTable schema =
       singletonDouble 0
     Schema.Struct fields ->
       Table schema 1 $
-        Boxed.concatMap (tableColumns . defaultTable . fieldSchema) fields
+        Boxed.concatMap (columns . defaultTable . fieldSchema) fields
     Schema.Enum variant0 variants ->
       Table schema 1 $
-        tableColumns (singletonInt 0) <>
-        Boxed.concatMap (tableColumns . defaultTable . variantSchema) (Boxed.cons variant0 variants)
+        columns (singletonInt 0) <>
+        Boxed.concatMap (columns . defaultTable . variantSchema) (Boxed.cons variant0 variants)
     Schema.Array item ->
       singletonEmptyArray item
-
--- TODO duplicated
-unsafeFromByteString :: ByteString -> Storable.Vector Word8
-unsafeFromByteString (PS fp off len) =
-  Storable.unsafeFromForeignPtr fp off len

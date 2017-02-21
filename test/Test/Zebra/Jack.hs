@@ -77,7 +77,8 @@ import           Zebra.Data.Entity
 import           Zebra.Data.Fact
 import           Zebra.Data.Schema (Schema, Variant(..), VariantName(..), Field(..), FieldName(..))
 import qualified Zebra.Data.Schema as Schema
-import           Zebra.Data.Table
+import           Zebra.Data.Table (Table(..), Column(..))
+import qualified Zebra.Data.Table as Table
 
 
 jEncoding :: Jack Encoding
@@ -351,14 +352,14 @@ jEnumTable :: Int -> Variant -> Boxed.Vector Variant -> Jack (Table Schema)
 jEnumTable n variant0 variants =
   Table (Schema.Enum variant0 variants) n <$> do
     tags <- mkIntColumn <$> replicateM n (choose (0, fromIntegral $ Boxed.length variants))
-    v <- tableColumns <$> jTable n (Schema.variantSchema variant0)
-    vs <- Boxed.concatMap tableColumns <$> traverse (jTable n . Schema.variantSchema) variants
+    v <- Table.columns <$> jTable n (Schema.variantSchema variant0)
+    vs <- Boxed.concatMap Table.columns <$> traverse (jTable n . Schema.variantSchema) variants
     pure $ tags <> v <> vs
 
 jStructTable :: Int -> Boxed.Vector Field -> Jack (Table Schema)
 jStructTable n fields =
   Table (Schema.Struct fields) n <$>
-    Boxed.concatMap tableColumns <$> traverse (jTable n . Schema.fieldSchema) fields
+    Boxed.concatMap Table.columns <$> traverse (jTable n . Schema.fieldSchema) fields
 
 jArrayTable :: Int -> Schema -> Jack (Table Schema)
 jArrayTable n schema =

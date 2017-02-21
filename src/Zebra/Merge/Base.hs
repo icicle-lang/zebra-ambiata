@@ -20,19 +20,21 @@ module Zebra.Merge.Base
   , treeFold
   ) where
 
-import Zebra.Data
-
 import qualified Data.Map as Map
-
 import qualified Data.Text as Text
 import           Data.Vector.Unboxed.Deriving (derivingUnbox)
+
+import           GHC.Generics (Generic(..))
+
+import           P
+
 import qualified X.Data.Vector as Boxed
 import qualified X.Data.Vector.Unboxed as Unboxed
-
 import qualified X.Text.Show as Show
-import GHC.Generics (Generic(..))
 
-import P
+import           Zebra.Data
+import           Zebra.Data.Table (Table, TableError)
+
 
 -- | A BlockDataId roughly corresponds to the id of the file, where a Table came from.
 newtype BlockDataId

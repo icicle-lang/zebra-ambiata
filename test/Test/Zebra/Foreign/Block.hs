@@ -33,7 +33,7 @@ import           X.Control.Monad.Trans.Either (EitherT, pattern EitherT, runEith
 import           Zebra.Data.Block
 import           Zebra.Data.Entity
 import qualified Zebra.Data.Entity as Entity
-import           Zebra.Data.Table
+import qualified Zebra.Data.Table as Table
 import           Zebra.Foreign.Block
 import           Zebra.Foreign.Entity
 import           Zebra.Foreign.Util
@@ -126,7 +126,7 @@ check_entities_of_block convert block =
           fmap (sumAttribute $ Storable.length . attributeTombstone) entities
 
       , check "# of table rows" recordCount $
-          fmap (sumAttribute $ tableRowCount . attributeTable) entities
+          fmap (sumAttribute $ Table.rowCount . attributeTable) entities
       ]
 
 

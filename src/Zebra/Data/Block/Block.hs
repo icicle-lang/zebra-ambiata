@@ -41,11 +41,13 @@ import qualified X.Data.Vector.Unboxed as Unboxed
 import           Zebra.Data.Block.Entity
 import           Zebra.Data.Block.Index
 import           Zebra.Data.Core
-import           Zebra.Data.Schema
 import           Zebra.Data.Entity
 import           Zebra.Data.Fact
-import           Zebra.Data.Table
-import           Zebra.Data.Table.Mutable
+import           Zebra.Data.Schema
+import           Zebra.Data.Table (Table, ValueError)
+import qualified Zebra.Data.Table as Table
+import           Zebra.Data.Table.Mutable (MutableError)
+import qualified Zebra.Data.Table.Mutable as MTable
 
 
 data Block a =
@@ -69,7 +71,7 @@ data FactError a =
 
 blockOfFacts :: Boxed.Vector Schema -> Boxed.Vector Fact -> Either MutableError (Block Schema)
 blockOfFacts schemas facts =
-  Block (entitiesOfFacts facts) (indicesOfFacts facts) <$> tablesOfFacts schemas facts
+  Block (entitiesOfFacts facts) (indicesOfFacts facts) <$> MTable.fromFacts schemas facts
 
 factsOfBlock :: Boxed.Vector Schema -> Block a -> Either (FactError a) (Boxed.Vector Fact)
 factsOfBlock schemas block = do
@@ -81,7 +83,7 @@ factsOfBlock schemas block = do
     tables =
       blockTables block
 
-  values <- first FactValueError $ Boxed.zipWithM valuesOfTable schemas tables
+  values <- first FactValueError $ Boxed.zipWithM Table.rows schemas tables
 
   let
     (result, ValueState indices' values') =
@@ -287,7 +289,7 @@ takeTableRows attrs aid@(AttributeId aix0) n =
 
       let
         (table1, table2) =
-          splitAtTable n table
+          Table.splitAt n table
 
       MBoxed.unsafeWrite attrs aix table2
 

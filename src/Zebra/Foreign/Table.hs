@@ -25,7 +25,7 @@ import           P
 
 import           X.Control.Monad.Trans.Either (EitherT, left)
 
-import           Zebra.Data.Table
+import           Zebra.Data.Table (Table(..), Column(..))
 import           Zebra.Foreign.Bindings
 import           Zebra.Foreign.Util
 

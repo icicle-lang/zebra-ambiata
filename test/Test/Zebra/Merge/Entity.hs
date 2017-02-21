@@ -26,6 +26,7 @@ import qualified X.Data.Vector.Stream as Stream
 import           Zebra.Data
 import           Zebra.Data.Fact (Fact(..))
 import           Zebra.Data.Schema (Schema)
+import           Zebra.Data.Table (Table(..))
 import           Zebra.Merge.Base
 import           Zebra.Merge.Entity
 
@@ -134,4 +135,3 @@ prop_treeFold_with_map =
 return []
 tests :: IO Bool
 tests = $disorderCheckEnvAll TestRunNormal
-

@@ -6,4 +6,3 @@ module Zebra.Data (
 import           Zebra.Data.Block as X
 import           Zebra.Data.Core as X
 import           Zebra.Data.Encoding as X
-import           Zebra.Data.Table as X
