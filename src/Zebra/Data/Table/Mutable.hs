@@ -2,6 +2,7 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DoAndIfThenElse #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -11,21 +12,25 @@ module Zebra.Data.Table.Mutable (
     MTable(..)
   , MColumn(..)
 
-  , newMTable
-  , insertMaybeValue
-  , insertValue
-  , insertDefault
-  , evalStateTable
-  , unsafeFreezeTable
-
-  , thawTable
-
-  , appendTable
-
-  , tablesOfFacts
-
   , MutableError(..)
   , renderMutableError
+
+  , schema
+  , rowCount
+  , columns
+
+  , new
+
+  , insertRowOrDefault
+  , insertRow
+  , insertDefault
+
+  , append
+
+  , unsafeFreeze
+  , thaw
+
+  , fromFacts
   ) where
 
 import           Control.Monad.Primitive (PrimMonad(..))
@@ -36,10 +41,8 @@ import           Control.Monad.Trans.State.Strict (StateT, runStateT, get, put)
 import qualified Data.ByteString as B
 import           Data.ByteString.Internal (ByteString(..))
 import qualified Data.Text as T
-import qualified Data.Text.Encoding as T
 import           Data.Typeable (Typeable)
 import qualified Data.Vector as Boxed
-import qualified Data.Vector.Storable as Storable
 import qualified Data.Vector.Storable.Mutable as MStorable
 import qualified Data.Vector.Unboxed.Mutable as MUnboxed
 import           Data.Word (Word8)
@@ -56,15 +59,19 @@ import qualified X.Data.Vector.Ref as Ref
 
 import           Zebra.Data.Core
 import           Zebra.Data.Fact
-import           Zebra.Data.Schema
+import           Zebra.Data.Schema (Schema, Field(..), Variant(..))
+import qualified Zebra.Data.Schema as Schema
 import           Zebra.Data.Table (Table(..), Column(..))
+import qualified Zebra.Data.Table as Table
+import qualified Zebra.Data.Vector.Storable as Storable
 
 
 data MTable s =
-  MTable {
-      mtableRowCount :: !(Ref MUnboxed.MVector s Int)
-    , mtableColumns :: !(Boxed.Vector (MColumn s))
-    } deriving (Generic, Typeable)
+  MTable
+    !Schema
+    !(Ref MUnboxed.MVector s Int)
+    !(Boxed.Vector (MColumn s))
+  deriving (Generic, Typeable)
 
 data MColumn s =
     MByteColumn !(Grow MStorable.MVector s Word8)
@@ -72,6 +79,27 @@ data MColumn s =
   | MDoubleColumn !(Grow MStorable.MVector s Double)
   | MArrayColumn !(Grow MStorable.MVector s Int64) !(MTable s)
     deriving (Generic, Typeable)
+
+newtype ColumnIndex =
+  ColumnIndex {
+      unColumnIndex :: Int
+    } deriving (Eq, Ord, Show, Num)
+
+schema :: MTable s -> Schema
+schema (MTable x _ _) =
+  x
+
+rowCount :: PrimMonad m => MTable (PrimState m) -> m Int
+rowCount (MTable _ x _) =
+  Ref.readRef x
+
+allocateRows :: PrimMonad m => MTable (PrimState m) -> Int -> m ()
+allocateRows (MTable _ x _) n =
+  Ref.modifyRef x (+ n)
+
+columns :: MTable s -> Boxed.Vector (MColumn s)
+columns (MTable _ _ x) =
+  x
 
 data MutableError =
     MutableExpectedByteColumn !FoundMColumn
@@ -81,9 +109,8 @@ data MutableError =
   | MutableNoMoreColumns
   | MutableLeftoverColumns ![FoundMColumn]
   | MutableSchemaMismatch !Value !Schema
-  | MutableStructFieldsMismatch !(Boxed.Vector Value) !(Boxed.Vector FieldSchema)
-  | MutableEnumVariantMismatch !Int !Value !(Boxed.Vector VariantSchema)
-  | MutableRequiredFieldMissing !Schema
+  | MutableStructFieldsMismatch !(Boxed.Vector Value) !(Boxed.Vector Field)
+  | MutableEnumVariantMismatch !Int !Value !(Boxed.Vector Variant)
   | MutableAttributeNotFound !AttributeId
     deriving (Eq, Ord, Show)
 
@@ -106,13 +133,13 @@ renderMutableError = \case
     "Expected array column, but found: " <> renderFoundMColumn column
   MutableNoMoreColumns ->
     "Expected to find more columns in table - ran out when trying to insert."
-  MutableLeftoverColumns columns ->
-    "Found more columns than expected in table: " <> renderFoundMColumns columns
-  MutableSchemaMismatch value schema ->
+  MutableLeftoverColumns xs ->
+    "Found more columns than expected in table: " <> renderFoundMColumns xs
+  MutableSchemaMismatch value vschema ->
     "Schema did not match value:" <>
     "\n" <>
     "\n  schema =" <>
-    "\n    " <> T.pack (show schema) <>
+    "\n    " <> T.pack (show vschema) <>
     "\n" <>
     "\n  value =" <>
     "\n    " <> T.pack (show value)
@@ -135,8 +162,6 @@ renderMutableError = \case
     "\n" <>
     "\n  value =" <>
     "\n    " <> T.pack (show value)
-  MutableRequiredFieldMissing schema ->
-    "Struct required field missing: " <> T.pack (show schema)
   MutableAttributeNotFound (AttributeId aid) ->
     "Attribute not found: " <> T.pack (show aid)
 
@@ -157,46 +182,44 @@ renderFoundMColumns =
 
 ------------------------------------------------------------------------
 
-unsafeFreezeTables :: PrimMonad m => MTableBox (PrimState m) -> m (Boxed.Vector Table)
-unsafeFreezeTables (MTableBox tables) =
-  traverse (unsafeFreezeTable . snd) tables
-
-unsafeFreezeTable :: PrimMonad m => MTable (PrimState m) -> m Table
-unsafeFreezeTable (MTable nref cols) = do
+unsafeFreeze :: PrimMonad m => MTable (PrimState m) -> m (Table Schema)
+unsafeFreeze x = do
   Table
-    <$> Ref.readRef nref
-    <*> traverse unsafeFreezeColumn cols
+    <$> pure (schema x)
+    <*> rowCount x
+    <*> traverse unsafeFreezeColumn (columns x)
 
-unsafeFreezeColumn :: PrimMonad m => MColumn (PrimState m) -> m Column
+unsafeFreezeColumn :: PrimMonad m => MColumn (PrimState m) -> m (Column Schema)
 unsafeFreezeColumn = \case
   MByteColumn g ->
-    ByteColumn . unsafeToByteString <$> Grow.unsafeFreeze g
+    ByteColumn . Storable.unsafeToByteString <$> Grow.unsafeFreeze g
   MIntColumn g ->
     IntColumn <$> Grow.unsafeFreeze g
   MDoubleColumn g ->
     DoubleColumn <$> Grow.unsafeFreeze g
   MArrayColumn g mtable -> do
     ns <- Grow.unsafeFreeze g
-    table <- unsafeFreezeTable mtable
+    table <- unsafeFreeze mtable
     pure $ ArrayColumn ns table
 
-thawTable :: PrimMonad m => Table -> m (MTable (PrimState m))
-thawTable (Table n columns) =
+thaw :: PrimMonad m => Table Schema -> m (MTable (PrimState m))
+thaw x =
   MTable
-    <$> Ref.newRef n
-    <*> Boxed.mapM thawColumn columns
+    <$> pure (Table.annotation x)
+    <*> Ref.newRef (Table.rowCount x)
+    <*> Boxed.mapM thawColumn (Table.columns x)
 
-thawColumn :: PrimMonad m => Column -> m (MColumn (PrimState m))
+thawColumn :: PrimMonad m => Column Schema -> m (MColumn (PrimState m))
 thawColumn = \case
   ByteColumn bs -> do
-    MByteColumn <$> growOfVector (unsafeFromByteString bs)
+    MByteColumn <$> growOfVector (Storable.unsafeFromByteString bs)
   IntColumn vs ->
     MIntColumn <$> growOfVector vs
   DoubleColumn vs ->
     MDoubleColumn <$> growOfVector vs
   ArrayColumn vs rec -> do
     ns <- growOfVector vs
-    table <- thawTable rec
+    table <- thaw rec
     pure $ MArrayColumn ns table
  where
   growOfVector vv = do
@@ -206,16 +229,16 @@ thawColumn = \case
 
 ------------------------------------------------------------------------
 
-appendTable :: PrimMonad m => MTable (PrimState m) -> Table -> EitherT MutableError m ()
-appendTable (MTable nref mfs) (Table n fs) = do
-  Ref.modifyRef nref (+ n)
-  Boxed.zipWithM_ appendColumn mfs fs
+append :: PrimMonad m => MTable (PrimState m) -> Table a -> EitherT MutableError m ()
+append mtable table = do
+  allocateRows mtable $ Table.rowCount table
+  Boxed.zipWithM_ appendColumn (columns mtable) (Table.columns table)
 
-appendColumn :: PrimMonad m => MColumn (PrimState m) -> Column -> EitherT MutableError m ()
+appendColumn :: PrimMonad m => MColumn (PrimState m) -> Column a -> EitherT MutableError m ()
 appendColumn mf = \case
   ByteColumn bs
    | MByteColumn g <- mf
-   -> Grow.append g (unsafeFromByteString bs)
+   -> Grow.append g (Storable.unsafeFromByteString bs)
    | otherwise
    -> left $ MutableExpectedByteColumn $ describeColumn mf
 
@@ -234,160 +257,103 @@ appendColumn mf = \case
   ArrayColumn vs rec
    | MArrayColumn g mrec <- mf
    -> do  Grow.append g vs
-          appendTable mrec rec
+          append mrec rec
    | otherwise
    -> left $ MutableExpectedArrayColumn $ describeColumn mf
 
 ------------------------------------------------------------------------
 
-newtype MTableBox s =
-  MTableBox (Boxed.Vector (Schema, MTable s))
-
-mkMTableBox :: PrimMonad m => Boxed.Vector Schema -> m (MTableBox (PrimState m))
-mkMTableBox schemas = do
-  xs <- traverse newMTable schemas
-  pure . MTableBox $ Boxed.zip schemas xs
-
-insertFact ::
+insertRowOrDefault ::
   PrimMonad m =>
-  MTableBox (PrimState m) ->
-  AttributeId ->
-  Maybe' Value ->
-  EitherT MutableError m ()
-insertFact (MTableBox tables) aid@(AttributeId ix) mvalue = do
-  case tables Boxed.!? fromIntegral ix of
-    Nothing ->
-      left $ MutableAttributeNotFound aid
-    Just (schema, table) ->
-      insertMaybeValue schema table mvalue
-
-------------------------------------------------------------------------
-
-tablesOfFacts ::
-  Boxed.Vector Schema ->
-  Boxed.Vector Fact ->
-  Either MutableError (Boxed.Vector Table)
-tablesOfFacts schemas facts =
-  runST $ runEitherT $ do
-    box <- lift $ mkMTableBox schemas
-
-    for_ facts $ \fact ->
-      insertFact box (factAttributeId fact) (factValue fact)
-
-    lift $ unsafeFreezeTables box
-
-insertMaybeValue ::
-  PrimMonad m =>
-  Schema ->
   MTable (PrimState m) ->
   Maybe' Value ->
   EitherT MutableError m ()
-insertMaybeValue schema table = \case
+insertRowOrDefault table = \case
   Nothing' -> do
-    evalStateTable table $ do
-      insertDefault schema
-      MTable nref _ <- get
-      Ref.modifyRef nref (+ 1)
+    consumeColumns table $ do
+      insertDefault table (schema table)
+      allocateRows table 1
   Just' value -> do
-    evalStateTable table $ do
-      insertValue schema value
-      MTable nref _ <- get
-      Ref.modifyRef nref (+ 1)
+    consumeColumns table $ do
+      insertRow table (schema table) value
+      allocateRows table 1
 
-insertValue ::
+insertRow ::
   PrimMonad m =>
+  MTable (PrimState m) ->
   Schema ->
   Value ->
-  StateT (MTable (PrimState m)) (EitherT MutableError m) ()
-insertValue schema value =
-  case schema of
-    BoolSchema ->
+  StateT ColumnIndex (EitherT MutableError m) ()
+insertRow table vschema value =
+  case vschema of
+    Schema.Bool ->
       case value of
-        BoolValue False ->
-          insertInt 0
-        BoolValue True ->
-          insertInt 1
+        Bool x ->
+          insertBool table x
         _ ->
-          lift . left $ MutableSchemaMismatch value schema
+          lift . left $ MutableSchemaMismatch value vschema
 
-    Int64Schema ->
+    Schema.Byte ->
       case value of
-        Int64Value x ->
-          insertInt $ fromIntegral x
+        Byte x ->
+          insertByte table x
         _ ->
-          lift . left $ MutableSchemaMismatch value schema
+          lift . left $ MutableSchemaMismatch value vschema
 
-    DoubleSchema ->
+    Schema.Int ->
       case value of
-        DoubleValue x ->
-          insertDouble x
+        Int x ->
+          insertInt table x
         _ ->
-          lift . left $ MutableSchemaMismatch value schema
+          lift . left $ MutableSchemaMismatch value vschema
 
-    StringSchema ->
+    Schema.Double ->
       case value of
-        StringValue x ->
-          insertString $ T.encodeUtf8 x
+        Double x ->
+          insertDouble table x
         _ ->
-          lift . left $ MutableSchemaMismatch value schema
+          lift . left $ MutableSchemaMismatch value vschema
 
-    DateSchema ->
+    Schema.Enum variant0 variants ->
       case value of
-        DateValue x ->
-          insertInt . fromIntegral $ fromDay x
-        _ ->
-          lift . left $ MutableSchemaMismatch value schema
-
-    ListSchema ischema ->
-      case value of
-        ListValue xs ->
-          popArrayColumn $ \ns -> do
-            let
-              n =
-                fromIntegral $ Boxed.length xs
-
-              insertElem x = do
-                table <- get
-                insertValue ischema x
-                MTable _ columns <- get
-                if Boxed.null columns then do
-                  put table
-                else
-                  lift . left . MutableLeftoverColumns . Boxed.toList $
-                    fmap describeColumn columns
-
-            Grow.add ns n
-            traverse_ insertElem xs
-
-            MTable nref _ <- get
-            Ref.modifyRef nref (+ Boxed.length xs)
-
-            put =<< newEmptyMTable
-
-        _ ->
-          lift . left $ MutableSchemaMismatch value schema
-
-    StructSchema fields ->
-      case value of
-        StructValue values ->
-          insertStruct fields values
-        _ ->
-          lift . left $ MutableSchemaMismatch value schema
-
-    EnumSchema variant0 variants ->
-      case value of
-        EnumValue tag x -> do
-          insertInt $ fromIntegral tag
+        Enum tag x -> do
+          insertInt table $ fromIntegral tag
           (vs0, v1, vs2) <-
             lift . hoistMaybe (MutableEnumVariantMismatch tag x $ Boxed.cons variant0 variants) $
               focus tag variant0 variants
 
-          traverse_ (insertDefault . variantSchema) vs0
-          insertValue (variantSchema v1) x
-          traverse_ (insertDefault . variantSchema) vs2
+          traverse_ (insertDefault table . variantSchema) vs0
+          insertRow table (variantSchema v1) x
+          traverse_ (insertDefault table . variantSchema) vs2
 
         _ ->
-          lift . left $ MutableSchemaMismatch value schema
+          lift . left $ MutableSchemaMismatch value vschema
+
+    Schema.Struct fields ->
+      case value of
+        Struct values ->
+          insertStruct table fields values
+        _ ->
+          lift . left $ MutableSchemaMismatch value vschema
+
+    Schema.Array ischema ->
+      case value of
+        ByteArray xs ->
+          case ischema of
+            Schema.Byte ->
+              insertByteArray table xs
+            _ ->
+              lift . left $ MutableSchemaMismatch value vschema
+
+        Array xs ->
+          popArrayColumn table $ \ns atable -> do
+            traverse_ (consumeColumns atable . insertRow atable ischema) xs
+            Grow.add ns . fromIntegral $ Boxed.length xs
+            allocateRows atable $ Boxed.length xs
+
+        _ ->
+          lift . left $ MutableSchemaMismatch value vschema
+
 
 focus :: Int -> a -> Boxed.Vector a -> Maybe (Boxed.Vector a, a, Boxed.Vector a)
 focus i x0 xs =
@@ -401,49 +367,50 @@ focus i x0 xs =
 
 insertStruct ::
   PrimMonad m =>
-  Boxed.Vector FieldSchema ->
+  MTable (PrimState m) ->
+  Boxed.Vector Field ->
   Boxed.Vector Value ->
-  StateT (MTable (PrimState m)) (EitherT MutableError m) ()
-insertStruct fields values =
+  StateT ColumnIndex (EitherT MutableError m) ()
+insertStruct table fields values =
   if Boxed.length fields /= Boxed.length values then
     lift . left $ MutableStructFieldsMismatch values fields
   else
-    Boxed.zipWithM_ insertValue (fmap fieldSchema fields) values
+    Boxed.zipWithM_ (insertRow table) (fmap fieldSchema fields) values
 
 ------------------------------------------------------------------------
 
-evalStateTable ::
+consumeColumns ::
   PrimMonad m =>
   MTable (PrimState m) ->
-  StateT (MTable (PrimState m)) (EitherT MutableError m) a ->
+  StateT ColumnIndex (EitherT MutableError m) a ->
   EitherT MutableError m a
-evalStateTable table0 m = do
-  (result, MTable _ columns) <- runStateT m table0
-  if Boxed.null columns then
+consumeColumns table m = do
+  (result, ColumnIndex index) <- runStateT m 0
+  if index == Boxed.length (columns table) then
     pure result
   else
-    left . MutableLeftoverColumns . Boxed.toList $ fmap describeColumn columns
+    left . MutableLeftoverColumns . Boxed.toList .
+      fmap describeColumn . Boxed.drop index $ columns table
 
 popColumn ::
   PrimMonad m =>
-  StateT (MTable (PrimState m)) (EitherT MutableError m) (MColumn (PrimState m))
-popColumn = do
-  MTable nref xs <- get
-  case xs Boxed.!? 0 of
+  MTable (PrimState m) ->
+  StateT ColumnIndex (EitherT MutableError m) (MColumn (PrimState m))
+popColumn table = do
+  index <- get
+  case columns table Boxed.!? unColumnIndex index of
     Just x -> do
-      put . MTable nref $ Boxed.drop 1 xs
+      put $ index + 1
       pure x
     Nothing ->
       lift $ left MutableNoMoreColumns
 
 popByteColumn ::
   PrimMonad m =>
-  StateT
-    (MTable (PrimState m))
-    (EitherT MutableError m)
-    (Grow MStorable.MVector (PrimState m) Word8)
-popByteColumn =
-  popColumn >>= \case
+  MTable (PrimState m) ->
+  StateT ColumnIndex (EitherT MutableError m) (Grow MStorable.MVector (PrimState m) Word8)
+popByteColumn table =
+  popColumn table >>= \case
     MByteColumn xs ->
       pure xs
     x ->
@@ -451,12 +418,10 @@ popByteColumn =
 
 popIntColumn ::
   PrimMonad m =>
-  StateT
-    (MTable (PrimState m))
-    (EitherT MutableError m)
-    (Grow MStorable.MVector (PrimState m) Int64)
-popIntColumn =
-  popColumn >>= \case
+  MTable (PrimState m) ->
+  StateT ColumnIndex (EitherT MutableError m) (Grow MStorable.MVector (PrimState m) Int64)
+popIntColumn table =
+  popColumn table >>= \case
     MIntColumn xs ->
       pure xs
     x ->
@@ -464,12 +429,10 @@ popIntColumn =
 
 popDoubleColumn ::
   PrimMonad m =>
-  StateT
-    (MTable (PrimState m))
-    (EitherT MutableError m)
-    (Grow MStorable.MVector (PrimState m) Double)
-popDoubleColumn =
-  popColumn >>= \case
+  MTable (PrimState m) ->
+  StateT ColumnIndex (EitherT MutableError m) (Grow MStorable.MVector (PrimState m) Double)
+popDoubleColumn table =
+  popColumn table >>= \case
     MDoubleColumn xs ->
       pure xs
     x ->
@@ -477,20 +440,13 @@ popDoubleColumn =
 
 popArrayColumn ::
   PrimMonad m =>
-  (Grow MStorable.MVector (PrimState m) Int64 ->
-    StateT (MTable (PrimState m)) (EitherT MutableError m) a) ->
-  StateT (MTable (PrimState m)) (EitherT MutableError m) a
-popArrayColumn f =
-  popColumn >>= \case
-    MArrayColumn ns table0 ->
-      lift . evalStateTable table0 $ do
-        x <- f ns
-
-        n <- fromIntegral . Storable.sum <$> Grow.unsafeFreeze ns
-        MTable nref _ <- get
-        Ref.writeRef nref n
-
-        pure x
+  MTable (PrimState m) ->
+  (Grow MStorable.MVector (PrimState m) Int64 -> MTable (PrimState m) -> EitherT MutableError m a) ->
+  StateT ColumnIndex (EitherT MutableError m) a
+popArrayColumn table update =
+  popColumn table >>= \case
+    MArrayColumn ns atable -> do
+      lift $ update ns atable
     x ->
       lift . left . MutableExpectedArrayColumn $ describeColumn x
 
@@ -502,129 +458,184 @@ describeColumn = \case
     FoundMIntColumn
   MDoubleColumn _ ->
     FoundMDoubleColumn
-  MArrayColumn _ (MTable _ xs) ->
+  MArrayColumn _ (MTable _ _ xs) ->
     FoundMArrayColumn . Boxed.toList $ fmap describeColumn xs
 
 ------------------------------------------------------------------------
 
+insertBool ::
+  PrimMonad m =>
+  MTable (PrimState m) ->
+  Bool ->
+  StateT ColumnIndex (EitherT MutableError m) ()
+insertBool table x = do
+  xs <- popIntColumn table
+  Grow.add xs $ if x then 1 else 0
+
+insertByte ::
+  PrimMonad m =>
+  MTable (PrimState m) ->
+  Word8 ->
+  StateT ColumnIndex (EitherT MutableError m) ()
+insertByte table x = do
+  xs <- popByteColumn table
+  Grow.add xs x
+
 insertInt ::
   PrimMonad m =>
+  MTable (PrimState m) ->
   Int64 ->
-  StateT (MTable (PrimState m)) (EitherT MutableError m) ()
-insertInt w = do
-  xs <- popIntColumn
-  Grow.add xs w
+  StateT ColumnIndex (EitherT MutableError m) ()
+insertInt table x = do
+  xs <- popIntColumn table
+  Grow.add xs x
 
 insertDouble ::
   PrimMonad m =>
+  MTable (PrimState m) ->
   Double ->
-  StateT (MTable (PrimState m)) (EitherT MutableError m) ()
-insertDouble d = do
-  xs <- popDoubleColumn
-  Grow.add xs d
+  StateT ColumnIndex (EitherT MutableError m) ()
+insertDouble table x = do
+  xs <- popDoubleColumn table
+  Grow.add xs x
 
-insertString ::
+insertByteArray ::
   PrimMonad m =>
+  MTable (PrimState m) ->
   ByteString ->
-  StateT (MTable (PrimState m)) (EitherT MutableError m) ()
-insertString bs = do
-  popArrayColumn $ \ns -> do
-    Grow.add ns (fromIntegral $ B.length bs)
-    xs <- popByteColumn
-    Grow.append xs (unsafeFromByteString bs)
+  StateT ColumnIndex (EitherT MutableError m) ()
+insertByteArray table bs = do
+  popArrayColumn table $ \ns atable ->
+    consumeColumns atable $ do
+      xs <- popByteColumn atable
+      Grow.append xs $ Storable.unsafeFromByteString bs
+      Grow.add ns . fromIntegral $ B.length bs
+      allocateRows atable $ B.length bs
 
 insertDefault ::
   PrimMonad m =>
+  MTable (PrimState m) ->
   Schema ->
-  StateT (MTable (PrimState m)) (EitherT MutableError m) ()
-insertDefault = \case
-  BoolSchema ->
-    insertInt 0
-  Int64Schema ->
-    insertInt 0
-  DoubleSchema ->
-    insertDouble 0
-  StringSchema ->
-    insertString B.empty
-  DateSchema ->
-    insertInt 0
-  ListSchema _ ->
-    popArrayColumn $ \ns -> do
+  StateT ColumnIndex (EitherT MutableError m) ()
+insertDefault table = \case
+  Schema.Bool ->
+    insertBool table False
+  Schema.Byte ->
+    insertByte table 0
+  Schema.Int ->
+    insertInt table 0
+  Schema.Double ->
+    insertDouble table 0
+  Schema.Struct fields ->
+    traverse_ (insertDefault table . fieldSchema) fields
+  Schema.Enum variant0 variants -> do
+    insertInt table 0
+    traverse_ (insertDefault table . variantSchema) (Boxed.cons variant0 variants)
+  Schema.Array _schema ->
+    popArrayColumn table $ \ns _atable -> do
       Grow.add ns 0
-      put =<< newEmptyMTable
-  StructSchema fields ->
-    traverse_ (insertDefault . fieldSchema) fields
-  EnumSchema variant0 variants -> do
-    insertInt 0
-    traverse_ (insertDefault . variantSchema) (Boxed.cons variant0 variants)
 
 ------------------------------------------------------------------------
 
-newEmptyMTable :: PrimMonad m => m (MTable (PrimState m))
-newEmptyMTable =
+newBool :: PrimMonad m => m (MTable (PrimState m))
+newBool =
   MTable
-    <$> Ref.newRef 0
-    <*> pure Boxed.empty
-
-newMByteColumn :: PrimMonad m => m (MTable (PrimState m))
-newMByteColumn =
-  MTable
-    <$> Ref.newRef 0
-    <*> (Boxed.singleton . MByteColumn <$> Grow.new 4)
-
-newMIntColumn :: PrimMonad m => m (MTable (PrimState m))
-newMIntColumn =
-  MTable
-    <$> Ref.newRef 0
+    <$> pure Schema.Bool
+    <*> Ref.newRef 0
     <*> (Boxed.singleton . MIntColumn <$> Grow.new 4)
 
-newMDoubleColumn :: PrimMonad m => m (MTable (PrimState m))
-newMDoubleColumn =
+newByte :: PrimMonad m => m (MTable (PrimState m))
+newByte =
   MTable
-    <$> Ref.newRef 0
+    <$> pure Schema.Byte
+    <*> Ref.newRef 0
+    <*> (Boxed.singleton . MByteColumn <$> Grow.new 4)
+
+newInt :: PrimMonad m => m (MTable (PrimState m))
+newInt =
+  MTable
+    <$> pure Schema.Int
+    <*> Ref.newRef 0
+    <*> (Boxed.singleton . MIntColumn <$> Grow.new 4)
+
+newDouble :: PrimMonad m => m (MTable (PrimState m))
+newDouble =
+  MTable
+    <$> pure Schema.Double
+    <*> Ref.newRef 0
     <*> (Boxed.singleton . MDoubleColumn <$> Grow.new 4)
 
-newMArrayColumn :: PrimMonad m => MTable (PrimState m) -> m (MTable (PrimState m))
-newMArrayColumn vs =
+newEnum :: PrimMonad m => Schema.Variant -> Boxed.Vector Schema.Variant -> m (MTable (PrimState m))
+newEnum variant0 variants = do
+  tag <- newInt
+  vtables <- traverse (new . variantSchema) (Boxed.cons variant0 variants)
   MTable
-    <$> Ref.newRef 0
-    <*> (Boxed.singleton . flip MArrayColumn vs <$> Grow.new 4)
+    <$> pure (Schema.Enum variant0 variants)
+    <*> Ref.newRef 0
+    <*> pure (Boxed.concatMap columns $ Boxed.cons tag vtables)
 
-newMTable :: PrimMonad m => Schema -> m (MTable (PrimState m))
-newMTable = \case
-  BoolSchema ->
-    newMIntColumn
-  Int64Schema ->
-    newMIntColumn
-  DoubleSchema ->
-    newMDoubleColumn
-  StringSchema ->
-    newMArrayColumn =<< newMByteColumn
-  DateSchema ->
-    newMIntColumn
-  ListSchema schema ->
-    newMArrayColumn =<< newMTable schema
-  StructSchema fields ->
-    MTable
-      <$> Ref.newRef 0
-      <*> (Boxed.concatMap mtableColumns <$> traverse (newMTable . fieldSchema) fields)
-  EnumSchema variant0 variants -> do
-    tag <- newMIntColumn
-    vtables <- traverse (newMTable . variantSchema) (Boxed.cons variant0 variants)
-    MTable
-      <$> Ref.newRef 0
-      <*> pure (Boxed.concatMap mtableColumns $ Boxed.cons tag vtables)
+newStruct :: PrimMonad m => Boxed.Vector Schema.Field -> m (MTable (PrimState m))
+newStruct fields =
+  MTable
+    <$> pure (Schema.Struct fields)
+    <*> Ref.newRef 0
+    <*> (Boxed.concatMap columns <$> traverse (new . fieldSchema) fields)
+
+newArray :: PrimMonad m => MTable (PrimState m) -> m (MTable (PrimState m))
+newArray item =
+  MTable
+    <$> pure (Schema.Array $ schema item)
+    <*> Ref.newRef 0
+    <*> (Boxed.singleton . flip MArrayColumn item <$> Grow.new 4)
+
+new :: PrimMonad m => Schema -> m (MTable (PrimState m))
+new = \case
+  Schema.Bool ->
+    newBool
+  Schema.Byte ->
+    newByte
+  Schema.Int ->
+    newInt
+  Schema.Double ->
+    newDouble
+  Schema.Struct fields ->
+    newStruct fields
+  Schema.Enum variant0 variants -> do
+    newEnum variant0 variants
+  Schema.Array ischema ->
+    newArray =<< new ischema
 
 ------------------------------------------------------------------------
 
-unsafeFromByteString :: ByteString -> Storable.Vector Word8
-unsafeFromByteString (PS fp off len) =
-  Storable.unsafeFromForeignPtr fp off len
+newtype MTableBox s =
+  MTableBox (Boxed.Vector (MTable s))
 
-unsafeToByteString :: Storable.Vector Word8 -> ByteString
-unsafeToByteString xs =
-  let
-    (fp, off, len) =
-      Storable.unsafeToForeignPtr xs
-  in
-    PS fp off len
+mkMTableBox :: PrimMonad m => Boxed.Vector Schema -> m (MTableBox (PrimState m))
+mkMTableBox schemas =
+  MTableBox <$> traverse new schemas
+
+insertFact ::
+  PrimMonad m =>
+  MTableBox (PrimState m) ->
+  AttributeId ->
+  Maybe' Value ->
+  EitherT MutableError m ()
+insertFact (MTableBox tables) aid@(AttributeId ix) mvalue = do
+  case tables Boxed.!? fromIntegral ix of
+    Nothing ->
+      left $ MutableAttributeNotFound aid
+    Just table ->
+      insertRowOrDefault table mvalue
+
+fromFacts ::
+  Boxed.Vector Schema ->
+  Boxed.Vector Fact ->
+  Either MutableError (Boxed.Vector (Table Schema))
+fromFacts schemas facts =
+  runST $ runEitherT $ do
+    box@(MTableBox tables) <- lift $ mkMTableBox schemas
+
+    for_ facts $ \fact ->
+      insertFact box (factAttributeId fact) (factValue fact)
+
+    lift $ traverse unsafeFreeze tables

@@ -28,9 +28,9 @@ import P
 -- We need to be very careful that streams are not stored inside vectors,
 -- because then they would be stored as a thunk and good codegen / fusion is impossible.
 mergeFiles :: Monad m
-  => (c -> Stream.Stream m Block)
+  => (c -> Stream.Stream m (Block a))
   -> Boxed.Vector c
-  -> Stream.Stream m (Either MergeError EntityMerged)
+  -> Stream.Stream m (Either (MergeError a) (EntityMerged a))
 mergeFiles f_map fs
  = Stream.map entityMergedOfEntityValues
  $ treeFold mergeEntityValues Stream.empty getEntities

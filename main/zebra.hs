@@ -25,7 +25,7 @@ import qualified System.IO as IO
 
 import           Text.Show.Pretty (ppShow)
 
-import           X.Control.Monad.Trans.Either (EitherT, joinErrors, hoistEither, bracketEitherT', left)
+import           X.Control.Monad.Trans.Either (EitherT, joinErrors, hoistEither, bracketEitherT')
 import           X.Control.Monad.Trans.Either.Exit (orDie)
 import qualified X.Data.Vector as Boxed
 import qualified X.Data.Vector.Storable as Storable
@@ -238,26 +238,22 @@ withOutputPusher opts inputfile outputfile runWith = do
   maybe (return ()) doPurge mblock
   lift $ IO.hClose outfd
 
-catFacts :: [Encoding.Encoding] -> Stream.Stream (EitherT Serial.DecodeError IO) Block.Block -> EitherT Text IO ()
+catFacts :: Show a => [Encoding.Encoding] -> Stream.Stream (EitherT Serial.DecodeError IO) (Block.Block a) -> EitherT Text IO ()
 catFacts encodings blocks =
-  case traverse Encoding.recoverSchemaOfEncoding encodings of
-    Nothing ->
-      left "failed to recover schemas from encodings for fact output"
-    Just schemas0 -> do
-      let
-        schemas =
-          Boxed.fromList schemas0
+  let
+    schemas =
+      Boxed.fromList $ fmap Encoding.recoverSchemaOfEncoding encodings
 
-        go block = do
-          facts <- firstTshow . hoistEither $ Block.factsOfBlock schemas block
-          Boxed.mapM_ (liftIO . Char8.putStrLn . Fact.renderFact) facts
+    go block = do
+      facts <- firstTshow . hoistEither $ Block.factsOfBlock schemas block
+      Boxed.mapM_ (liftIO . Char8.putStrLn . Fact.renderFact) facts
 
-        blocks' =
-          Stream.trans (firstT Serial.renderDecodeError) blocks
+    blocks' =
+      Stream.trans (firstT Serial.renderDecodeError) blocks
+  in
+    Stream.mapM_ go blocks'
 
-      Stream.mapM_ go blocks'
-
-catBlocks :: CatOptions -> Stream.Stream (EitherT Serial.DecodeError IO) Block.Block -> EitherT Text IO ()
+catBlocks :: Show a => CatOptions -> Stream.Stream (EitherT Serial.DecodeError IO) (Block.Block a) -> EitherT Text IO ()
 catBlocks opts blocks = do
   let int0 = 0 :: Int
   totalBlocks <- lift $ IORef.newIORef int0
@@ -299,7 +295,7 @@ catBlocks opts blocks = do
 
   return ()
 
-catEntity :: CatOptions -> Entity.Entity -> EitherT Text IO ()
+catEntity :: Show a => CatOptions -> Entity.Entity a -> EitherT Text IO ()
 catEntity opts entity = lift $ do
   IO.putStrLn ("    " <> show (Entity.entityId entity) <> " (" <> show (Entity.entityHash entity) <> ")")
 
@@ -324,7 +320,7 @@ catEntity opts entity = lift $ do
    | otherwise
    = showf (Boxed.minimum inps) <> "..." <> showf (Boxed.maximum inps)
 
-catEntityFacts :: Entity.Entity -> IO ()
+catEntityFacts :: Show a => Entity.Entity a -> IO ()
 catEntityFacts entity = do
   IO.putStrLn ("      Values:")
   let facts' = Boxed.filter ((>0) . Storable.length . Entity.attributeTime . snd)

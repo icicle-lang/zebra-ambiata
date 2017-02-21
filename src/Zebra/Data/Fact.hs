@@ -2,6 +2,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# OPTIONS_GHC -funbox-strict-fields #-}
 module Zebra.Data.Fact (
     Fact(..)
   , Value(..)
@@ -10,10 +11,10 @@ module Zebra.Data.Fact (
 
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as Char8
-import           Data.Thyme.Calendar (Day)
 import           Data.Thyme.Format (formatTime)
 import           Data.Typeable (Typeable)
 import qualified Data.Vector as Boxed
+import           Data.Word (Word8)
 
 import           GHC.Generics (Generic)
 
@@ -37,14 +38,14 @@ data Fact =
     } deriving (Eq, Ord, Show, Generic, Typeable)
 
 data Value =
-    BoolValue !Bool
-  | Int64Value !Int64
-  | DoubleValue !Double
-  | StringValue !Text
-  | DateValue !Day
-  | ListValue !(Boxed.Vector Value)
-  | StructValue !(Boxed.Vector Value)
-  | EnumValue !Int !Value
+    Bool !Bool
+  | Byte !Word8
+  | Int !Int64
+  | Double !Double
+  | Enum !Int !Value
+  | Struct !(Boxed.Vector Value)
+  | Array !(Boxed.Vector Value)
+  | ByteArray !ByteString -- ^ Optimisation for Array [Byte, Byte, ..]
     deriving (Eq, Ord, Show, Generic, Typeable)
 
 renderFact :: Fact -> ByteString
@@ -80,25 +81,25 @@ renderMaybeValue =
 
 renderValue :: Value -> ByteString
 renderValue = \case
-  BoolValue x ->
+  Bool x ->
     Char8.pack $ show x
-  Int64Value x ->
+  Byte x ->
     Char8.pack $ show x
-  DoubleValue x ->
+  Int x ->
     Char8.pack $ show x
-  StringValue x ->
+  Double x ->
     Char8.pack $ show x
-  DateValue x ->
-    Char8.pack $ show x
-  ListValue x ->
-    if Boxed.null x then
-      "[]"
-    else
-      "[ " <> (Char8.intercalate ", " . Boxed.toList $ fmap renderValue x) <> " ]"
-  StructValue x ->
+  Struct x ->
     if Boxed.null x then
       "{}"
     else
       "{ " <> (Char8.intercalate ", " . Boxed.toList $ fmap renderValue x) <> " }"
-  EnumValue tag x ->
+  Enum tag x ->
     Char8.pack (show tag) <> ": " <> renderValue x
+  Array x ->
+    if Boxed.null x then
+      "[]"
+    else
+      "[ " <> (Char8.intercalate ", " . Boxed.toList $ fmap renderValue x) <> " ]"
+  ByteArray x ->
+    Char8.pack $ show x

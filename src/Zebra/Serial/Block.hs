@@ -41,19 +41,20 @@ import qualified X.Data.Vector.Stream as Stream
 import           Zebra.Data.Block
 import           Zebra.Data.Core
 import           Zebra.Data.Encoding
-import           Zebra.Data.Table
+import           Zebra.Data.Table (Table(..), Column(..))
+import qualified Zebra.Data.Table as Table
 import           Zebra.Serial.Array
 
 
 -- | Encode a zebra block.
 --
-bBlock :: Block -> Builder
+bBlock :: Block a -> Builder
 bBlock block =
   bEntities (blockEntities block) <>
   bIndices (blockIndices block) <>
   bTables (blockTables block)
 
-getBlock :: Boxed.Vector Encoding -> Get Block
+getBlock :: Boxed.Vector Encoding -> Get (Block ())
 getBlock encodings = do
   entities <- getEntities
   indices <- getIndices
@@ -269,7 +270,7 @@ getIndices = do
 --   /invariant: table_count == count of unique attr_ids/
 --   /invariant: table_id contains all ids referenced by attr_ids/
 --
-bTables :: Boxed.Vector Table -> Builder
+bTables :: Boxed.Vector (Table a) -> Builder
 bTables xs =
   let
     n =
@@ -284,14 +285,14 @@ bTables xs =
 
     counts =
       Storable.convert $
-      fmap (fromIntegral . tableRowCount) xs
+      fmap (fromIntegral . Table.rowCount) xs
   in
     Build.word32LE tcount <>
     bIntArray ids <>
     bIntArray counts <>
     foldMap bTable xs
 
-getTables :: Boxed.Vector Encoding -> Get (Boxed.Vector Table)
+getTables :: Boxed.Vector Encoding -> Get (Boxed.Vector (Table ()))
 getTables encodings = do
   tcount <- fromIntegral <$> Get.getWord32le
   ids <- fmap fromIntegral . Boxed.convert <$> getIntArray tcount
@@ -307,15 +308,15 @@ getTables encodings = do
 
   Boxed.zipWithM get ids counts
 
-bTable :: Table -> Builder
+bTable :: Table a -> Builder
 bTable =
-  foldMap bColumn . tableColumns
+  foldMap bColumn . Table.columns
 
-getTable :: Int -> Encoding -> Get Table
+getTable :: Int -> Encoding -> Get (Table ())
 getTable n (Encoding columns) = do
-  Table n . Boxed.fromList <$> traverse (getColumn n) columns
+  Table () n . Boxed.fromList <$> traverse (getColumn n) columns
 
-bColumn :: Column -> Builder
+bColumn :: Column a -> Builder
 bColumn = \case
   ByteColumn bs ->
     bByteArray bs
@@ -325,10 +326,10 @@ bColumn = \case
     bIntArray $ coerce xs
   ArrayColumn ns rec ->
     bIntArray ns <>
-    Build.word32LE (fromIntegral $ tableRowCount rec) <>
+    Build.word32LE (fromIntegral $ Table.rowCount rec) <>
     bTable rec
 
-getColumn :: Int -> ColumnEncoding -> Get Column
+getColumn :: Int -> ColumnEncoding -> Get (Column ())
 getColumn n = \case
   ByteEncoding ->
     ByteColumn <$> getByteArray

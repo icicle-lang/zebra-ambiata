@@ -11,14 +11,14 @@ import           System.IO (IO)
 
 import           Test.Zebra.Jack
 
-import           Zebra.Data.Table
+import qualified Zebra.Data.Table as Table
 
 
 prop_roundtrip_splitAt :: Property
 prop_roundtrip_splitAt =
   gamble arbitrary $ \ix ->
-  gamble jTable $
-    tripping (splitAtTable ix) (uncurry appendTables)
+  gamble jAnyTable $
+    tripping (Table.splitAt ix) (uncurry Table.append)
 
 return []
 tests :: IO Bool

@@ -1,5 +1,8 @@
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE DeriveFoldable #-}
+{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE DoAndIfThenElse #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
@@ -38,25 +41,27 @@ import qualified X.Data.Vector.Unboxed as Unboxed
 import           Zebra.Data.Block.Entity
 import           Zebra.Data.Block.Index
 import           Zebra.Data.Core
-import           Zebra.Data.Schema
 import           Zebra.Data.Entity
 import           Zebra.Data.Fact
-import           Zebra.Data.Table
-import           Zebra.Data.Table.Mutable
+import           Zebra.Data.Schema
+import           Zebra.Data.Table (Table, ValueError)
+import qualified Zebra.Data.Table as Table
+import           Zebra.Data.Table.Mutable (MutableError)
+import qualified Zebra.Data.Table.Mutable as MTable
 
 
-data Block =
+data Block a =
   Block {
       blockEntities :: !(Boxed.Vector BlockEntity)
     , blockIndices :: !(Unboxed.Vector BlockIndex)
-    , blockTables :: !(Boxed.Vector Table)
-    } deriving (Eq, Ord, Show, Generic, Typeable)
+    , blockTables :: !(Boxed.Vector (Table a))
+    } deriving (Eq, Ord, Show, Generic, Typeable, Functor, Foldable, Traversable)
 
 ------------------------------------------------------------------------
 -- Conversion to/from facts
 
-data FactError =
-    FactValueError !ValueError
+data FactError a =
+    FactValueError !(ValueError a)
   | FactIndicesExhausted
   | FactValuesExhausted !AttributeId
   | FactNoValues !AttributeId
@@ -64,11 +69,11 @@ data FactError =
   | FactLeftoverValues !(Boxed.Vector (Boxed.Vector Value))
     deriving (Eq, Ord, Show, Generic, Typeable)
 
-blockOfFacts :: Boxed.Vector Schema -> Boxed.Vector Fact -> Either MutableError Block
+blockOfFacts :: Boxed.Vector Schema -> Boxed.Vector Fact -> Either MutableError (Block Schema)
 blockOfFacts schemas facts =
-  Block (entitiesOfFacts facts) (indicesOfFacts facts) <$> tablesOfFacts schemas facts
+  Block (entitiesOfFacts facts) (indicesOfFacts facts) <$> MTable.fromFacts schemas facts
 
-factsOfBlock :: Boxed.Vector Schema -> Block -> Either FactError (Boxed.Vector Fact)
+factsOfBlock :: Boxed.Vector Schema -> Block a -> Either (FactError a) (Boxed.Vector Fact)
 factsOfBlock schemas block = do
   let
     entities =
@@ -78,7 +83,7 @@ factsOfBlock schemas block = do
     tables =
       blockTables block
 
-  values <- first FactValueError $ Boxed.zipWithM valuesOfTable schemas tables
+  values <- first FactValueError $ Boxed.zipWithM Table.rows schemas tables
 
   let
     (result, ValueState indices' values') =
@@ -97,7 +102,7 @@ data ValueState =
     , _stateValues :: Boxed.Vector (Boxed.Vector Value)
     }
 
-takeEntityFacts :: Boxed.Vector BlockEntity -> EitherT FactError (State ValueState) (Boxed.Vector Fact)
+takeEntityFacts :: Boxed.Vector BlockEntity -> EitherT (FactError a) (State ValueState) (Boxed.Vector Fact)
 takeEntityFacts entities =
   concatFor entities $ \(BlockEntity ehash eid attrs) ->
     -- The conversion from unboxed to boxed is not ideal here, but this
@@ -115,7 +120,7 @@ takeFacts ::
   EntityId ->
   AttributeId ->
   Int ->
-  EitherT FactError (State ValueState) (Boxed.Vector Fact)
+  EitherT (FactError a) (State ValueState) (Boxed.Vector Fact)
 takeFacts ehash eid aid nfacts = do
   ixs <- Boxed.convert <$> takeIndices nfacts
   vs <- takeValues aid nfacts
@@ -131,7 +136,7 @@ mkFact ehash eid aid (BlockIndex time factsetId tombstone) value =
       NotTombstone ->
         Just' value
 
-takeIndices :: Int -> EitherT FactError (State ValueState) (Unboxed.Vector BlockIndex)
+takeIndices :: Int -> EitherT (FactError a) (State ValueState) (Unboxed.Vector BlockIndex)
 takeIndices n = do
   ValueState is0 vss0 <- get
 
@@ -145,7 +150,7 @@ takeIndices n = do
   put $ ValueState is vss0
   pure js
 
-takeValues :: AttributeId -> Int -> EitherT FactError (State ValueState) (Boxed.Vector Value)
+takeValues :: AttributeId -> Int -> EitherT (FactError a) (State ValueState) (Boxed.Vector Value)
 takeValues aid@(AttributeId aix) n = do
   ValueState is0 vss0 <- get
 
@@ -178,7 +183,7 @@ data EntityError =
   | EntityNotEnoughRows
     deriving (Eq, Ord, Show, Generic, Typeable)
 
-entitiesOfBlock :: Block -> Either EntityError (Boxed.Vector Entity)
+entitiesOfBlock :: Block a -> Either EntityError (Boxed.Vector (Entity a))
 entitiesOfBlock (Block entities indices tables) =
   runST $ runEitherT $ do
     mtables <- Boxed.thaw tables
@@ -212,9 +217,9 @@ rowsOfEntity (BlockEntity _ _ attrs) =
 
 fromBlockEntity ::
   PrimMonad m =>
-  MBoxed.MVector (PrimState m) Table ->
+  MBoxed.MVector (PrimState m) (Table a) ->
   IndexedEntity ->
-  EitherT EntityError m Entity
+  EitherT EntityError m (Entity a)
 fromBlockEntity mtables (IndexedEntity (BlockEntity hash eid battrs) indices) = do
   mindices <- newRef indices
   let battrs' = denseBlockAttributes (MBoxed.length mtables) battrs
@@ -238,9 +243,9 @@ denseBlockAttributes num blockAttributes =
 fromBlockAttribute ::
   PrimMonad m =>
   Ref MBoxed.MVector (PrimState m) (Unboxed.Vector BlockIndex) ->
-  MBoxed.MVector (PrimState m) Table ->
+  MBoxed.MVector (PrimState m) (Table a) ->
   BlockAttribute ->
-  EitherT EntityError m Attribute
+  EitherT EntityError m (Attribute a)
 fromBlockAttribute mindices mtables (BlockAttribute aid n) = do
   indices <- takeIndexRows mindices $ fromIntegral n
   table <- takeTableRows mtables aid $ fromIntegral n
@@ -268,10 +273,10 @@ takeIndexRows ref n = do
 
 takeTableRows ::
   PrimMonad m =>
-  MBoxed.MVector (PrimState m) Table ->
+  MBoxed.MVector (PrimState m) (Table a) ->
   AttributeId ->
   Int ->
-  EitherT EntityError m Table
+  EitherT EntityError m (Table a)
 takeTableRows attrs aid@(AttributeId aix0) n =
   let
     aix =
@@ -284,7 +289,7 @@ takeTableRows attrs aid@(AttributeId aix0) n =
 
       let
         (table1, table2) =
-          splitAtTable n table
+          Table.splitAt n table
 
       MBoxed.unsafeWrite attrs aix table2
 

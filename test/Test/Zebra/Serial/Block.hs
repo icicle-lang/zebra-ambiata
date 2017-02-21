@@ -22,7 +22,7 @@ import           Text.Show.Pretty (ppShow)
 import           Zebra.Data.Block
 import           Zebra.Data.Core
 import           Zebra.Data.Encoding
-import           Zebra.Data.Table
+import qualified Zebra.Data.Table as Table
 import           Zebra.Serial.Block
 
 
@@ -43,12 +43,12 @@ prop_roundtrip_from_facts =
         Boxed.fromList facts
     in
       counterexample (ppShow schema) $
-      trippingSerial bBlock (getBlock encoding) block
+      trippingSerial bBlock (getBlock encoding) (() <$ block)
 
 prop_roundtrip_block :: Property
 prop_roundtrip_block =
   gamble jYoloBlock $ \block ->
-    trippingSerial bBlock (getBlock . fmap encodingOfTable $ blockTables block) block
+    trippingSerial bBlock (getBlock . fmap Table.encoding $ blockTables block) (() <$ block)
 
 prop_roundtrip_entities :: Property
 prop_roundtrip_entities =
@@ -67,18 +67,14 @@ prop_roundtrip_indices =
 
 prop_roundtrip_tables :: Property
 prop_roundtrip_tables =
-  gamble (Boxed.fromList <$> listOf jTable) $ \xs ->
-    trippingSerial bTables (getTables $ fmap encodingOfTable xs) xs
+  gamble (Boxed.fromList <$> listOf jAnyTable) $ \xs ->
+    trippingSerial bTables (getTables $ fmap Table.encoding xs) (fmap (() <$) xs)
 
 prop_roundtrip_table :: Property
 prop_roundtrip_table =
-  gamble (jTable' 1) $ \table ->
-    trippingSerial bTable (getTable 1 $ encodingOfTable table) table
-
-prop_roundtrip_column :: Property
-prop_roundtrip_column =
-  gamble (jColumn 1) $ \column ->
-    trippingSerial bColumn (getColumn 1 $ encodingOfColumn column) column
+  gamble jSchema $ \schema ->
+  gamble (jTable 1 schema) $ \table ->
+    trippingSerial bTable (getTable 1 $ Table.encoding table) (() <$ table)
 
 return []
 tests :: IO Bool

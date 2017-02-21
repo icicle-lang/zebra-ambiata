@@ -22,9 +22,9 @@ import           Zebra.Foreign.Table
 
 prop_roundtrip_table :: Property
 prop_roundtrip_table =
-  gamble jTable $ \table ->
+  gamble jAnyTable $ \table ->
   testIO . bracket Mempool.create Mempool.free $ \pool ->
-    trippingIO (liftE . foreignOfTable pool) tableOfForeign table
+    trippingIO (liftE . foreignOfTable pool) tableOfForeign (() <$ table)
 
 return []
 tests :: IO Bool

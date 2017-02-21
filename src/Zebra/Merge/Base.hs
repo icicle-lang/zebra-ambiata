@@ -1,4 +1,7 @@
+{-# LANGUAGE DeriveFoldable #-}
+{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NoImplicitPrelude #-}
@@ -17,19 +20,21 @@ module Zebra.Merge.Base
   , treeFold
   ) where
 
-import Zebra.Data
-
 import qualified Data.Map as Map
-
 import qualified Data.Text as Text
 import           Data.Vector.Unboxed.Deriving (derivingUnbox)
+
+import           GHC.Generics (Generic(..))
+
+import           P
+
 import qualified X.Data.Vector as Boxed
 import qualified X.Data.Vector.Unboxed as Unboxed
-
 import qualified X.Text.Show as Show
-import GHC.Generics (Generic(..))
 
-import P
+import           Zebra.Data
+import           Zebra.Data.Table (Table, TableError)
+
 
 -- | A BlockDataId roughly corresponds to the id of the file, where a Table came from.
 newtype BlockDataId
@@ -44,14 +49,14 @@ derivingUnbox "BlockDataId"
   [| \(BlockDataId x) -> x |]
   [| \x -> BlockDataId x |]
 
-data MergeError =
-    MergeTableError !TableError
+data MergeError a =
+    MergeTableError !(TableError a)
   | MergeAttributeWithoutTable !AttributeId
   | MergeBlockDataWithoutTable !AttributeId !BlockDataId
-    deriving (Eq, Show)
+    deriving (Eq, Show, Functor, Foldable, Traversable)
 
 -- This could certainly be nicer
-renderMergeError :: MergeError -> Text
+renderMergeError :: Show a => MergeError a -> Text
 renderMergeError = \case
   MergeTableError r ->
     -- Wouldn't hurt to add a renderTableError
@@ -64,17 +69,17 @@ renderMergeError = \case
 
 -- | EntityMerged is an entity with all its values, after merging has finished.
 -- These are the real values of the entity.
-data EntityMerged
+data EntityMerged a
  = EntityMerged
  { emEntityHash :: !EntityHash
  , emEntityId   :: !EntityId
  , emIndices    :: !(Boxed.Vector (Unboxed.Vector BlockIndex))
    -- ^ Indices for current entity, indexed by attribute id
- , emTables    :: !(Boxed.Vector Table)
+ , emTables    :: !(Boxed.Vector (Table a))
    -- ^ Table values for current entity, indexed by attribute id
  }
- deriving (Eq, Generic)
-instance Show EntityMerged where
+ deriving (Eq, Generic, Functor, Foldable, Traversable)
+instance Show a => Show (EntityMerged a) where
  showsPrec = Show.gshowsPrec
 
 
@@ -89,7 +94,7 @@ instance Show EntityMerged where
 -- Then after all files have been merged, we can chop all input files once, merge them
 -- according to the indices, then concatenate.
 --
--- Invariants: 
+-- Invariants:
 --   * length evIndicies == length evTables
 --      (evIndices and evTables are same length)
 --   * forall i, length (evTables ! i) > 0
@@ -98,16 +103,16 @@ instance Show EntityMerged where
 --      (each BlockDataId in evIndices refers to a BlockDataId in evTables)
 --      (the converse isn't true: there can be Tables that have no indices)
 --
-data EntityValues
+data EntityValues a
  = EntityValues
  { evEntity    :: !BlockEntity
  , evIndices   :: !(Boxed.Vector (Unboxed.Vector (BlockIndex, BlockDataId)))
    -- ^ Indices for current entity, indexed by attribute id
- , evTables   :: !(Boxed.Vector (Map.Map BlockDataId Table))
+ , evTables   :: !(Boxed.Vector (Map.Map BlockDataId (Table a)))
    -- ^ Table values for current entity, indexed by attribute id
  }
- deriving (Eq, Generic)
-instance Show EntityValues where
+ deriving (Eq, Generic, Functor, Foldable, Traversable)
+instance Show a => Show (EntityValues a) where
  showsPrec = Show.gshowsPrec
 
 
@@ -133,5 +138,5 @@ treeFold k z f vec
    | otherwise
    = let (a,b) = Boxed.splitAt (Boxed.length vs `div` 2) vs
      in  go a `k` go b
-{-# INLINE treeFold #-} 
+{-# INLINE treeFold #-}
 

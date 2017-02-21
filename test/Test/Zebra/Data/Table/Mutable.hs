@@ -6,7 +6,7 @@ import           Control.Monad.ST (runST)
 
 import           Disorder.Core.Run (disorderCheckEnvAll, ExpectedTestSpeed(..))
 import           Disorder.Jack (Property)
-import           Disorder.Jack ((===), gamble, tripping, listOf)
+import           Disorder.Jack ((===), gamble, tripping, listOf, counterexample)
 
 import qualified Data.Vector as Boxed
 
@@ -18,16 +18,26 @@ import           System.IO (IO)
 
 import           Test.Zebra.Jack
 
+import           Text.Show.Pretty (ppShow)
+
 import           X.Control.Monad.Trans.Either (runEitherT)
 
-import           Zebra.Data
+import           Zebra.Data.Fact (Value)
+import           Zebra.Data.Schema (Schema)
+import           Zebra.Data.Table (Table, ValueError)
+import qualified Zebra.Data.Table as Table
+import qualified Zebra.Data.Table.Mutable as MTable
 
 
 prop_default_table_vs_mtable :: Property
 prop_default_table_vs_mtable =
   gamble jSchema $ \schema ->
-    tableOfMaybeValue schema Nothing' ===
-    Right (fromMaybeValue schema [Nothing'])
+  let
+    table =
+      Table.fromRowOrDefault schema Nothing'
+  in
+    counterexample (either ppShow ppShow table) $
+    table === Right (fromMaybeValue schema [Nothing'])
 
 prop_roundtrip_value_mtable :: Property
 prop_roundtrip_value_mtable =
@@ -37,9 +47,9 @@ prop_roundtrip_value_mtable =
 
 prop_roundtrip_table_mtable :: Property
 prop_roundtrip_table_mtable =
-  gamble jTable $ \table -> runST $ do
-    mtable <- thawTable table
-    table' <- unsafeFreezeTable mtable
+  gamble jAnyTable $ \table -> runST $ do
+    mtable <- MTable.thaw table
+    table' <- MTable.unsafeFreeze mtable
     return (table === table')
 
 prop_appendTable_commutes :: Property
@@ -50,29 +60,27 @@ prop_appendTable_commutes =
     let rec1 = fromMaybeValue schema values1
     let rec2 = fromMaybeValue schema values2
     let rec3 = fromMaybeValue schema (values1 <> values2)
-    mtable <- thawTable rec1
-    Right () <- runEitherT $ appendTable mtable rec2
-    rec3' <- unsafeFreezeTable mtable
+    mtable <- MTable.thaw rec1
+    Right () <- runEitherT $ MTable.append mtable rec2
+    rec3' <- MTable.unsafeFreeze mtable
     return (rec3 === rec3')
 
-
-
-fromMaybeValue :: Schema -> [Maybe' Value] -> Table
+fromMaybeValue :: Schema -> [Maybe' Value] -> Table Schema
 fromMaybeValue schema mvalues =
   runST $ do
-    table <- newMTable schema
+    table <- MTable.new schema
     result <- runEitherT $
-      traverse_ (insertMaybeValue schema table) mvalues
+      traverse_ (MTable.insertRowOrDefault table) mvalues
     case result of
       Left err ->
         Savage.error $ show err
       Right () ->
-        unsafeFreezeTable table
+        MTable.unsafeFreeze table
 
-toValue :: Schema -> Table -> Either ValueError [Value]
+toValue :: Schema -> Table a -> Either (ValueError a) [Value]
 toValue schema table =
   fmap Boxed.toList $
-  valuesOfTable schema table
+    Table.rows schema table
 
 return []
 tests :: IO Bool

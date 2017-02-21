@@ -41,7 +41,7 @@ data MergeError =
 
 data MergeOptions c m =
   MergeOptions
-  { optionPullBlock  :: c -> m (Maybe Block)
+  { optionPullBlock  :: c -> m (Maybe (Block ()))
   , optionPushEntity :: CEntity -> m ()
   , optionGCAfterBytes :: !Int64
   }
