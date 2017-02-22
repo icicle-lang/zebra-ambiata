@@ -25,6 +25,7 @@ module Zebra.Data.Table (
   , fromRow
   , fromRowOrDefault
 
+  , empty
   , concat
   , append
   , appendColumn
@@ -42,7 +43,7 @@ import           Data.Word (Word8)
 
 import           GHC.Generics (Generic)
 
-import           P hiding (concat, splitAt)
+import           P hiding (empty, concat, splitAt)
 
 import           X.Control.Monad.Trans.Either (EitherT, runEitherT, hoistEither, left)
 import qualified X.Data.ByteString.Unsafe as B
@@ -157,11 +158,14 @@ fromRow schema =
         Left $ TableSchemaMismatch value schema
 
     Schema.Array ischema -> \case
-      Array xs -> do
-        vs0 <- traverse (fromRow ischema) xs
-        vs1 <- concat vs0
-        pure . Table schema 1 . Boxed.singleton $
-          ArrayColumn (Storable.singleton . fromIntegral $ Boxed.length xs) vs1
+      Array xs
+        | Boxed.null xs ->
+            pure (singletonEmptyArray ischema)
+        | otherwise -> do
+            vs0 <- traverse (fromRow ischema) xs
+            vs1 <- concat vs0
+            pure . Table schema 1 . Boxed.singleton $
+              ArrayColumn (Storable.singleton . fromIntegral $ Boxed.length xs) vs1
       value ->
         Left $ TableSchemaMismatch value schema
 
@@ -423,8 +427,8 @@ emptyArray :: Table Schema -> Table Schema
 emptyArray vs@(Table schema _ _) =
   Table (Schema.Array schema) 0 . Boxed.singleton $ ArrayColumn Storable.empty vs
 
-emptyTable :: Schema -> Table Schema
-emptyTable schema =
+empty :: Schema -> Table Schema
+empty schema =
   case schema of
     Schema.Bool ->
       emptyBool
@@ -435,14 +439,14 @@ emptyTable schema =
     Schema.Double ->
       emptyDouble
     Schema.Array item ->
-      emptyArray $ emptyTable item
+      emptyArray $ empty item
     Schema.Struct fields ->
       Table schema 0 $
-        Boxed.concatMap (columns . emptyTable . fieldSchema) fields
+        Boxed.concatMap (columns . empty . fieldSchema) fields
     Schema.Enum variant0 variants ->
       Table schema 0 $
         columns emptyInt <>
-        Boxed.concatMap (columns . emptyTable . variantSchema) (Boxed.cons variant0 variants)
+        Boxed.concatMap (columns . empty . variantSchema) (Boxed.cons variant0 variants)
 
 singletonBool :: Bool -> Table Schema
 singletonBool b =
@@ -472,7 +476,7 @@ singletonEmptyArray :: Schema -> Table Schema
 singletonEmptyArray schema =
   Table (Schema.Array schema) 1 .
     Boxed.singleton $
-    ArrayColumn (Storable.singleton 0) (emptyTable schema)
+    ArrayColumn (Storable.singleton 0) (empty schema)
 
 defaultTable :: Schema -> Table Schema
 defaultTable schema =
