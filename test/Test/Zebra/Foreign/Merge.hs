@@ -215,7 +215,7 @@ prop_merge_1_block_2_files =
     let Right b1 = blockOfFacts (Boxed.fromList schemas) (Boxed.fromList facts1)
     let Right b2 = blockOfFacts (Boxed.fromList schemas) (Boxed.fromList facts2)
     let err i = firstEitherT ppShow i
-    merged <- runEitherT $ err $ TestMerge.mergeLists gcEvery [[() <$ b1], [() <$ b2]]
+    merged <- runEitherT $ err $ TestMerge.mergeLists gcEvery [[b1], [b2]]
 
     return $ counterexample (ppShow (b1,b2))
            $ case merged of
@@ -251,7 +251,7 @@ prop_merge_2_block_2_files =
     let allBlocks = [ [b11, b12], [b21, b22] ]
 
     let err i = firstEitherT ppShow i
-    merged <- runEitherT $ err $ TestMerge.mergeLists gcEvery $ fmap (fmap (() <$)) allBlocks
+    merged <- runEitherT $ err $ TestMerge.mergeLists gcEvery $ allBlocks
 
     return $ counterexample (ppShow allBlocks)
            $ case merged of

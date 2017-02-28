@@ -15,6 +15,7 @@ module Zebra.Data.Table (
   , ValueError(..)
 
   , annotation
+  , schema
   , rowCount
   , columns
 
@@ -93,6 +94,10 @@ annotation :: Table a -> a
 annotation (Table x _ _) =
   x
 
+schema :: Table Schema -> Schema
+schema (Table x _ _) =
+  x
+
 rowCount :: Table a -> Int
 rowCount (Table _ x _) =
   x
@@ -102,72 +107,72 @@ columns (Table _ _ x) =
   x
 
 fromRowOrDefault :: Schema -> Maybe' Value -> Either (TableError Schema) (Table Schema)
-fromRowOrDefault schema = \case
+fromRowOrDefault s = \case
   Nothing' ->
-    pure $ defaultTable schema
+    pure $ defaultTable s
   Just' value ->
-    fromRow schema value
+    fromRow s value
 
 fromRow :: Schema -> Value -> Either (TableError Schema) (Table Schema)
-fromRow schema =
-  case schema of
+fromRow vschema =
+  case vschema of
     Schema.Bool -> \case
       Bool x ->
         pure $ singletonBool x
       value ->
-        Left $ TableSchemaMismatch value schema
+        Left $ TableSchemaMismatch value vschema
 
     Schema.Byte -> \case
       Byte x ->
         pure . singletonByte $ fromIntegral x
       value ->
-        Left $ TableSchemaMismatch value schema
+        Left $ TableSchemaMismatch value vschema
 
     Schema.Int -> \case
       Int x ->
         pure . singletonInt $ fromIntegral x
       value ->
-        Left $ TableSchemaMismatch value schema
+        Left $ TableSchemaMismatch value vschema
 
     Schema.Double -> \case
       Double x ->
         pure $ singletonDouble x
       value ->
-        Left $ TableSchemaMismatch value schema
+        Left $ TableSchemaMismatch value vschema
 
     Schema.Enum variant0 variants -> \case
       Enum tag x -> do
         Variant _ variant <- maybeToRight (TableEnumVariantMismatch tag x variants) $ Schema.lookupVariant tag variant0 variants
         xtable <- fromRow variant x
-        pure . Table schema 1 $
+        pure . Table vschema 1 $
           columns (singletonInt $ fromIntegral tag) <>
           columns xtable
       value ->
-        Left $ TableSchemaMismatch value schema
+        Left $ TableSchemaMismatch value vschema
 
     Schema.Struct fields -> \case
       Struct xs ->
         fromStruct fields xs
       value ->
-        Left $ TableSchemaMismatch value schema
+        Left $ TableSchemaMismatch value vschema
 
     Schema.Array Schema.Byte -> \case
       ByteArray x ->
         pure $ singletonByteArray x
       value ->
-        Left $ TableSchemaMismatch value schema
+        Left $ TableSchemaMismatch value vschema
 
-    Schema.Array ischema -> \case
+    Schema.Array eschema -> \case
       Array xs
         | Boxed.null xs ->
-            pure (singletonEmptyArray ischema)
+            pure (singletonEmptyArray eschema)
         | otherwise -> do
-            vs0 <- traverse (fromRow ischema) xs
+            vs0 <- traverse (fromRow eschema) xs
             vs1 <- concat vs0
-            pure . Table schema 1 . Boxed.singleton $
+            pure . Table vschema 1 . Boxed.singleton $
               ArrayColumn (Storable.singleton . fromIntegral $ Boxed.length xs) vs1
       value ->
-        Left $ TableSchemaMismatch value schema
+        Left $ TableSchemaMismatch value vschema
 
 fromStruct :: Boxed.Vector Field -> Boxed.Vector Value -> Either (TableError Schema) (Table Schema)
 fromStruct fields values =
@@ -180,8 +185,8 @@ fromStruct fields values =
 ------------------------------------------------------------------------
 
 rows :: Schema -> Table a -> Either (ValueError a) (Boxed.Vector Value)
-rows schema table0 =
-  evalStateTable table0 $ popValueColumn schema
+rows vschema table0 =
+  evalStateTable table0 $ popValueColumn vschema
 
 evalStateTable :: Table a -> EitherT (ValueError a) (State (Table a)) b -> Either (ValueError a) b
 evalStateTable table0 m =
@@ -194,12 +199,13 @@ evalStateTable table0 m =
     else
       Left . ValueLeftoverColumns $ encoding table
 
+-- FIXME we should be putting the Table in the state like this, make the same as MTable
 popColumn :: EitherT (ValueError a) (State (Table a)) (Column a)
 popColumn = do
-  Table schema n xs <- get
+  Table s n xs <- get
   case xs Boxed.!? 0 of
     Just x -> do
-      put . Table schema n $ Boxed.drop 1 xs
+      put . Table s n $ Boxed.drop 1 xs
       pure x
     Nothing ->
       left ValueNoMoreColumns
@@ -281,9 +287,9 @@ popValueColumn = \case
       bs <- popByteColumn
       fmap (fmap $ ByteArray) . hoistEither $ restring ns bs
 
-  Schema.Array schema ->
+  Schema.Array eschema ->
     popArrayColumn $ \ns -> do
-      xs <- popValueColumn schema
+      xs <- popValueColumn eschema
       fmap (fmap Array) . hoistEither $ relist ns xs
 
 restring :: Storable.Vector Int64 -> ByteString -> Either (ValueError a) (Boxed.Vector ByteString)
@@ -337,9 +343,9 @@ concat xss0 =
     Left TableCannotConcatEmpty
   else
     let
-      schema :: Schema
-      schema =
-        annotation $ Boxed.head xss0 -- FIXME check schema
+      schema0 :: Schema
+      schema0 =
+        schema $ Boxed.head xss0 -- FIXME check schema
 
       n :: Int
       n =
@@ -352,12 +358,12 @@ concat xss0 =
       yss =
         Boxed.transpose xss
     in
-      fmap (Table schema n) $
+      fmap (Table schema0 n) $
         traverse (Boxed.fold1M' appendColumn) yss
 
 append :: Table a -> Table a -> Either (TableError a) (Table a)
-append (Table schema n xs) (Table _schema m ys) =
-  Table schema (n + m) <$> Boxed.zipWithM appendColumn xs ys
+append (Table s n xs) (Table _s m ys) =
+  Table s (n + m) <$> Boxed.zipWithM appendColumn xs ys
 
 appendColumn :: Column a -> Column a -> Either (TableError a) (Column a)
 appendColumn x y =
@@ -378,7 +384,7 @@ appendColumn x y =
       Left $ TableAppendColumnsMismatch x y
 
 splitAt :: Int -> Table a -> (Table a, Table a)
-splitAt i0 (Table schema n fs) =
+splitAt i0 (Table s n fs) =
   let
     i =
       min n (max 0 i0)
@@ -386,7 +392,7 @@ splitAt i0 (Table schema n fs) =
     (as, bs) =
       Boxed.unzip $ Boxed.map (splitAtColumn i) fs
   in
-    (Table schema i as, Table schema (n - i) bs)
+    (Table s i as, Table s (n - i) bs)
 
 splitAtColumn :: Int -> Column a -> (Column a, Column a)
 splitAtColumn i =
@@ -424,12 +430,12 @@ emptyDouble =
   Table Schema.Double 0 . Boxed.singleton $ DoubleColumn Storable.empty
 
 emptyArray :: Table Schema -> Table Schema
-emptyArray vs@(Table schema _ _) =
-  Table (Schema.Array schema) 0 . Boxed.singleton $ ArrayColumn Storable.empty vs
+emptyArray vs@(Table s _ _) =
+  Table (Schema.Array s) 0 . Boxed.singleton $ ArrayColumn Storable.empty vs
 
 empty :: Schema -> Table Schema
-empty schema =
-  case schema of
+empty tschema =
+  case tschema of
     Schema.Bool ->
       emptyBool
     Schema.Byte ->
@@ -438,13 +444,13 @@ empty schema =
       emptyInt
     Schema.Double ->
       emptyDouble
-    Schema.Array item ->
-      emptyArray $ empty item
+    Schema.Array element ->
+      emptyArray $ empty element
     Schema.Struct fields ->
-      Table schema 0 $
+      Table tschema 0 $
         Boxed.concatMap (columns . empty . fieldSchema) fields
     Schema.Enum variant0 variants ->
-      Table schema 0 $
+      Table tschema 0 $
         columns emptyInt <>
         Boxed.concatMap (columns . empty . variantSchema) (Boxed.cons variant0 variants)
 
@@ -473,14 +479,14 @@ singletonByteArray bs =
       (Table Schema.Byte (B.length bs) . Boxed.singleton $ ByteColumn bs)
 
 singletonEmptyArray :: Schema -> Table Schema
-singletonEmptyArray schema =
-  Table (Schema.Array schema) 1 .
+singletonEmptyArray element =
+  Table (Schema.Array element) 1 .
     Boxed.singleton $
-    ArrayColumn (Storable.singleton 0) (empty schema)
+    ArrayColumn (Storable.singleton 0) (empty element)
 
 defaultTable :: Schema -> Table Schema
-defaultTable schema =
-  case schema of
+defaultTable tschema =
+  case tschema of
     Schema.Bool ->
       singletonBool False
     Schema.Byte ->
@@ -490,11 +496,11 @@ defaultTable schema =
     Schema.Double ->
       singletonDouble 0
     Schema.Struct fields ->
-      Table schema 1 $
+      Table tschema 1 $
         Boxed.concatMap (columns . defaultTable . fieldSchema) fields
     Schema.Enum variant0 variants ->
-      Table schema 1 $
+      Table tschema 1 $
         columns (singletonInt 0) <>
         Boxed.concatMap (columns . defaultTable . variantSchema) (Boxed.cons variant0 variants)
-    Schema.Array item ->
-      singletonEmptyArray item
+    Schema.Array element ->
+      singletonEmptyArray element

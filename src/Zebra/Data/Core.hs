@@ -7,7 +7,9 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 module Zebra.Data.Core (
-    EntityId(..)
+    ZebraVersion(..)
+
+  , EntityId(..)
   , EntityHash(..)
   , AttributeId(..)
   , AttributeName(..)
@@ -55,6 +57,11 @@ import           P
 
 import           X.Text.Show (gshowsPrec)
 
+
+data ZebraVersion =
+    ZebraV1 -- ^ Encoding is stored in header instead of schema.
+  | ZebraV2 -- ^ Schema is stored in header.
+    deriving (Eq, Ord, Show, Generic, Typeable)
 
 newtype EntityId =
   EntityId {

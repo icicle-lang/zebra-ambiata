@@ -38,6 +38,8 @@ import           GHC.Generics (Generic)
 
 import           P
 
+import           Text.Printf (printf)
+
 import           X.Text.Show (gshowsPrec)
 
 import           Zebra.Data.Core
@@ -138,9 +140,15 @@ recoverSchemaOfEncoding (Encoding encodings) =
       x
     xs ->
       let
+        digits =
+          length (show $ length xs)
+
+        format =
+          "%0" <> show digits <> "d"
+
         mkField :: Int -> Schema -> Field
         mkField i x =
-          Field (FieldName . T.pack $ show i) x
+          Field (FieldName . T.pack $ printf format i) x
       in
         Struct .
         Boxed.fromList $

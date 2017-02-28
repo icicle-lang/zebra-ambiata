@@ -37,8 +37,9 @@ import qualified X.Data.Vector as Boxed
 import qualified X.Data.Vector.Stream as Stream
 
 import           Zebra.Data
-import           Zebra.Serial.Header
+import           Zebra.Data.Schema (Schema)
 import           Zebra.Serial.Block
+import           Zebra.Serial.Header
 
 
 data DecodeError
@@ -57,17 +58,17 @@ renderDecodeError = \case
   DecodeErrorBadParserExpectsMoreAfterEnd ->
     "Decode error: the parser asked for more input after telling it the stream has ended. This means there is a bug in the parser."
 
-fileOfBytes :: Monad m => Stream.Stream m B.ByteString -> EitherT DecodeError m (Map AttributeName Encoding, Stream.Stream (EitherT DecodeError m) (Block ()))
+fileOfBytes :: Monad m => Stream.Stream m B.ByteString -> EitherT DecodeError m (Map AttributeName Schema, Stream.Stream (EitherT DecodeError m) (Block Schema))
 fileOfBytes input = EitherT $ do
   (header, rest) <- runStreamOne getHeader input
   case header of
    Left err -> return $ Left err
    Right header' ->
-    let encoding = Boxed.fromList $ Map.elems header'
-        blocks = runStreamMany (getBlock encoding) rest
+    let schemas = Boxed.fromList $ Map.elems header'
+        blocks = runStreamMany (getBlock schemas) rest
     in  return $ Right (header', blocks)
 
-blocksOfBytes :: Monad m => Boxed.Vector Encoding -> Stream.Stream m B.ByteString -> Stream.Stream (EitherT DecodeError m) (Block ())
+blocksOfBytes :: Monad m => Boxed.Vector Schema -> Stream.Stream m B.ByteString -> Stream.Stream (EitherT DecodeError m) (Block Schema)
 blocksOfBytes formats inp = runStreamMany (getBlock formats) inp
 
 
@@ -144,7 +145,7 @@ runStreamMany g (Stream.Stream s'go s'init) =
          -> return $ Stream.Yield ret (s, str', Nothing)
 
 
-fileOfFilePath :: MonadIO m => FilePath -> EitherT DecodeError m (Map AttributeName Encoding, Stream.Stream (EitherT DecodeError m) (Block ()))
+fileOfFilePath :: MonadIO m => FilePath -> EitherT DecodeError m (Map AttributeName Schema, Stream.Stream (EitherT DecodeError m) (Block Schema))
 fileOfFilePath path = do
   bytes <- lift $ streamOfFile path
   fileOfBytes bytes

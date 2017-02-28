@@ -20,6 +20,8 @@ library
                     , ambiata-x-eithert
                     , ambiata-x-show
                     , ambiata-x-vector
+                    , aeson                           >= 1.0        && < 1.2
+                    , aeson-pretty                    == 0.8.*
                     , attoparsec                      >= 0.13       && < 0.14
                     , binary                          >= 0.7.2      && < 0.9
                     , bindings-DSL                    >= 1.0.0      && <= 1.0.23
@@ -33,6 +35,7 @@ library
                     , text                            == 1.2.*
                     , thyme                           == 0.3.*
                     , transformers                    == 0.5.*
+                    , unordered-containers            == 0.2.*
                     , vector                          >= 0.10       && < 0.12
                     , vector-space                    == 0.10.*
                     , vector-th-unbox                 == 0.2.*
