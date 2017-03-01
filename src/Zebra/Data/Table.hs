@@ -142,11 +142,18 @@ fromRow vschema =
 
     Schema.Enum variant0 variants -> \case
       Enum tag x -> do
-        Variant _ variant <- maybeToRight (TableEnumVariantMismatch tag x variants) $ Schema.lookupVariant tag variant0 variants
-        xtable <- fromRow variant x
+        (vs0, v1, vs2) <-
+            maybeToRight (TableEnumVariantMismatch tag x $ Boxed.cons variant0 variants) $
+              Schema.focusVariant tag variant0 variants
+
+        table1 <- fromRow (variantSchema v1) x
+
         pure . Table vschema 1 $
           columns (singletonInt $ fromIntegral tag) <>
-          columns xtable
+          Boxed.concatMap (columns . defaultTable . variantSchema) vs0 <>
+          columns table1 <>
+          Boxed.concatMap (columns . defaultTable . variantSchema) vs2
+
       value ->
         Left $ TableSchemaMismatch value vschema
 

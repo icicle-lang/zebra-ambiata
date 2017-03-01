@@ -320,7 +320,7 @@ insertRow table vschema value =
           insertInt table $ fromIntegral tag
           (vs0, v1, vs2) <-
             lift . hoistMaybe (MutableEnumVariantMismatch tag x $ Boxed.cons variant0 variants) $
-              focus tag variant0 variants
+              Schema.focusVariant tag variant0 variants
 
           traverse_ (insertDefault table . variantSchema) vs0
           insertRow table (variantSchema v1) x
@@ -353,17 +353,6 @@ insertRow table vschema value =
 
         _ ->
           lift . left $ MutableSchemaMismatch value vschema
-
-
-focus :: Int -> a -> Boxed.Vector a -> Maybe (Boxed.Vector a, a, Boxed.Vector a)
-focus i x0 xs =
-  case i of
-    0 ->
-      Just (Boxed.empty, x0, xs)
-    _ -> do
-      let !j = i - 1
-      x <- xs Boxed.!? j
-      pure (Boxed.cons x0 $ Boxed.take j xs, x, Boxed.drop (j + 1) xs)
 
 insertStruct ::
   PrimMonad m =>

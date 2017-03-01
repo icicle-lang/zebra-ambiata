@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE LambdaCase #-}
@@ -11,6 +12,7 @@ module Zebra.Data.Schema (
   , Variant(..)
   , VariantName(..)
   , lookupVariant
+  , focusVariant
 
   , SchemaDecodeError(..)
   , renderSchemaDecodeError
@@ -39,6 +41,7 @@ import           P
 
 import qualified X.Data.Vector as Boxed
 import           X.Text.Show (gshowsPrec)
+
 
 newtype FieldName =
   FieldName {
@@ -104,6 +107,16 @@ lookupVariant ix variant0 variants =
       Just variant0
     _ ->
       variants Boxed.!? (ix - 1)
+
+focusVariant :: Int -> Variant -> Boxed.Vector Variant -> Maybe (Boxed.Vector Variant, Variant, Boxed.Vector Variant)
+focusVariant i x0 xs =
+  case i of
+    0 ->
+      Just (Boxed.empty, x0, xs)
+    _ -> do
+      let !j = i - 1
+      x <- xs Boxed.!? j
+      pure (Boxed.cons x0 $ Boxed.take j xs, x, Boxed.drop (j + 1) xs)
 
 encode :: Schema -> ByteString
 encode =
