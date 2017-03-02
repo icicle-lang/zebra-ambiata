@@ -286,13 +286,6 @@ insertRow ::
   StateT ColumnIndex (EitherT MutableError m) ()
 insertRow table vschema value =
   case vschema of
-    Schema.Bool ->
-      case value of
-        Bool x ->
-          insertBool table x
-        _ ->
-          lift . left $ MutableSchemaMismatch value vschema
-
     Schema.Byte ->
       case value of
         Byte x ->
@@ -452,15 +445,6 @@ describeColumn = \case
 
 ------------------------------------------------------------------------
 
-insertBool ::
-  PrimMonad m =>
-  MTable (PrimState m) ->
-  Bool ->
-  StateT ColumnIndex (EitherT MutableError m) ()
-insertBool table x = do
-  xs <- popIntColumn table
-  Grow.add xs $ if x then 1 else 0
-
 insertByte ::
   PrimMonad m =>
   MTable (PrimState m) ->
@@ -507,8 +491,6 @@ insertDefault ::
   Schema ->
   StateT ColumnIndex (EitherT MutableError m) ()
 insertDefault table = \case
-  Schema.Bool ->
-    insertBool table False
   Schema.Byte ->
     insertByte table 0
   Schema.Int ->
@@ -525,13 +507,6 @@ insertDefault table = \case
       Grow.add ns 0
 
 ------------------------------------------------------------------------
-
-newBool :: PrimMonad m => m (MTable (PrimState m))
-newBool =
-  MTable
-    <$> pure Schema.Bool
-    <*> Ref.newRef 0
-    <*> (Boxed.singleton . MIntColumn <$> Grow.new 4)
 
 newByte :: PrimMonad m => m (MTable (PrimState m))
 newByte =
@@ -579,8 +554,6 @@ newArray item =
 
 new :: PrimMonad m => Schema -> m (MTable (PrimState m))
 new = \case
-  Schema.Bool ->
-    newBool
   Schema.Byte ->
     newByte
   Schema.Int ->

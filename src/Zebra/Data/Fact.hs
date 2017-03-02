@@ -51,8 +51,7 @@ data Fact =
     } deriving (Eq, Ord, Show, Generic, Typeable)
 
 data Value =
-    Bool !Bool
-  | Byte !Word8
+    Byte !Word8
   | Int !Int64
   | Double !Double
   | Enum !Int !Value
@@ -141,11 +140,6 @@ aesonConfig =
 toAeson :: Schema -> Value -> Either FactRenderError Aeson.Value
 toAeson schema value0 =
   case schema of
-    Schema.Bool
-      | Bool x <- value0
-      ->
-        pure $ Aeson.Bool x
-
     Schema.Byte
       | Byte x <- value0
       ->
