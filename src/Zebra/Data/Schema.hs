@@ -219,7 +219,7 @@ pSchemaVariant =
 pSchemaStructFields :: Aeson.Value -> Aeson.Parser (Boxed.Vector Field)
 pSchemaStructFields =
   Aeson.withArray "array of struct fields" $ \xs -> do
-    traverse pSchemaField xs
+    kmapM pSchemaField xs
 
 pSchemaField :: Aeson.Value -> Aeson.Parser Field
 pSchemaField =
@@ -233,7 +233,7 @@ pEnum f =
   Aeson.withObject "object containing an enum (i.e. a single member)" $ \o ->
     case HashMap.toList o of
       [(tag, value)] ->
-        f tag value
+        f tag value <?> Aeson.Key tag
       [] ->
         fail $
           "expected an object containing an enum (i.e. a single member)," <>
