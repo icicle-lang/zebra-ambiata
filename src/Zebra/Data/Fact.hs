@@ -9,6 +9,12 @@ module Zebra.Data.Fact (
   , Value(..)
   , renderFact
 
+  , unit
+  , false
+  , true
+  , none
+  , some
+
   , FactRenderError(..)
   , renderFactRenderError
   ) where
@@ -28,7 +34,7 @@ import           Data.Word (Word8)
 
 import           GHC.Generics (Generic)
 
-import           P
+import           P hiding (some)
 
 import           System.Locale (defaultTimeLocale)
 
@@ -77,6 +83,30 @@ renderFactRenderError = \case
     ppPrefix "\n    " schema
   FactSchemaNotFoundForAttribute (AttributeId aid) ->
     "Could not render fact, no schema found for attribute-id: " <> T.pack (show aid)
+
+------------------------------------------------------------------------
+
+unit :: Value
+unit =
+  Struct Boxed.empty
+
+false :: Value
+false =
+  Enum 0 unit
+
+true :: Value
+true =
+  Enum 1 unit
+
+none :: Value
+none =
+  Enum 0 unit
+
+some :: Value -> Value
+some =
+  Enum 1
+
+------------------------------------------------------------------------
 
 ppPrefix :: Show a => Text -> a -> Text
 ppPrefix prefix =
