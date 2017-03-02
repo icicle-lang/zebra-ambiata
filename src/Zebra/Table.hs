@@ -4,12 +4,15 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE DoAndIfThenElse #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# OPTIONS_GHC -funbox-strict-fields #-}
 module Zebra.Table (
     Table(..)
   , Column(..)
+  , ColumnIndex(..)
 
   , TableError(..)
   , ValueError(..)
@@ -35,7 +38,8 @@ module Zebra.Table (
   ) where
 
 import           Control.Monad.State.Strict (MonadState(..))
-import           Control.Monad.Trans.State.Strict (State, runState)
+import           Control.Monad.Trans.Class (lift)
+import           Control.Monad.Trans.State.Strict (StateT, runStateT)
 
 import           Data.ByteString.Internal (ByteString(..))
 import qualified Data.ByteString as B
@@ -46,7 +50,6 @@ import           GHC.Generics (Generic)
 
 import           P hiding (empty, concat, splitAt)
 
-import           X.Control.Monad.Trans.Either (EitherT, runEitherT, hoistEither, left)
 import qualified X.Data.ByteString.Unsafe as B
 import qualified X.Data.Vector as Boxed
 import qualified X.Data.Vector.Generic as Generic
@@ -70,6 +73,11 @@ data Column a =
   | ArrayColumn !(Storable.Vector Int64) !(Table a)
     deriving (Eq, Ord, Show, Generic, Typeable, Functor, Foldable, Traversable)
 
+newtype ColumnIndex =
+  ColumnIndex {
+      unColumnIndex :: Int
+    } deriving (Eq, Ord, Show, Num)
+
 data TableError a =
     TableSchemaMismatch !Value !Schema
   | TableRequiredFieldMissing !Schema
@@ -88,7 +96,7 @@ data ValueError a =
   | ValueListLengthMismatch !Int !Int
   | ValueEnumVariantMismatch !Int !(Boxed.Vector Variant)
   | ValueNoMoreColumns
-  | ValueLeftoverColumns !Encoding
+  | ValueLeftoverColumns !(Boxed.Vector (Column a))
     deriving (Eq, Ord, Show, Generic, Typeable, Functor, Foldable, Traversable)
 
 annotation :: Table a -> a
@@ -188,104 +196,105 @@ fromStruct fields values =
 
 rows :: Schema -> Table a -> Either (ValueError a) (Boxed.Vector Value)
 rows vschema table0 =
-  evalStateTable table0 $ popValueColumn vschema
+  consumeColumns table0 $ popValueColumn table0 vschema
 
-evalStateTable :: Table a -> EitherT (ValueError a) (State (Table a)) b -> Either (ValueError a) b
-evalStateTable table0 m =
-  let
-    (result, table) =
-      runState (runEitherT m) table0
-  in
-    if Boxed.null $ columns table then
-      result
-    else
-      Left . ValueLeftoverColumns $ encoding table
+consumeColumns :: Table a -> StateT ColumnIndex (Either (ValueError a)) b -> Either (ValueError a) b
+consumeColumns table m = do
+  (result, ColumnIndex index) <- runStateT m 0
+  if index == Boxed.length (columns table) then
+    pure result
+  else
+    Left . ValueLeftoverColumns . Boxed.drop index $ columns table
 
--- FIXME we should be putting the Table in the state like this, make the same as MTable
-popColumn :: EitherT (ValueError a) (State (Table a)) (Column a)
-popColumn = do
-  Table s n xs <- get
-  case xs Boxed.!? 0 of
+popColumn :: Table a -> StateT ColumnIndex (Either (ValueError a)) (Column a)
+popColumn table = do
+  index <- get
+  case columns table Boxed.!? unColumnIndex index of
     Just x -> do
-      put . Table s n $ Boxed.drop 1 xs
+      put $ index + 1
       pure x
     Nothing ->
-      left ValueNoMoreColumns
+      lift $ Left ValueNoMoreColumns
 
-popByteColumn :: EitherT (ValueError a) (State (Table a)) ByteString
-popByteColumn =
-  popColumn >>= \case
+popByteColumn :: Table a -> StateT ColumnIndex (Either (ValueError a)) ByteString
+popByteColumn table =
+  popColumn table >>= \case
     ByteColumn xs ->
       pure xs
     x ->
-      left $ ValueExpectedByteColumn x
+      lift . Left $ ValueExpectedByteColumn x
 
-popIntColumn :: EitherT (ValueError a) (State (Table a)) (Storable.Vector Int64)
-popIntColumn =
-  popColumn >>= \case
+popIntColumn :: Table a -> StateT ColumnIndex (Either (ValueError a)) (Storable.Vector Int64)
+popIntColumn table =
+  popColumn table >>= \case
     IntColumn xs ->
       pure xs
     x ->
-      left $ ValueExpectedIntColumn x
+      lift . Left $ ValueExpectedIntColumn x
 
-popDoubleColumn :: EitherT (ValueError a) (State (Table a)) (Storable.Vector Double)
-popDoubleColumn =
-  popColumn >>= \case
+popDoubleColumn :: Table a -> StateT ColumnIndex (Either (ValueError a)) (Storable.Vector Double)
+popDoubleColumn table =
+  popColumn table >>= \case
     DoubleColumn xs ->
       pure xs
     x ->
-      left $ ValueExpectedDoubleColumn x
+      lift . Left $ ValueExpectedDoubleColumn x
 
 popArrayColumn ::
-  (Storable.Vector Int64 -> EitherT (ValueError a) (State (Table a)) b) ->
-  EitherT (ValueError a) (State (Table a)) b
-popArrayColumn f =
-  popColumn >>= \case
-    ArrayColumn ns table0 ->
-      hoistEither . evalStateTable table0 $ f ns
+  Table a ->
+  (Storable.Vector Int64 -> Table a -> Either (ValueError a) b) ->
+  StateT ColumnIndex (Either (ValueError a)) b
+popArrayColumn table update =
+  popColumn table >>= \case
+    ArrayColumn ns atable -> do
+      lift $ update ns atable
     x ->
-      left $ ValueExpectedArrayColumn x
+      lift . Left $ ValueExpectedArrayColumn x
 
-popValueColumn :: Schema -> EitherT (ValueError a) (State (Table a)) (Boxed.Vector Value)
-popValueColumn = \case
+popValueColumn :: Table a -> Schema -> StateT ColumnIndex (Either (ValueError a)) (Boxed.Vector Value)
+popValueColumn table = \case
   Schema.Byte ->
-    fmap (fmap (Value.Byte . fromIntegral) . Boxed.convert . Storable.unsafeFromByteString) popByteColumn
+    fmap Value.Byte . Boxed.convert . Storable.unsafeFromByteString <$>
+      popByteColumn table
 
   Schema.Int ->
-    fmap (fmap (Value.Int . fromIntegral) . Boxed.convert) popIntColumn
+    fmap Value.Int . Boxed.convert <$>
+      popIntColumn table
 
   Schema.Double ->
-    fmap (fmap Value.Double . Boxed.convert) popDoubleColumn
+    fmap Value.Double . Boxed.convert <$>
+      popDoubleColumn table
 
   Schema.Struct fields ->
     if Boxed.null fields then do
-      Table _ n _ <- get
-      pure . Boxed.replicate n $ Value.Struct Boxed.empty
+      pure . Boxed.replicate (rowCount table) $ Value.Struct Boxed.empty
     else do
-      xss <- traverse (popValueColumn . fieldSchema) fields
+      xss <- traverse (popValueColumn table . fieldSchema) fields
       pure . fmap Value.Struct $ Boxed.transpose xss
 
   Schema.Enum variant0 variants -> do
-    tags <- popIntColumn
-    xss <- Boxed.transpose <$> traverse (popValueColumn . variantSchema) (Boxed.cons variant0 variants)
+    tags <- popIntColumn table
+    xss <- Boxed.transpose <$> traverse (popValueColumn table . variantSchema) (Boxed.cons variant0 variants)
 
     let
       takeTag tag xs = do
         x <- maybeToRight (ValueEnumVariantMismatch tag $ Boxed.cons variant0 variants) $ xs Boxed.!? tag
         pure $ Value.Enum tag x
 
-    hoistEither $
+    lift $
       Boxed.zipWithM takeTag (fmap fromIntegral $ Boxed.convert tags) xss
 
   Schema.Array Schema.Byte ->
-    popArrayColumn $ \ns -> do
-      bs <- popByteColumn
-      fmap (fmap $ Value.ByteArray) . hoistEither $ restring ns bs
+    popArrayColumn table $ \ns atable ->
+      consumeColumns atable $ do
+        bs <- popByteColumn atable
+        lift . fmap (fmap Value.ByteArray) $ restring ns bs
 
   Schema.Array eschema ->
-    popArrayColumn $ \ns -> do
-      xs <- popValueColumn eschema
-      fmap (fmap Value.Array) . hoistEither $ relist ns xs
+    popArrayColumn table $ \ns atable ->
+      consumeColumns atable $ do
+        xs <- popValueColumn atable eschema
+        lift . fmap (fmap Value.Array) $ relist ns xs
 
 restring :: Storable.Vector Int64 -> ByteString -> Either (ValueError a) (Boxed.Vector ByteString)
 restring ns bs =
