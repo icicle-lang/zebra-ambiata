@@ -39,6 +39,24 @@ prop_default_table_vs_mtable =
     counterexample (either ppShow ppShow table) $
     table === Right (fromMaybeValue schema [Nothing'])
 
+prop_value_table_vs_mtable :: Property
+prop_value_table_vs_mtable =
+  gamble jSchema $ \schema ->
+  gamble (jValue schema) $ \value ->
+    let
+      Right table0 =
+        Table.fromRowOrDefault schema (Just' value)
+
+      table1 =
+        runST $ do
+          mtable <- MTable.new schema
+          Right () <- runEitherT $ MTable.insertRowOrDefault mtable (Just' value)
+          MTable.unsafeFreeze mtable
+   in
+     table0
+     ===
+     table1
+
 prop_roundtrip_value_mtable :: Property
 prop_roundtrip_value_mtable =
   gamble jSchema $ \schema ->

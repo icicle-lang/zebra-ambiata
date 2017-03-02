@@ -21,7 +21,6 @@ module Zebra.Serial.Block (
   , bColumn
   , getTables
   , getTable
-  , getColumn
   ) where
 
 import           Data.Binary.Get (Get)
@@ -40,7 +39,8 @@ import qualified X.Data.Vector.Stream as Stream
 
 import           Zebra.Data.Block
 import           Zebra.Data.Core
-import           Zebra.Data.Encoding
+import           Zebra.Data.Schema (Schema)
+import qualified Zebra.Data.Schema as Schema
 import           Zebra.Data.Table (Table(..), Column(..))
 import qualified Zebra.Data.Table as Table
 import           Zebra.Serial.Array
@@ -54,11 +54,11 @@ bBlock block =
   bIndices (blockIndices block) <>
   bTables (blockTables block)
 
-getBlock :: Boxed.Vector Encoding -> Get (Block ())
-getBlock encodings = do
+getBlock :: Boxed.Vector Schema -> Get (Block Schema)
+getBlock schemas = do
   entities <- getEntities
   indices <- getIndices
-  tables <- getTables encodings
+  tables <- getTables schemas
   pure $
     Block entities indices tables
 
@@ -292,29 +292,25 @@ bTables xs =
     bIntArray counts <>
     foldMap bTable xs
 
-getTables :: Boxed.Vector Encoding -> Get (Boxed.Vector (Table ()))
-getTables encodings = do
+getTables :: Boxed.Vector Schema -> Get (Boxed.Vector (Table Schema))
+getTables schemas = do
   tcount <- fromIntegral <$> Get.getWord32le
   ids <- fmap fromIntegral . Boxed.convert <$> getIntArray tcount
   counts <- fmap fromIntegral . Boxed.convert <$> getIntArray tcount
 
   let
     get aid n =
-      case encodings Boxed.!? aid of
+      case schemas Boxed.!? aid of
         Nothing ->
           fail $ "Cannot read table, unknown attribute-id: " <> show aid
-        Just format ->
-          getTable n format
+        Just schema ->
+          getTable n schema
 
   Boxed.zipWithM get ids counts
 
 bTable :: Table a -> Builder
 bTable =
   foldMap bColumn . Table.columns
-
-getTable :: Int -> Encoding -> Get (Table ())
-getTable n (Encoding columns) = do
-  Table () n . Boxed.fromList <$> traverse (getColumn n) columns
 
 bColumn :: Column a -> Builder
 bColumn = \case
@@ -329,17 +325,52 @@ bColumn = \case
     Build.word32LE (fromIntegral $ Table.rowCount rec) <>
     bTable rec
 
-getColumn :: Int -> ColumnEncoding -> Get (Column ())
-getColumn n = \case
-  ByteEncoding ->
-    ByteColumn <$> getByteArray
-  IntEncoding ->
-    IntColumn <$> getIntArray n
-  DoubleEncoding ->
-    DoubleColumn . coerce <$> getIntArray n
-  ArrayEncoding format -> do
-    ns <- getIntArray n
-    rows <- Get.getWord32le
-    rec <- getTable (fromIntegral rows) format
-    pure $
-      ArrayColumn ns rec
+getTable :: Int -> Schema -> Get (Table Schema)
+getTable n schema =
+  case schema of
+    Schema.Bool ->
+      Table schema n . Boxed.singleton <$> getIntColumn n
+
+    Schema.Byte ->
+      Table schema n . Boxed.singleton <$> getByteColumn n
+
+    Schema.Int ->
+      Table schema n . Boxed.singleton <$> getIntColumn n
+
+    Schema.Double ->
+      Table schema n . Boxed.singleton <$> getDoubleColumn n
+
+    Schema.Enum variant0 variants -> do
+      tags <- getIntColumn n
+      cols <- concatMapM (fmap Table.columns . getTable n . Schema.variantSchema) (Boxed.cons variant0 variants)
+      pure . Table schema n $ Boxed.cons tags cols
+
+    Schema.Struct fields -> do
+      cols <- concatMapM (fmap Table.columns . getTable n . Schema.fieldSchema) fields
+      pure $ Table schema n cols
+
+    Schema.Array element -> do
+      counts <- getIntArray n
+      total <- fromIntegral <$> Get.getWord32le
+      inner <- getTable total element
+      pure . Table schema n . Boxed.singleton $
+        ArrayColumn counts inner
+
+getByteColumn :: Int -> Get (Column a)
+getByteColumn _n =
+  ByteColumn <$> getByteArray
+
+getIntColumn :: Int -> Get (Column a)
+getIntColumn n =
+  IntColumn <$> getIntArray n
+
+getDoubleColumn :: Int -> Get (Column a)
+getDoubleColumn n =
+  DoubleColumn . coerce <$> getIntArray n
+
+concatMapM :: Monad m => (a -> m (Boxed.Vector b)) -> Boxed.Vector a -> m (Boxed.Vector b)
+concatMapM f =
+  Stream.vectorOfStreamM .
+  Stream.concatMapM (fmap Stream.streamOfVectorM . f) .
+  Stream.streamOfVectorM
+{-# INLINE concatMapM #-}

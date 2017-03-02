@@ -1,14 +1,16 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternSynonyms #-}
 module Zebra.Serial.Header (
     bHeader
-  , bMagic
+  , bVersion
 
   , getHeader
-  , getMagic
+  , getVersion
   ) where
 
 import           Data.Binary.Get (Get)
@@ -27,6 +29,8 @@ import           P
 
 import           Zebra.Data.Core
 import           Zebra.Data.Encoding
+import           Zebra.Data.Schema (Schema)
+import qualified Zebra.Data.Schema as Schema
 import           Zebra.Serial.Array
 
 
@@ -34,7 +38,7 @@ import           Zebra.Serial.Array
 --
 -- @
 --   header {
---     "||ZEBRA||00000||" : 16 x u8
+--     "||ZEBRA||vvvvv||" : 16 x u8
 --     attr_count         : u32
 --     attr_name_length   : int_array schema_count
 --     attr_name_string   : byte_array
@@ -42,8 +46,8 @@ import           Zebra.Serial.Array
 --     attr_schema_string : byte_array
 --   }
 -- @
-bHeader :: Map AttributeName Encoding -> Builder
-bHeader features =
+bHeader :: ZebraVersion -> Map AttributeName Schema -> Builder
+bHeader version features =
   let
     n_attrs =
       Build.word32LE . fromIntegral $
@@ -57,21 +61,40 @@ bHeader features =
 
     schema =
       bStrings .
-      fmap (T.encodeUtf8 . renderEncoding) .
+      fmap Schema.encode .
+      Boxed.fromList $
+      Map.elems features
+
+    encoding =
+      bStrings .
+      fmap (T.encodeUtf8 . renderEncoding . encodingOfSchema) .
       Boxed.fromList $
       Map.elems features
   in
-    bMagic <>
+    bVersion version <>
     n_attrs <>
     names <>
-    schema
+    case version of
+      ZebraV1 ->
+        encoding
+      ZebraV2 ->
+        schema
 
-getHeader :: Get (Map AttributeName Encoding)
+getHeader :: Get (Map AttributeName Schema)
 getHeader = do
-  () <- getMagic
+  version <- getVersion
   n <- fromIntegral <$> Get.getWord32le
   ns <- fmap (AttributeName . T.decodeUtf8) <$> getStrings n
-  ss <- traverse (fromBytes "encoding" parseEncoding) =<< getStrings n
+
+  let
+    parse =
+      case version of
+        ZebraV1 ->
+          fmap recoverSchemaOfEncoding . fromBytes "encoding" parseEncoding
+        ZebraV2 ->
+          either (fail . T.unpack . Schema.renderSchemaDecodeError) pure . Schema.decode
+
+  ss <- traverse parse =<< getStrings n
   pure .
     Map.fromList . toList $
     Boxed.zip ns ss
@@ -84,22 +107,38 @@ fromBytes name parse bs =
     Just s ->
       pure s
 
+
 -- | The zebra 8-byte magic number, including version.
 --
 -- @
---   ||ZEBRA||00001||
+-- ||ZEBRA||vvvvv||
 -- @
-magic :: ByteString
-magic =
+bVersion :: ZebraVersion -> Builder
+bVersion = \case
+  ZebraV1 ->
+    Build.byteString MagicV1
+  ZebraV2 ->
+    Build.byteString MagicV2
+
+getVersion :: Get ZebraVersion
+getVersion = do
+  bs <- Get.getByteString $ B.length MagicV1
+  case bs of
+    MagicV1 ->
+      pure ZebraV1
+    MagicV2 ->
+      pure ZebraV2
+    _ ->
+      fail $ "Invalid magic number: " <> show bs
+
+#if __GLASGOW_HASKELL__ >= 800
+pattern MagicV1 :: ByteString
+#endif
+pattern MagicV1 =
   "||ZEBRA||00001||"
 
-bMagic :: Builder
-bMagic =
-  Build.byteString magic
-
-getMagic :: Get ()
-getMagic = do
-  bs <- Get.getByteString (B.length magic)
-  when (bs /= magic) $
-    fail $ "Invalid magic number: " <> show bs
-  pure ()
+#if __GLASGOW_HASKELL__ >= 800
+pattern MagicV2 :: ByteString
+#endif
+pattern MagicV2 =
+  "||ZEBRA||00002||"

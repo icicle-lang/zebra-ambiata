@@ -15,19 +15,24 @@ module Zebra.Merge.Puller.File
   , PullId (..)
   ) where
 
+import           Control.Monad.IO.Class (MonadIO(..))
+import           Control.Monad.Trans.Class (lift)
+
+import qualified Data.IORef as IORef
+
+import           P
+
+import           System.IO (FilePath)
+
+import           X.Control.Monad.Trans.Either (EitherT, left)
+import qualified X.Data.Vector as Boxed
+import qualified X.Data.Vector.Stream as Stream
+
 import           Zebra.Data
+import           Zebra.Data.Schema (Schema)
 import           Zebra.Serial.File
 import           Zebra.Foreign.Util
 
-import           Control.Monad.IO.Class (MonadIO(..))
-import           Control.Monad.Trans.Class (lift)
-import           X.Control.Monad.Trans.Either (EitherT, left)
-import qualified Data.IORef as IORef
-import qualified X.Data.Vector as Boxed
-import qualified X.Data.Vector.Stream as Stream
-import           System.IO (FilePath)
-
-import P
 
 data PullerError =
    PullerForeign ForeignError
@@ -42,7 +47,7 @@ newtype PullId =
 
 blockChainPuller :: MonadIO m
   => Boxed.Vector FilePath
-  -> EitherT PullerError m (PullId -> EitherT DecodeError m (Maybe (Block ())), Boxed.Vector PullId)
+  -> EitherT PullerError m (PullId -> EitherT DecodeError m (Maybe (Block Schema)), Boxed.Vector PullId)
 blockChainPuller files
  | Just (file0, _) <- Boxed.uncons files
  = do
@@ -59,7 +64,7 @@ blockChainPuller files
  where
   makePuller file0 header0 fileN = do
     blocks <- readBlocksCheckHeader file0 header0 fileN
-    lift $ pullerOfStream blocks 
+    lift $ pullerOfStream blocks
 
   readBlocksCheckHeader file0 header0 fileN = do
     (h,bs) <- firstT PullerDecode $ fileOfFilePath fileN

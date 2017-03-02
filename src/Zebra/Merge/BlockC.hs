@@ -17,21 +17,23 @@ module Zebra.Merge.BlockC
 import qualified Anemone.Foreign.Mempool as Mempool
 import           Anemone.Foreign.Mempool (Mempool)
 
-import Zebra.Data hiding (BlockEntity(..))
-import Zebra.Foreign.Block
-import Zebra.Foreign.Entity
-import Zebra.Foreign.Merge
-import Zebra.Foreign.Util
-
-import qualified X.Data.Vector as Boxed
-
-import P
-
 import           Control.Monad.IO.Class (MonadIO(..))
-import           X.Control.Monad.Trans.Either (EitherT, left)
 import           Control.Monad.Trans.Class (lift)
 
 import qualified Data.Map.Strict as Map
+
+import           P
+
+import           X.Control.Monad.Trans.Either (EitherT, left)
+import qualified X.Data.Vector as Boxed
+
+import           Zebra.Data
+import           Zebra.Data.Schema (Schema)
+import           Zebra.Foreign.Block
+import           Zebra.Foreign.Entity
+import           Zebra.Foreign.Merge
+import           Zebra.Foreign.Util
+
 
 data MergeError =
     MergeInputEntitiesOutOfOrder (EntityHash,EntityId) (EntityHash,EntityId)
@@ -41,7 +43,7 @@ data MergeError =
 
 data MergeOptions c m =
   MergeOptions
-  { optionPullBlock  :: c -> m (Maybe (Block ()))
+  { optionPullBlock  :: c -> m (Maybe (Block Schema))
   , optionPushEntity :: CEntity -> m ()
   , optionGCAfterBytes :: !Int64
   }

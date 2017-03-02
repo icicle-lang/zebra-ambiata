@@ -16,11 +16,12 @@ import qualified Data.List as List
 import qualified Data.Map as Map
 import           Data.String (String)
 import qualified Data.Text as Text
+import qualified Data.Text.IO as Text
 
 import           P
 
 import qualified System.Exit as Exit
-import           System.IO (IO, FilePath)
+import           System.IO (IO, FilePath, stderr)
 import qualified System.IO as IO
 
 import           Text.Show.Pretty (ppShow)
@@ -34,17 +35,18 @@ import qualified X.Data.Vector.Unboxed as Unboxed
 import           X.Options.Applicative (Parser, Mod, CommandFields)
 import qualified X.Options.Applicative as Options
 
+import           Zebra.Data (ZebraVersion(..))
 import qualified Zebra.Data.Block as Block
 import qualified Zebra.Data.Core as Core
 import qualified Zebra.Data.Entity as Entity
 import qualified Zebra.Data.Fact as Fact
-import qualified Zebra.Data.Encoding as Encoding
+import           Zebra.Data.Schema (Schema)
+import qualified Zebra.Foreign.Block as Foreign
+import qualified Zebra.Foreign.Entity as Foreign
+import qualified Zebra.Merge.BlockC as Merge
+import qualified Zebra.Merge.Puller.File as Merge
 import qualified Zebra.Serial as Serial
 import qualified Zebra.Serial.File as Serial
-import qualified Zebra.Merge.BlockC as Merge
-import qualified Zebra.Merge.Puller.File as MergePuller
-import qualified Zebra.Foreign.Block as FoBlock
-import qualified Zebra.Foreign.Entity as FoEntity
 
 
 main :: IO ()
@@ -54,26 +56,27 @@ main = do
   Options.cli "zebra" buildInfoVersion dependencyInfo parser run
 
 data Command =
-    FileCat [FilePath] CatOptions
-  | FileFacts FilePath
-  | MergeFiles [FilePath] (Maybe FilePath) MergeOptions
-  deriving (Eq, Show)
+    FileCat ![FilePath] !CatOptions
+  | FileFacts !FilePath
+  | MergeFiles ![FilePath] !(Maybe FilePath) !MergeOptions
+    deriving (Eq, Show)
 
 data CatOptions =
   CatOptions {
-    catHeader :: Bool
-  , catBlockSummary :: Bool
-  , catEntities :: Bool
-  , catEntityDetails :: Bool
-  , catEntitySummary :: Bool
-  , catSummary :: Bool
-  } deriving (Eq, Show)
+      catHeader :: !Bool
+    , catBlockSummary :: !Bool
+    , catEntities :: !Bool
+    , catEntityDetails :: !Bool
+    , catEntitySummary :: !Bool
+    , catSummary :: !Bool
+    } deriving (Eq, Show)
 
 data MergeOptions =
   MergeOptions {
-    mergeGcGigabytes :: Double
-  , mergeOutputBlockFacts :: Int
-  } deriving (Eq, Show)
+      mergeGcGigabytes :: !Double
+    , mergeOutputBlockFacts :: !Int
+    , mergeOutputFormat :: !ZebraVersion
+    } deriving (Eq, Show)
 
 parser :: Parser Command
 parser =
@@ -124,34 +127,60 @@ pOutputFile =
 
 pCatOptions :: Parser CatOptions
 pCatOptions =
-  fixCatOptions
-  <$> (CatOptions
-  <$> Options.switch (Options.long "header")
-  <*> Options.switch (Options.long "block-summary")
-  <*> Options.switch (Options.long "entities")
-  <*> Options.switch (Options.long "entity-details")
-  <*> Options.switch (Options.long "entity-summary")
-  <*> Options.switch (Options.long "summary")
-  )
+  fmap fixCatOptions $
+    CatOptions
+      <$> Options.switch (Options.long "header")
+      <*> Options.switch (Options.long "block-summary")
+      <*> Options.switch (Options.long "entities")
+      <*> Options.switch (Options.long "entity-details")
+      <*> Options.switch (Options.long "entity-summary")
+      <*> Options.switch (Options.long "summary")
 
 fixCatOptions :: CatOptions -> CatOptions
-fixCatOptions opts
- = opts
- { catEntities = catEntities opts || catEntityDetails opts || catEntitySummary opts }
+fixCatOptions opts =
+  opts {
+      catEntities =
+        catEntities opts ||
+        catEntityDetails opts ||
+        catEntitySummary opts
+    }
 
 pMergeOptions :: Parser MergeOptions
 pMergeOptions =
   MergeOptions
-  <$> Options.option Options.auto
-    (Options.value 2
-    <> Options.long "gc-gigabytes"
-    <> Options.help "Garbage collect input blocks when pool becomes this large. Fractions allowed.")
-  <*> Options.option Options.auto
-    (Options.value 4096
-    <> Options.long "output-block-facts"
-    <> Options.help "Minimum number of facts per output block (last block of leftovers will contain fewer)")
+    <$> pGCLimit
+    <*> pOutputBlockFacts
+    <*> pOutputFormat
 
+pGCLimit :: Parser Double
+pGCLimit =
+  Options.option Options.auto $
+    Options.value 2 <>
+    Options.long "gc-gigabytes" <>
+    Options.help "Garbage collect input blocks when pool becomes this large. Fractions allowed."
 
+pOutputBlockFacts :: Parser Int
+pOutputBlockFacts =
+  Options.option Options.auto $
+    Options.value 4096 <>
+    Options.long "output-block-facts" <>
+    Options.help "Minimum number of facts per output block (last block of leftovers will contain fewer)"
+
+pOutputFormat :: Parser ZebraVersion
+pOutputFormat =
+  fromMaybe ZebraV1 <$> optional (pOutputV1 <|> pOutputV2)
+
+pOutputV1 :: Parser ZebraVersion
+pOutputV1 =
+  Options.flag' ZebraV1 $
+    Options.long "output-v1" <>
+    Options.help "Force merge to output files in version 1 format. (default)"
+
+pOutputV2 :: Parser ZebraVersion
+pOutputV2 =
+  Options.flag' ZebraV2 $
+    Options.long "output-v2" <>
+    Options.help "Force merge to output files in version 2 format."
 
 run :: Command -> IO ()
 run c = case c of
@@ -171,7 +200,7 @@ run c = case c of
     Exit.exitFailure
 
   MergeFiles ins@(in1:_) outputPath opts -> orDie id $ do
-    (puller, pullids) <- firstTshow $ MergePuller.blockChainPuller (Boxed.fromList ins)
+    (puller, pullids) <- firstTshow $ Merge.blockChainPuller (Boxed.fromList ins)
     let withPusher = case outputPath of
           Just out -> withOutputPusher opts in1 out
           Nothing  -> withPrintPusher
@@ -180,25 +209,24 @@ run c = case c of
     let runOpts = Merge.MergeOptions (firstTshow . puller) pusher $ truncate (mergeGcGigabytes opts * 1024 * 1024 * 1024)
     joinErrors (Text.pack . show) id $ Merge.mergeBlocks runOpts pullids
 
-withPrintPusher :: ((FoEntity.CEntity -> EitherT Text IO ()) -> EitherT Text IO ())
-  -> EitherT Text IO ()
-
+withPrintPusher :: ((Foreign.CEntity -> EitherT Text IO ()) -> EitherT Text IO ()) -> EitherT Text IO ()
 withPrintPusher runWith = do
   let pusher e = do
-      eid     <- firstTshow $ FoEntity.peekEntityId $ FoEntity.unCEntity e
+      eid     <- firstTshow $ Foreign.peekEntityId $ Foreign.unCEntity e
       lift $ IO.putStrLn (show eid)
 
   runWith pusher
 
-
-withOutputPusher :: MergeOptions -> FilePath -> FilePath
-  -> ((FoEntity.CEntity -> EitherT Text IO ()) -> EitherT Text IO ())
-  -> EitherT Text IO ()
-
+withOutputPusher ::
+  MergeOptions ->
+  FilePath ->
+  FilePath ->
+  ((Foreign.CEntity -> EitherT Text IO ()) -> EitherT Text IO ()) ->
+  EitherT Text IO ()
 withOutputPusher opts inputfile outputfile runWith = do
   (fileheader,_) <- firstTshow $ Serial.fileOfFilePath inputfile
   outfd <- lift $ IO.openBinaryFile outputfile IO.WriteMode
-  lift $ Builder.hPutBuilder outfd (Serial.bHeader fileheader)
+  lift $ Builder.hPutBuilder outfd $ Serial.bHeader (mergeOutputFormat opts) fileheader
 
   pool0    <- lift $ Mempool.create
 
@@ -210,12 +238,12 @@ withOutputPusher opts inputfile outputfile runWith = do
   bracketEitherT' (lift $ IORef.newIORef pool0) freePool $ \poolRef -> do
 
   let checkPurge block = do
-      is <- FoBlock.peekBlockRowCount (FoBlock.unCBlock block)
+      is <- Foreign.peekBlockRowCount (Foreign.unCBlock block)
       return (is >= mergeOutputBlockFacts opts)
 
   let doPurge block = do
       pool <- lift $ IORef.readIORef poolRef
-      outblock <- firstTshow $ FoBlock.blockOfForeign block
+      outblock <- firstTshow $ Foreign.blockOfForeign block
       lift $ Builder.hPutBuilder outfd (Serial.bBlock outblock)
       pool' <- lift $ Mempool.create
       lift $ IORef.writeIORef poolRef pool'
@@ -225,7 +253,7 @@ withOutputPusher opts inputfile outputfile runWith = do
   let pusher e = do
       pool    <- lift $ IORef.readIORef poolRef
       block   <- lift $ IORef.readIORef blockRef
-      block'  <- firstTshow $ FoBlock.appendEntityToBlock pool e block
+      block'  <- firstTshow $ Foreign.appendEntityToBlock pool e block
       ifpurge <- checkPurge block'
       if ifpurge
         then doPurge block'
@@ -238,15 +266,22 @@ withOutputPusher opts inputfile outputfile runWith = do
   maybe (return ()) doPurge mblock
   lift $ IO.hClose outfd
 
-catFacts :: Show a => [Encoding.Encoding] -> Stream.Stream (EitherT Serial.DecodeError IO) (Block.Block a) -> EitherT Text IO ()
-catFacts encodings blocks =
+catFacts :: Show a => [Schema] -> Stream.Stream (EitherT Serial.DecodeError IO) (Block.Block a) -> EitherT Text IO ()
+catFacts schemas0 blocks =
   let
     schemas =
-      Boxed.fromList $ fmap Encoding.recoverSchemaOfEncoding encodings
+      Boxed.fromList schemas0
+
+    putFact fact =
+      case Fact.renderFact schemas fact of
+        Left err ->
+          Text.hPutStrLn stderr $ Fact.renderFactRenderError err
+        Right bs ->
+          Char8.putStrLn bs
 
     go block = do
       facts <- firstTshow . hoistEither $ Block.factsOfBlock schemas block
-      Boxed.mapM_ (liftIO . Char8.putStrLn . Fact.renderFact) facts
+      Boxed.mapM_ (liftIO . putFact) facts
 
     blocks' =
       Stream.trans (firstT Serial.renderDecodeError) blocks
