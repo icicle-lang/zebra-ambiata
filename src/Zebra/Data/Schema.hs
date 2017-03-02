@@ -14,6 +14,14 @@ module Zebra.Data.Schema (
   , lookupVariant
   , focusVariant
 
+  , unit
+  , bool
+  , false
+  , true
+  , option
+  , none
+  , some
+
   , SchemaDecodeError(..)
   , renderSchemaDecodeError
 
@@ -37,7 +45,7 @@ import           Data.Typeable (Typeable)
 
 import           GHC.Generics (Generic)
 
-import           P
+import           P hiding (bool, some)
 
 import qualified X.Data.Vector as Boxed
 import           X.Text.Show (gshowsPrec)
@@ -116,6 +124,38 @@ focusVariant i x0 xs =
       let !j = i - 1
       x <- xs Boxed.!? j
       pure (Boxed.cons x0 $ Boxed.take j xs, x, Boxed.drop (j + 1) xs)
+
+------------------------------------------------------------------------
+
+unit :: Schema
+unit =
+  Struct Boxed.empty
+
+false :: Variant
+false =
+  Variant (VariantName "false") unit
+
+true :: Variant
+true =
+  Variant (VariantName "true") unit
+
+bool :: Schema
+bool =
+  Enum false $ Boxed.singleton true
+
+none :: Variant
+none =
+  Variant (VariantName "none") unit
+
+some :: Schema -> Variant
+some =
+  Variant (VariantName "some")
+
+option :: Schema -> Schema
+option =
+  Enum none . Boxed.singleton . some
+
+------------------------------------------------------------------------
 
 encode :: Schema -> ByteString
 encode =
