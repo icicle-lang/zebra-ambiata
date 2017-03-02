@@ -114,8 +114,6 @@ encodingOfDictionary =
 
 encodingOfSchema :: Schema -> Encoding
 encodingOfSchema = \case
-  Bool ->
-    Encoding $ pure IntEncoding
   Byte ->
     Encoding $ pure ByteEncoding
   Int ->

@@ -97,8 +97,6 @@ jColumnEncoding =
 
 schemaSubterms :: Schema -> [Schema]
 schemaSubterms = \case
-  Schema.Bool ->
-    []
   Schema.Byte ->
     []
   Schema.Int ->
@@ -116,8 +114,7 @@ jSchema :: Jack Schema
 jSchema =
   reshrink schemaSubterms $
   oneOfRec [
-      pure Schema.Bool
-    , pure Schema.Byte
+      pure Schema.Byte
     , pure Schema.Int
     , pure Schema.Double
     ] [
@@ -164,8 +161,6 @@ jFact schema aid =
 
 jValue :: Schema -> Jack Value
 jValue = \case
-  Schema.Bool ->
-    Bool <$> elements [False, True]
   Schema.Byte ->
     Byte <$> sizedBounded
   Schema.Int ->
@@ -313,8 +308,6 @@ jAnyTable =
 
 jTable :: Int -> Schema -> Jack (Table Schema)
 jTable n = \case
-  Schema.Bool ->
-    jBoolTable n
   Schema.Byte ->
     jByteTable n
   Schema.Int ->
@@ -327,11 +320,6 @@ jTable n = \case
     jStructTable n fields
   Schema.Array item ->
     jArrayTable n item
-
-jBoolTable :: Int -> Jack (Table Schema)
-jBoolTable n =
-  Table Schema.Bool n . mkIntColumn . fmap (\x -> if x then 1 else 0) <$>
-    vectorOf n arbitrary
 
 jByteTable :: Int -> Jack (Table Schema)
 jByteTable n =

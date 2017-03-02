@@ -328,9 +328,6 @@ bColumn = \case
 getTable :: Int -> Schema -> Get (Table Schema)
 getTable n schema =
   case schema of
-    Schema.Bool ->
-      Table schema n . Boxed.singleton <$> getIntColumn n
-
     Schema.Byte ->
       Table schema n . Boxed.singleton <$> getByteColumn n
 

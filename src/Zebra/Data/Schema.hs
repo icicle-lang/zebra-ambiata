@@ -82,8 +82,7 @@ instance Show Variant where
     gshowsPrec
 
 data Schema =
-    Bool
-  | Byte
+    Byte
   | Int
   | Double
   | Enum !Variant !(Boxed.Vector Variant)
@@ -142,8 +141,6 @@ pSchema :: Aeson.Value -> Aeson.Parser Schema
 pSchema =
   pEnum $ \tag ->
     case tag of
-      "bool" ->
-        const $ pure Bool
       "byte" ->
         const $ pure Byte
       "int" ->
@@ -219,8 +216,6 @@ kmapM f =
 
 ppSchema :: Schema -> Aeson.Value
 ppSchema = \case
-  Bool ->
-    ppEnum "bool" ppUnit
   Byte ->
     ppEnum "byte" ppUnit
   Int ->

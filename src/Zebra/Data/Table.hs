@@ -116,12 +116,6 @@ fromRowOrDefault s = \case
 fromRow :: Schema -> Value -> Either (TableError Schema) (Table Schema)
 fromRow vschema =
   case vschema of
-    Schema.Bool -> \case
-      Bool x ->
-        pure $ singletonBool x
-      value ->
-        Left $ TableSchemaMismatch value vschema
-
     Schema.Byte -> \case
       Byte x ->
         pure . singletonByte $ fromIntegral x
@@ -251,15 +245,8 @@ popArrayColumn f =
     x ->
       left $ ValueExpectedArrayColumn x
 
-popBoolColumn :: EitherT (ValueError a) (State (Table a)) (Boxed.Vector Bool)
-popBoolColumn =
-  fmap (fmap (/= 0) . Boxed.convert) $ popIntColumn
-
 popValueColumn :: Schema -> EitherT (ValueError a) (State (Table a)) (Boxed.Vector Value)
 popValueColumn = \case
-  Schema.Bool ->
-    fmap (fmap Bool) popBoolColumn
-
   Schema.Byte ->
     fmap (fmap (Byte . fromIntegral) . Boxed.convert . Storable.unsafeFromByteString) popByteColumn
 
@@ -420,10 +407,6 @@ splitAtColumn i =
 
 ------------------------------------------------------------------------
 
-emptyBool :: Table Schema
-emptyBool =
-  Table Schema.Bool 0 . Boxed.singleton $ IntColumn Storable.empty
-
 emptyByte :: Table Schema
 emptyByte =
   Table Schema.Byte 0 . Boxed.singleton $ ByteColumn B.empty
@@ -443,8 +426,6 @@ emptyArray vs@(Table s _ _) =
 empty :: Schema -> Table Schema
 empty tschema =
   case tschema of
-    Schema.Bool ->
-      emptyBool
     Schema.Byte ->
       emptyByte
     Schema.Int ->
@@ -460,11 +441,6 @@ empty tschema =
       Table tschema 0 $
         columns emptyInt <>
         Boxed.concatMap (columns . empty . variantSchema) (Boxed.cons variant0 variants)
-
-singletonBool :: Bool -> Table Schema
-singletonBool b =
-  Table Schema.Bool 1 . Boxed.singleton . IntColumn . Storable.singleton $
-    if b then 1 else 0
 
 singletonByte :: Word8 -> Table Schema
 singletonByte =
@@ -494,8 +470,6 @@ singletonEmptyArray element =
 defaultTable :: Schema -> Table Schema
 defaultTable tschema =
   case tschema of
-    Schema.Bool ->
-      singletonBool False
     Schema.Byte ->
       singletonByte 0
     Schema.Int ->
