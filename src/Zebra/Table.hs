@@ -7,7 +7,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# OPTIONS_GHC -funbox-strict-fields #-}
-module Zebra.Data.Table (
+module Zebra.Table (
     Table(..)
   , Column(..)
 
@@ -52,10 +52,11 @@ import qualified X.Data.Vector as Boxed
 import qualified X.Data.Vector.Generic as Generic
 
 import           Zebra.Data.Encoding
-import           Zebra.Data.Fact
-import           Zebra.Data.Schema (Schema, Field(..), Variant(..))
-import qualified Zebra.Data.Schema as Schema
 import qualified Zebra.Data.Vector.Storable as Storable
+import           Zebra.Schema (Schema, Field(..), Variant(..))
+import qualified Zebra.Schema as Schema
+import           Zebra.Value (Value)
+import qualified Zebra.Value as Value
 
 
 data Table a =
@@ -117,25 +118,25 @@ fromRow :: Schema -> Value -> Either (TableError Schema) (Table Schema)
 fromRow vschema =
   case vschema of
     Schema.Byte -> \case
-      Byte x ->
+      Value.Byte x ->
         pure . singletonByte $ fromIntegral x
       value ->
         Left $ TableSchemaMismatch value vschema
 
     Schema.Int -> \case
-      Int x ->
+      Value.Int x ->
         pure . singletonInt $ fromIntegral x
       value ->
         Left $ TableSchemaMismatch value vschema
 
     Schema.Double -> \case
-      Double x ->
+      Value.Double x ->
         pure $ singletonDouble x
       value ->
         Left $ TableSchemaMismatch value vschema
 
     Schema.Enum variant0 variants -> \case
-      Enum tag x -> do
+      Value.Enum tag x -> do
         (vs0, v1, vs2) <-
             maybeToRight (TableEnumVariantMismatch tag x $ Boxed.cons variant0 variants) $
               Schema.focusVariant tag variant0 variants
@@ -152,19 +153,19 @@ fromRow vschema =
         Left $ TableSchemaMismatch value vschema
 
     Schema.Struct fields -> \case
-      Struct xs ->
+      Value.Struct xs ->
         fromStruct fields xs
       value ->
         Left $ TableSchemaMismatch value vschema
 
     Schema.Array Schema.Byte -> \case
-      ByteArray x ->
+      Value.ByteArray x ->
         pure $ singletonByteArray x
       value ->
         Left $ TableSchemaMismatch value vschema
 
     Schema.Array eschema -> \case
-      Array xs
+      Value.Array xs
         | Boxed.null xs ->
             pure (singletonEmptyArray eschema)
         | otherwise -> do
@@ -248,21 +249,21 @@ popArrayColumn f =
 popValueColumn :: Schema -> EitherT (ValueError a) (State (Table a)) (Boxed.Vector Value)
 popValueColumn = \case
   Schema.Byte ->
-    fmap (fmap (Byte . fromIntegral) . Boxed.convert . Storable.unsafeFromByteString) popByteColumn
+    fmap (fmap (Value.Byte . fromIntegral) . Boxed.convert . Storable.unsafeFromByteString) popByteColumn
 
   Schema.Int ->
-    fmap (fmap (Int . fromIntegral) . Boxed.convert) popIntColumn
+    fmap (fmap (Value.Int . fromIntegral) . Boxed.convert) popIntColumn
 
   Schema.Double ->
-    fmap (fmap Double . Boxed.convert) popDoubleColumn
+    fmap (fmap Value.Double . Boxed.convert) popDoubleColumn
 
   Schema.Struct fields ->
     if Boxed.null fields then do
       Table _ n _ <- get
-      pure . Boxed.replicate n $ Struct Boxed.empty
+      pure . Boxed.replicate n $ Value.Struct Boxed.empty
     else do
       xss <- traverse (popValueColumn . fieldSchema) fields
-      pure . fmap Struct $ Boxed.transpose xss
+      pure . fmap Value.Struct $ Boxed.transpose xss
 
   Schema.Enum variant0 variants -> do
     tags <- popIntColumn
@@ -271,7 +272,7 @@ popValueColumn = \case
     let
       takeTag tag xs = do
         x <- maybeToRight (ValueEnumVariantMismatch tag $ Boxed.cons variant0 variants) $ xs Boxed.!? tag
-        pure $ Enum tag x
+        pure $ Value.Enum tag x
 
     hoistEither $
       Boxed.zipWithM takeTag (fmap fromIntegral $ Boxed.convert tags) xss
@@ -279,12 +280,12 @@ popValueColumn = \case
   Schema.Array Schema.Byte ->
     popArrayColumn $ \ns -> do
       bs <- popByteColumn
-      fmap (fmap $ ByteArray) . hoistEither $ restring ns bs
+      fmap (fmap $ Value.ByteArray) . hoistEither $ restring ns bs
 
   Schema.Array eschema ->
     popArrayColumn $ \ns -> do
       xs <- popValueColumn eschema
-      fmap (fmap Array) . hoistEither $ relist ns xs
+      fmap (fmap Value.Array) . hoistEither $ relist ns xs
 
 restring :: Storable.Vector Int64 -> ByteString -> Either (ValueError a) (Boxed.Vector ByteString)
 restring ns bs =

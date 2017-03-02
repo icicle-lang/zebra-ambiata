@@ -34,9 +34,9 @@ import           Zebra.Foreign.Entity
 
 import           Zebra.Data.Block
 import           Zebra.Data.Core
-import           Zebra.Data.Schema
 import           Zebra.Data.Entity
 import           Zebra.Data.Fact
+import           Zebra.Schema
 
 import qualified Zebra.Merge.Puller.List as TestMerge
 

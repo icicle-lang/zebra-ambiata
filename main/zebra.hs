@@ -40,11 +40,11 @@ import qualified Zebra.Data.Block as Block
 import qualified Zebra.Data.Core as Core
 import qualified Zebra.Data.Entity as Entity
 import qualified Zebra.Data.Fact as Fact
-import           Zebra.Data.Schema (Schema)
 import qualified Zebra.Foreign.Block as Foreign
 import qualified Zebra.Foreign.Entity as Foreign
 import qualified Zebra.Merge.BlockC as Merge
 import qualified Zebra.Merge.Puller.File as Merge
+import           Zebra.Schema (Schema)
 import qualified Zebra.Serial as Serial
 import qualified Zebra.Serial.File as Serial
 

@@ -1,6 +1,6 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE TemplateHaskell #-}
-module Test.Zebra.Data.Table where
+module Test.Zebra.Table where
 
 import           Disorder.Jack (Property, quickCheckAll)
 import           Disorder.Jack (gamble, tripping, arbitrary)
@@ -11,7 +11,7 @@ import           System.IO (IO)
 
 import           Test.Zebra.Jack
 
-import qualified Zebra.Data.Table as Table
+import qualified Zebra.Table as Table
 
 
 prop_roundtrip_splitAt :: Property

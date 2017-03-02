@@ -33,7 +33,7 @@ import qualified X.Data.Vector.Unboxed as Unboxed
 import qualified X.Text.Show as Show
 
 import           Zebra.Data
-import           Zebra.Data.Table (Table, TableError)
+import           Zebra.Table (Table, TableError)
 
 
 -- | A BlockDataId roughly corresponds to the id of the file, where a Table came from.

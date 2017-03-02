@@ -43,11 +43,12 @@ import           Zebra.Data.Block.Index
 import           Zebra.Data.Core
 import           Zebra.Data.Entity
 import           Zebra.Data.Fact
-import           Zebra.Data.Schema
-import           Zebra.Data.Table (Table, ValueError)
-import qualified Zebra.Data.Table as Table
-import           Zebra.Data.Table.Mutable (MutableError)
-import qualified Zebra.Data.Table.Mutable as MTable
+import           Zebra.Schema (Schema)
+import           Zebra.Table (Table, ValueError)
+import qualified Zebra.Table as Table
+import           Zebra.Table.Mutable (MutableError)
+import qualified Zebra.Table.Mutable as MTable
+import           Zebra.Value (Value)
 
 
 data Block a =

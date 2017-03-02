@@ -39,11 +39,11 @@ import qualified X.Data.Vector.Stream as Stream
 
 import           Zebra.Data.Block
 import           Zebra.Data.Core
-import           Zebra.Data.Schema (Schema)
-import qualified Zebra.Data.Schema as Schema
-import           Zebra.Data.Table (Table(..), Column(..))
-import qualified Zebra.Data.Table as Table
+import           Zebra.Schema (Schema)
+import qualified Zebra.Schema as Schema
 import           Zebra.Serial.Array
+import           Zebra.Table (Table(..), Column(..))
+import qualified Zebra.Table as Table
 
 
 -- | Encode a zebra block.

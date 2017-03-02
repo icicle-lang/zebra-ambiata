@@ -37,7 +37,7 @@ import qualified X.Data.Vector as Boxed
 import qualified X.Data.Vector.Stream as Stream
 
 import           Zebra.Data
-import           Zebra.Data.Schema (Schema)
+import           Zebra.Schema (Schema)
 import           Zebra.Serial.Block
 import           Zebra.Serial.Header
 

@@ -19,13 +19,6 @@ module Test.Zebra.Jack (
   , jDay
   , jFactsetId
 
-  -- * Zebra.Data.Schema
-  , jSchema
-  , jField
-  , jFieldName
-  , jVariant
-  , jVariantName
-
   -- * Zebra.Data.Entity
   , jEntity
   , jAttribute
@@ -33,15 +26,24 @@ module Test.Zebra.Jack (
   -- * Zebra.Data.Fact
   , jFacts
   , jFact
-  , jValue
-
-  -- * Zebra.Data.Table
-  , jAnyTable
-  , jTable
 
   -- * Zebra.Data.Encoding
   , jEncoding
   , jColumnEncoding
+
+  -- * Zebra.Schema
+  , jSchema
+  , jField
+  , jFieldName
+  , jVariant
+  , jVariantName
+
+  -- * Zebra.Value
+  , jValue
+
+  -- * Zebra.Table
+  , jAnyTable
+  , jTable
 
   , jMaybe'
   ) where
@@ -75,10 +77,12 @@ import           Zebra.Data.Core
 import           Zebra.Data.Encoding
 import           Zebra.Data.Entity
 import           Zebra.Data.Fact
-import           Zebra.Data.Schema (Schema, Variant(..), VariantName(..), Field(..), FieldName(..))
-import qualified Zebra.Data.Schema as Schema
-import           Zebra.Data.Table (Table(..), Column(..))
-import qualified Zebra.Data.Table as Table
+import           Zebra.Schema (Schema, Variant(..), VariantName(..), Field(..), FieldName(..))
+import qualified Zebra.Schema as Schema
+import           Zebra.Table (Table(..), Column(..))
+import qualified Zebra.Table as Table
+import           Zebra.Value (Value)
+import qualified Zebra.Value as Value
 
 
 jEncoding :: Jack Encoding
@@ -162,24 +166,24 @@ jFact schema aid =
 jValue :: Schema -> Jack Value
 jValue = \case
   Schema.Byte ->
-    Byte <$> sizedBounded
+    Value.Byte <$> sizedBounded
   Schema.Int ->
-    Int <$> sizedBounded
+    Value.Int <$> sizedBounded
   Schema.Double ->
-    Double <$> arbitrary
+    Value.Double <$> arbitrary
   Schema.Enum variant0 variants -> do
     tag <- choose (0, Boxed.length variants)
     case Schema.lookupVariant tag variant0 variants of
       Nothing ->
         Savage.error $ renderTagLookupError tag variant0 variants
       Just (Variant _ schema) ->
-        Enum tag <$> jValue schema
+        Value.Enum tag <$> jValue schema
   Schema.Struct fields ->
-    Struct <$> traverse (jValue . fieldSchema) fields
+    Value.Struct <$> traverse (jValue . fieldSchema) fields
   Schema.Array Schema.Byte ->
-    ByteArray <$> arbitrary
+    Value.ByteArray <$> arbitrary
   Schema.Array schema ->
-    Array . Boxed.fromList <$> listOfN 0 10 (jValue schema)
+    Value.Array . Boxed.fromList <$> listOfN 0 10 (jValue schema)
 
 renderTagLookupError :: Int -> Variant -> Boxed.Vector Variant -> [Char]
 renderTagLookupError tag variant0 variants =

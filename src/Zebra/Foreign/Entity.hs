@@ -31,10 +31,10 @@ import           X.Control.Monad.Trans.Either (EitherT)
 
 import           Zebra.Data.Core
 import           Zebra.Data.Entity
-import           Zebra.Data.Table
 import           Zebra.Foreign.Bindings
 import           Zebra.Foreign.Table
 import           Zebra.Foreign.Util
+import           Zebra.Table
 
 
 newtype CEntity =

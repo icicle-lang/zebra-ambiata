@@ -3,8 +3,6 @@ import           Disorder.Core.Main
 import qualified Test.Zebra.Data.Block
 import qualified Test.Zebra.Data.Core
 import qualified Test.Zebra.Data.Encoding
-import qualified Test.Zebra.Data.Table
-import qualified Test.Zebra.Data.Table.Mutable
 import qualified Test.Zebra.Foreign.Block
 import qualified Test.Zebra.Foreign.Entity
 import qualified Test.Zebra.Foreign.Merge
@@ -14,6 +12,8 @@ import qualified Test.Zebra.Serial.Array
 import qualified Test.Zebra.Serial.Block
 import qualified Test.Zebra.Serial.File
 import qualified Test.Zebra.Serial.Header
+import qualified Test.Zebra.Table
+import qualified Test.Zebra.Table.Mutable
 
 main :: IO ()
 main =
@@ -21,8 +21,6 @@ main =
       Test.Zebra.Data.Block.tests
     , Test.Zebra.Data.Core.tests
     , Test.Zebra.Data.Encoding.tests
-    , Test.Zebra.Data.Table.Mutable.tests
-    , Test.Zebra.Data.Table.tests
     , Test.Zebra.Foreign.Block.tests
     , Test.Zebra.Foreign.Entity.tests
     , Test.Zebra.Foreign.Merge.tests
@@ -32,4 +30,6 @@ main =
     , Test.Zebra.Serial.Block.tests
     , Test.Zebra.Serial.File.tests
     , Test.Zebra.Serial.Header.tests
+    , Test.Zebra.Table.Mutable.tests
+    , Test.Zebra.Table.tests
     ]

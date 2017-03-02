@@ -29,9 +29,9 @@ import qualified X.Data.Vector as Boxed
 import qualified X.Data.Vector.Stream as Stream
 
 import           Zebra.Data
-import           Zebra.Data.Schema (Schema)
-import           Zebra.Serial.File
 import           Zebra.Foreign.Util
+import           Zebra.Schema (Schema)
+import           Zebra.Serial.File
 
 
 data PullerError =
