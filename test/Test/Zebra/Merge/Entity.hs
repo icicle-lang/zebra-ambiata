@@ -24,11 +24,10 @@ import qualified X.Data.Vector as Boxed
 import qualified X.Data.Vector.Stream as Stream
 
 import           Zebra.Data
-import           Zebra.Data.Fact (Fact(..))
-import           Zebra.Data.Schema (Schema)
-import           Zebra.Data.Table (Table(..))
 import           Zebra.Merge.Base
 import           Zebra.Merge.Entity
+import           Zebra.Schema (Schema)
+import           Zebra.Table (Table(..))
 
 
 fakeBlockId :: BlockDataId

@@ -17,8 +17,8 @@ import           Text.Show.Pretty (ppShow)
 
 import           Zebra.Data.Block
 import           Zebra.Data.Core
-import           Zebra.Data.Schema (Schema)
-import           Zebra.Data.Table.Mutable (MutableError)
+import           Zebra.Schema (Schema)
+import           Zebra.Table.Mutable (MutableError)
 
 
 prop_roundtrip_facts :: Property

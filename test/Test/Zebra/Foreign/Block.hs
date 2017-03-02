@@ -33,10 +33,10 @@ import           X.Control.Monad.Trans.Either (EitherT, pattern EitherT, runEith
 import           Zebra.Data.Block
 import           Zebra.Data.Entity
 import qualified Zebra.Data.Entity as Entity
-import qualified Zebra.Data.Table as Table
 import           Zebra.Foreign.Block
 import           Zebra.Foreign.Entity
 import           Zebra.Foreign.Util
+import qualified Zebra.Table as Table
 
 
 data CommonError =

@@ -43,7 +43,7 @@ import           Text.Printf (printf)
 import           X.Text.Show (gshowsPrec)
 
 import           Zebra.Data.Core
-import           Zebra.Data.Schema
+import           Zebra.Schema
 
 
 newtype Encoding =

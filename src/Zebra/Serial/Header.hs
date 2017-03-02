@@ -29,8 +29,8 @@ import           P
 
 import           Zebra.Data.Core
 import           Zebra.Data.Encoding
-import           Zebra.Data.Schema (Schema)
-import qualified Zebra.Data.Schema as Schema
+import           Zebra.Schema (Schema)
+import qualified Zebra.Schema as Schema
 import           Zebra.Serial.Array
 
 

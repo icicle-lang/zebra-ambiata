@@ -20,9 +20,9 @@ import qualified X.Data.Vector as Boxed
 
 import           Zebra.Data
 import           Zebra.Data.Entity
-import           Zebra.Data.Schema (Schema)
 import           Zebra.Foreign.Entity
 import           Zebra.Merge.BlockC
+import           Zebra.Schema (Schema)
 
 
 mergeLists :: Int64 -> [[Block Schema]] -> EitherT MergeError IO [Entity ()]

@@ -8,7 +8,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternGuards #-}
 {-# OPTIONS_GHC -funbox-strict-fields #-}
-module Zebra.Data.Table.Mutable (
+module Zebra.Table.Mutable (
     MTable(..)
   , MColumn(..)
 
@@ -59,11 +59,13 @@ import qualified X.Data.Vector.Ref as Ref
 
 import           Zebra.Data.Core
 import           Zebra.Data.Fact
-import           Zebra.Data.Schema (Schema, Field(..), Variant(..))
-import qualified Zebra.Data.Schema as Schema
-import           Zebra.Data.Table (Table(..), Column(..))
-import qualified Zebra.Data.Table as Table
 import qualified Zebra.Data.Vector.Storable as Storable
+import           Zebra.Schema (Schema, Field(..), Variant(..))
+import qualified Zebra.Schema as Schema
+import           Zebra.Table (Table(..), Column(..))
+import qualified Zebra.Table as Table
+import           Zebra.Value (Value)
+import qualified Zebra.Value as Value
 
 
 data MTable s =
@@ -288,28 +290,28 @@ insertRow table vschema value =
   case vschema of
     Schema.Byte ->
       case value of
-        Byte x ->
+        Value.Byte x ->
           insertByte table x
         _ ->
           lift . left $ MutableSchemaMismatch value vschema
 
     Schema.Int ->
       case value of
-        Int x ->
+        Value.Int x ->
           insertInt table x
         _ ->
           lift . left $ MutableSchemaMismatch value vschema
 
     Schema.Double ->
       case value of
-        Double x ->
+        Value.Double x ->
           insertDouble table x
         _ ->
           lift . left $ MutableSchemaMismatch value vschema
 
     Schema.Enum variant0 variants ->
       case value of
-        Enum tag x -> do
+        Value.Enum tag x -> do
           insertInt table $ fromIntegral tag
           (vs0, v1, vs2) <-
             lift . hoistMaybe (MutableEnumVariantMismatch tag x $ Boxed.cons variant0 variants) $
@@ -324,21 +326,21 @@ insertRow table vschema value =
 
     Schema.Struct fields ->
       case value of
-        Struct values ->
+        Value.Struct values ->
           insertStruct table fields values
         _ ->
           lift . left $ MutableSchemaMismatch value vschema
 
     Schema.Array ischema ->
       case value of
-        ByteArray xs ->
+        Value.ByteArray xs ->
           case ischema of
             Schema.Byte ->
               insertByteArray table xs
             _ ->
               lift . left $ MutableSchemaMismatch value vschema
 
-        Array xs ->
+        Value.Array xs ->
           popArrayColumn table $ \ns atable -> do
             traverse_ (consumeColumns atable . insertRow atable ischema) xs
             Grow.add ns . fromIntegral $ Boxed.length xs

@@ -21,8 +21,8 @@ import           Text.Show.Pretty (ppShow)
 
 import           Zebra.Data.Block
 import           Zebra.Data.Core
-import qualified Zebra.Data.Table as Table
 import           Zebra.Serial.Block
+import qualified Zebra.Table as Table
 
 
 prop_roundtrip_from_facts :: Property

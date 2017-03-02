@@ -47,7 +47,10 @@ library
                     src
 
   exposed-modules:
-                    Zebra
+                    Zebra.Schema
+                    Zebra.Table
+                    Zebra.Table.Mutable
+                    Zebra.Value
 
                     Zebra.Data
                     Zebra.Data.Block
@@ -58,9 +61,6 @@ library
                     Zebra.Data.Encoding
                     Zebra.Data.Entity
                     Zebra.Data.Fact
-                    Zebra.Data.Schema
-                    Zebra.Data.Table
-                    Zebra.Data.Table.Mutable
 
                     Zebra.Foreign.Bindings
                     Zebra.Foreign.Block

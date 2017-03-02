@@ -28,11 +28,11 @@ import           X.Control.Monad.Trans.Either (EitherT, left)
 import qualified X.Data.Vector as Boxed
 
 import           Zebra.Data
-import           Zebra.Data.Schema (Schema)
 import           Zebra.Foreign.Block
 import           Zebra.Foreign.Entity
 import           Zebra.Foreign.Merge
 import           Zebra.Foreign.Util
+import           Zebra.Schema (Schema)
 
 
 data MergeError =

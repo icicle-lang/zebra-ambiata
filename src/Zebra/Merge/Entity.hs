@@ -24,9 +24,9 @@ import qualified X.Data.Vector.Generic as Generic
 import qualified X.Data.Vector.Stream as Stream
 
 import           Zebra.Data
-import           Zebra.Data.Table (Table)
-import qualified Zebra.Data.Table as Table
 import           Zebra.Merge.Base
+import           Zebra.Table (Table)
+import qualified Zebra.Table as Table
 
 
 entityValuesOfBlock :: Monad m => BlockDataId -> Block a -> Stream.Stream m (EntityValues a)

@@ -5,7 +5,7 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# OPTIONS_GHC -funbox-strict-fields #-}
-module Zebra.Data.Schema (
+module Zebra.Schema (
     Schema(..)
   , Field(..)
   , FieldName(..)
