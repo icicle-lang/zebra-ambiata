@@ -36,8 +36,9 @@ import           X.Control.Monad.Trans.Either (EitherT, pattern EitherT, left)
 import qualified X.Data.Vector as Boxed
 import qualified X.Data.Vector.Stream as Stream
 
-import           Zebra.Data
-import           Zebra.Schema (Schema)
+import           Zebra.Data.Block
+import           Zebra.Data.Core
+import           Zebra.Schema (TableSchema)
 import           Zebra.Serial.Block
 import           Zebra.Serial.Header
 
@@ -58,7 +59,7 @@ renderDecodeError = \case
   DecodeErrorBadParserExpectsMoreAfterEnd ->
     "Decode error: the parser asked for more input after telling it the stream has ended. This means there is a bug in the parser."
 
-fileOfBytes :: Monad m => Stream.Stream m B.ByteString -> EitherT DecodeError m (Map AttributeName Schema, Stream.Stream (EitherT DecodeError m) (Block Schema))
+fileOfBytes :: Monad m => Stream.Stream m B.ByteString -> EitherT DecodeError m (Map AttributeName TableSchema, Stream.Stream (EitherT DecodeError m) Block)
 fileOfBytes input = EitherT $ do
   (header, rest) <- runStreamOne getHeader input
   case header of
@@ -68,7 +69,7 @@ fileOfBytes input = EitherT $ do
         blocks = runStreamMany (getBlock schemas) rest
     in  return $ Right (header', blocks)
 
-blocksOfBytes :: Monad m => Boxed.Vector Schema -> Stream.Stream m B.ByteString -> Stream.Stream (EitherT DecodeError m) (Block Schema)
+blocksOfBytes :: Monad m => Boxed.Vector TableSchema -> Stream.Stream m B.ByteString -> Stream.Stream (EitherT DecodeError m) Block
 blocksOfBytes formats inp = runStreamMany (getBlock formats) inp
 
 
@@ -145,7 +146,7 @@ runStreamMany g (Stream.Stream s'go s'init) =
          -> return $ Stream.Yield ret (s, str', Nothing)
 
 
-fileOfFilePath :: MonadIO m => FilePath -> EitherT DecodeError m (Map AttributeName Schema, Stream.Stream (EitherT DecodeError m) (Block Schema))
+fileOfFilePath :: MonadIO m => FilePath -> EitherT DecodeError m (Map AttributeName TableSchema, Stream.Stream (EitherT DecodeError m) Block)
 fileOfFilePath path = do
   bytes <- lift $ streamOfFile path
   fileOfBytes bytes

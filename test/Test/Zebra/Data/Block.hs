@@ -2,10 +2,12 @@
 {-# LANGUAGE TemplateHaskell #-}
 module Test.Zebra.Data.Block where
 
+import qualified Data.Text as Text
 import qualified Data.Vector as Boxed
 
-import           Disorder.Jack (Property, quickCheckAll, counterexample)
-import           Disorder.Jack (gamble, property, listOf)
+import           Disorder.Core.Run (ExpectedTestSpeed(..), disorderCheckEnvAll)
+import           Disorder.Jack (Property, counterexample)
+import           Disorder.Jack ((===), gamble, property, listOf)
 
 import           P
 
@@ -17,30 +19,53 @@ import           Text.Show.Pretty (ppShow)
 
 import           Zebra.Data.Block
 import           Zebra.Data.Core
-import           Zebra.Schema (Schema)
-import           Zebra.Table.Mutable (MutableError)
+import qualified Zebra.Schema as Schema
+import qualified Zebra.Table as Table
 
 
 prop_roundtrip_facts :: Property
 prop_roundtrip_facts =
-  gamble jSchema $ \schema ->
+  gamble jColumnSchema $ \schema ->
   gamble (listOf $ jFact schema (AttributeId 0)) $ \facts ->
     let
       schemas =
-        Boxed.singleton schema
+        Boxed.singleton (Schema.Array schema)
 
       input =
         Boxed.fromList facts
     in
-      trippingBoth
-        (first TableError . blockOfFacts schemas)
-        (first FactError . factsOfBlock schemas)
-        input
+      trippingBoth (blockOfFacts schemas) factsOfBlock input
 
-data SomeError =
-    TableError !MutableError
-  | FactError !(FactError Schema)
-    deriving (Eq, Show)
+prop_roundtrip_tables :: Property
+prop_roundtrip_tables =
+  gamble jBlock $ \block ->
+  let
+    names =
+      fmap (AttributeName . Text.pack . ("attribute_" <>) . show)
+        [0..Boxed.length (blockTables block) - 1]
+  in
+    trippingBoth (tableOfBlock $ Boxed.fromList names) blockOfTable block
+
+prop_collection_from_block :: Property
+prop_collection_from_block =
+  gamble jBlock $ \block ->
+  let
+    names =
+      fmap (AttributeName . Text.pack . ("attribute_" <>) . show)
+        [0..Boxed.length (blockTables block) - 1]
+  in
+    either (flip counterexample False) id $ do
+      table0 <- first ppShow $ tableOfBlock (Boxed.fromList names) block
+
+      collection <- first (\x -> ppShow table0 <> "\n" <> ppShow x) $
+        Table.toCollection table0
+
+      table <- first ppShow $ Table.fromCollection (Table.schema table0) collection
+
+      pure . counterexample (ppShow collection) $
+        table0
+        ===
+        table
 
 trippingBoth :: (Monad m, Show (m a), Show (m b), Eq (m a)) => (a -> m b) -> (b -> m a) -> a -> Property
 trippingBoth to from x =
@@ -70,4 +95,4 @@ trippingBoth to from x =
 return []
 tests :: IO Bool
 tests =
-  $quickCheckAll
+  $disorderCheckEnvAll TestRunMore

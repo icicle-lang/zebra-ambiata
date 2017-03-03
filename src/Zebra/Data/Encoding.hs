@@ -32,7 +32,6 @@ import qualified Data.Attoparsec.Text as Atto
 import qualified Data.List as List
 import           Data.Map (Map)
 import qualified Data.Text as T
-import qualified Data.Vector as Boxed
 
 import           GHC.Generics (Generic)
 
@@ -43,7 +42,9 @@ import           Text.Printf (printf)
 import           X.Text.Show (gshowsPrec)
 
 import           Zebra.Data.Core
-import           Zebra.Schema
+import qualified Zebra.Data.Vector.Cons as Cons
+import           Zebra.Schema (TableSchema, ColumnSchema, Field(..), FieldName(..))
+import qualified Zebra.Schema as Schema
 
 
 newtype Encoding =
@@ -108,32 +109,44 @@ pColumnEncoding =
     , ArrayEncoding <$> (Atto.char '[' *> pEncoding <* Atto.char ']')
     ]
 
-encodingOfDictionary :: Map AttributeName Schema -> Map AttributeName Encoding
+encodingOfDictionary :: Map AttributeName TableSchema -> Map AttributeName Encoding
 encodingOfDictionary =
   fmap encodingOfSchema
 
-encodingOfSchema :: Schema -> Encoding
+encodingOfSchema :: TableSchema -> Encoding
 encodingOfSchema = \case
-  Byte ->
-    Encoding $ pure ByteEncoding
-  Int ->
+  Schema.Binary ->
+    Encoding (pure . ArrayEncoding . Encoding $ pure ByteEncoding)
+  Schema.Array schema ->
+    Encoding (pure . ArrayEncoding $ encodingOfColumn schema)
+  Schema.Map key value ->
+    Encoding (pure . ArrayEncoding $ encodingOfColumn key <> encodingOfColumn value)
+
+encodingOfColumn :: ColumnSchema -> Encoding
+encodingOfColumn = \case
+  Schema.Unit ->
+    Encoding []
+  Schema.Int ->
     Encoding $ pure IntEncoding
-  Double ->
+  Schema.Double ->
     Encoding $ pure DoubleEncoding
-  Enum variant0 variants ->
+  Schema.Enum variants ->
     Encoding (pure IntEncoding) <>
-    foldMap (encodingOfSchema . variantSchema) (Boxed.cons variant0 variants)
-  Struct fields ->
-    foldMap (encodingOfSchema . fieldSchema) fields
-  Array schema ->
-    Encoding (pure . ArrayEncoding $ encodingOfSchema schema)
+    foldMap (encodingOfColumn . Schema.variant) variants
+  Schema.Struct fields ->
+    foldMap (encodingOfColumn . Schema.field) fields
+  Schema.Nested schema ->
+    encodingOfSchema schema
+  Schema.Reversed schema ->
+    encodingOfColumn schema
 
 -- Best effort to recover an schema
-recoverSchemaOfEncoding :: Encoding -> Schema
+recoverSchemaOfEncoding :: Encoding -> TableSchema
 recoverSchemaOfEncoding (Encoding encodings) =
+  Schema.Array $ 
   case recoverSchemaOfColumns encodings of
     [] ->
-      Struct Boxed.empty
+      Schema.Unit
     [x] ->
       x
     xs ->
@@ -144,23 +157,27 @@ recoverSchemaOfEncoding (Encoding encodings) =
         format =
           "%0" <> show digits <> "d"
 
-        mkField :: Int -> Schema -> Field
+        mkField :: Int -> ColumnSchema -> Field ColumnSchema
         mkField i x =
           Field (FieldName . T.pack $ printf format i) x
       in
-        Struct .
-        Boxed.fromList $
+        Schema.Struct .
+        Cons.unsafeFromList $
         List.zipWith mkField [0..] xs
 
-recoverSchemaOfColumns :: [ColumnEncoding] -> [Schema]
+recoverSchemaOfColumns :: [ColumnEncoding] -> [ColumnSchema]
 recoverSchemaOfColumns = \case
   [] ->
     []
-  ByteEncoding : xs ->
-    Byte : recoverSchemaOfColumns xs
   IntEncoding : xs ->
-    Int : recoverSchemaOfColumns xs
+    Schema.Int : recoverSchemaOfColumns xs
   DoubleEncoding : xs ->
-    Double : recoverSchemaOfColumns xs
+    Schema.Double : recoverSchemaOfColumns xs
+  ArrayEncoding (Encoding [ByteEncoding]) : xs -> do
+    Schema.Nested Schema.Binary : recoverSchemaOfColumns xs
   ArrayEncoding encoding : xs -> do
-    Array (recoverSchemaOfEncoding encoding) : recoverSchemaOfColumns xs
+    Schema.Nested (recoverSchemaOfEncoding encoding) : recoverSchemaOfColumns xs
+
+  -- TODO this is no longer possible, maybe error?
+  ByteEncoding : xs ->
+    Schema.Int : recoverSchemaOfColumns xs

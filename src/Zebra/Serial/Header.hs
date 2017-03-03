@@ -29,7 +29,7 @@ import           P
 
 import           Zebra.Data.Core
 import           Zebra.Data.Encoding
-import           Zebra.Schema (Schema)
+import           Zebra.Schema (TableSchema)
 import qualified Zebra.Schema as Schema
 import           Zebra.Serial.Array
 
@@ -46,7 +46,7 @@ import           Zebra.Serial.Array
 --     attr_schema_string : byte_array
 --   }
 -- @
-bHeader :: ZebraVersion -> Map AttributeName Schema -> Builder
+bHeader :: ZebraVersion -> Map AttributeName TableSchema -> Builder
 bHeader version features =
   let
     n_attrs =
@@ -80,7 +80,7 @@ bHeader version features =
       ZebraV2 ->
         schema
 
-getHeader :: Get (Map AttributeName Schema)
+getHeader :: Get (Map AttributeName TableSchema)
 getHeader = do
   version <- getVersion
   n <- fromIntegral <$> Get.getWord32le
