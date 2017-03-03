@@ -62,7 +62,7 @@ import           Zebra.Data.Fact
 import qualified Zebra.Data.Vector.Storable as Storable
 import           Zebra.Schema (Schema, Field(..), Variant(..))
 import qualified Zebra.Schema as Schema
-import           Zebra.Table (Table(..), Column(..))
+import           Zebra.Table (Table(..), Column(..), ColumnIndex(..))
 import qualified Zebra.Table as Table
 import           Zebra.Value (Value)
 import qualified Zebra.Value as Value
@@ -81,11 +81,6 @@ data MColumn s =
   | MDoubleColumn !(Grow MStorable.MVector s Double)
   | MArrayColumn !(Grow MStorable.MVector s Int64) !(MTable s)
     deriving (Generic, Typeable)
-
-newtype ColumnIndex =
-  ColumnIndex {
-      unColumnIndex :: Int
-    } deriving (Eq, Ord, Show, Num)
 
 schema :: MTable s -> Schema
 schema (MTable x _ _) =
