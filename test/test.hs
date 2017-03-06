@@ -8,6 +8,7 @@ import qualified Test.Zebra.Foreign.Entity
 import qualified Test.Zebra.Foreign.Merge
 import qualified Test.Zebra.Foreign.Table
 import qualified Test.Zebra.Merge.Entity
+import qualified Test.Zebra.Schema
 import qualified Test.Zebra.Serial.Array
 import qualified Test.Zebra.Serial.Block
 import qualified Test.Zebra.Serial.File
@@ -26,6 +27,7 @@ main =
     , Test.Zebra.Foreign.Merge.tests
     , Test.Zebra.Foreign.Table.tests
     , Test.Zebra.Merge.Entity.tests
+    , Test.Zebra.Schema.tests
     , Test.Zebra.Serial.Array.tests
     , Test.Zebra.Serial.Block.tests
     , Test.Zebra.Serial.File.tests

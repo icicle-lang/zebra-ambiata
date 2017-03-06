@@ -159,12 +159,12 @@ option =
 
 encode :: Schema -> ByteString
 encode =
-  Lazy.toStrict . Aeson.encodePretty' aesonConfig . ppSchema
+  Lazy.toStrict . Aeson.encodePretty' aesonConfig . ppTableSchema
 
 decode :: ByteString -> Either SchemaDecodeError Schema
 decode =
   first (uncurry SchemaDecodeError . second T.pack) .
-    Aeson.eitherDecodeStrictWith Aeson.value' (Aeson.iparse pSchema)
+    Aeson.eitherDecodeStrictWith Aeson.value' (Aeson.iparse pTableSchema)
 
 aesonConfig :: Aeson.Config
 aesonConfig =
@@ -172,15 +172,37 @@ aesonConfig =
       Aeson.confIndent =
         Aeson.Spaces 2
     , Aeson.confCompare =
-        Aeson.keyOrder ["name", "schema"]
+        Aeson.keyOrder ["name", "column"]
     , Aeson.confNumFormat =
         Aeson.Generic
     }
 
-pSchema :: Aeson.Value -> Aeson.Parser Schema
-pSchema =
+pTableSchema :: Aeson.Value -> Aeson.Parser Schema
+pTableSchema =
   pEnum $ \tag ->
     case tag of
+      "binary" ->
+        const $ pure Byte
+      "array" ->
+        Aeson.withObject "object containing array schema" $ \o ->
+          withKey "element" o pColumnSchema
+      "map" ->
+        Aeson.withObject "object containing map schema" $ \o -> do
+          key <- withKey "key" o pColumnSchema
+          value <- withKey "value" o pColumnSchema
+          pure . Struct $ Boxed.fromList [
+              Field (FieldName "key") key
+            , Field (FieldName "value") value
+            ]
+      _ ->
+        const . fail $ "unknown table schema type: " <> T.unpack tag
+
+pColumnSchema :: Aeson.Value -> Aeson.Parser Schema
+pColumnSchema =
+  pEnum $ \tag ->
+    case tag of
+      "unit" ->
+        const . pure $ Struct Boxed.empty
       "byte" ->
         const $ pure Byte
       "int" ->
@@ -188,16 +210,19 @@ pSchema =
       "double" ->
         const $ pure Double
       "enum" ->
-        Aeson.withObject "object containing enum schema" $ \o ->
+        Aeson.withObject "object containing enum column schema" $ \o ->
           uncurry Enum <$> withKey "variants" o pSchemaEnumVariants
       "struct" ->
-        Aeson.withObject "object contain struct schema" $ \o ->
+        Aeson.withObject "object containing struct column schema" $ \o ->
           Struct <$> withKey "fields" o pSchemaStructFields
-      "array" ->
-        Aeson.withObject "object containing array schema" $ \o ->
-          Array <$> withKey "element" o pSchema
+      "nested" ->
+        Aeson.withObject "object containing nested column schema" $ \o ->
+          Array <$> withKey "table" o pTableSchema
+      "reversed" ->
+        Aeson.withObject "object containing reversed column schema" $ \o ->
+          withKey "column" o pColumnSchema
       _ ->
-        const . fail $ "unknown schema type: " <> T.unpack tag
+        const . fail $ "unknown column schema type: " <> T.unpack tag
 
 pSchemaEnumVariants :: Aeson.Value -> Aeson.Parser (Variant, Boxed.Vector Variant)
 pSchemaEnumVariants =
@@ -214,7 +239,7 @@ pSchemaVariant =
   Aeson.withObject "object containing an enum variant" $ \o ->
     Variant
       <$> withKey "name" o (pure . VariantName)
-      <*> withKey "schema" o pSchema
+      <*> withKey "column" o pColumnSchema
 
 pSchemaStructFields :: Aeson.Value -> Aeson.Parser (Boxed.Vector Field)
 pSchemaStructFields =
@@ -226,7 +251,7 @@ pSchemaField =
   Aeson.withObject "object containing a struct field" $ \o ->
     Field
       <$> withKey "name" o (pure . FieldName)
-      <*> withKey "schema" o pSchema
+      <*> withKey "column" o pColumnSchema
 
 pEnum :: (Text -> Aeson.Value -> Aeson.Parser a) -> Aeson.Value -> Aeson.Parser a
 pEnum f =
@@ -254,8 +279,16 @@ kmapM f =
   Boxed.imapM $ \i x ->
     f x <?> Aeson.Index i
 
-ppSchema :: Schema -> Aeson.Value
-ppSchema = \case
+ppTableSchema :: Schema -> Aeson.Value
+ppTableSchema = \case
+  Byte ->
+    ppEnum "binary" ppUnit
+  e ->
+    ppEnum "array" $
+      Aeson.object ["element" .= ppColumnSchema e]
+
+ppColumnSchema :: Schema -> Aeson.Value
+ppColumnSchema = \case
   Byte ->
     ppEnum "byte" ppUnit
   Int ->
@@ -266,11 +299,14 @@ ppSchema = \case
     ppEnum "enum" $
       Aeson.object ["variants" .= Aeson.Array (fmap ppSchemaVariant $ Boxed.cons v0 vs)]
   Struct fs ->
-    ppEnum "struct" $
-      Aeson.object ["fields" .= Aeson.Array (fmap ppSchemaField fs)]
-  Array e ->
-    ppEnum "array" $
-      Aeson.object ["element" .= ppSchema e]
+    if Boxed.null fs then
+      ppEnum "unit" ppUnit
+    else
+      ppEnum "struct" $
+        Aeson.object ["fields" .= Aeson.Array (fmap ppSchemaField fs)]
+  Array s ->
+    ppEnum "nested" $
+      Aeson.object ["table" .= ppTableSchema s]
 
 ppEnum :: Text -> Aeson.Value -> Aeson.Value
 ppEnum tag value =
@@ -287,8 +323,8 @@ ppSchemaVariant (Variant (VariantName name) schema) =
   Aeson.object [
       "name" .=
         name
-    , "schema" .=
-        ppSchema schema
+    , "column" .=
+        ppColumnSchema schema
     ]
 
 ppSchemaField :: Field -> Aeson.Value
@@ -296,6 +332,6 @@ ppSchemaField (Field (FieldName name) schema) =
   Aeson.object [
       "name" .=
         name
-    , "schema" .=
-        ppSchema schema
+    , "column" .=
+        ppColumnSchema schema
     ]
