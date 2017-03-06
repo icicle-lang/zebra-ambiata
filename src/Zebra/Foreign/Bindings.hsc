@@ -21,43 +21,93 @@ import Anemone.Foreign.Mempool (Mempool(..))
 
 #strict_import
 
+-- Hash used for plonking
 #znum ZEBRA_HASH_SEED
 
+-- CError / ForeignError enums
 #znum ZEBRA_SUCCESS
 #znum ZEBRA_INVALID_COLUMN_TYPE
+#znum ZEBRA_INVALID_TABLE_TYPE
 #znum ZEBRA_ATTRIBUTE_NOT_FOUND
 #znum ZEBRA_NOT_ENOUGH_BYTES
 #znum ZEBRA_NOT_ENOUGH_ROWS
-#znum ZEBRA_MERGE_DIFFERENT_COLUMN_TYPES
 #znum ZEBRA_MERGE_NO_ENTITIES
+#znum ZEBRA_APPEND_DIFFERENT_COLUMN_TYPES
 #znum ZEBRA_APPEND_DIFFERENT_ATTRIBUTE_COUNT
 
-#integral_t enum zebra_type
-#znum ZEBRA_BYTE
-#znum ZEBRA_INT
-#znum ZEBRA_DOUBLE
-#znum ZEBRA_ARRAY
 
-#starttype struct zebra_table
-#field row_count , Int64
-#field row_capacity , Int64
-#field column_count , Int64
-#field columns , Ptr <zebra_column>
+-- Zebra.Table.Table
+#integral_t enum zebra_table_tag
+#znum ZEBRA_TABLE_BINARY
+#znum ZEBRA_TABLE_ARRAY
+#znum ZEBRA_TABLE_MAP
+
+#starttype union zebra_table_variant
+-- ZEBRA_TABLE_BINARY
+#field _binary.bytes    , Ptr Word8
+-- ZEBRA_TABLE_ARRAY
+#field _array.values    , Ptr <zebra_column>
+-- ZEBRA_TABLE_MAP
+#field _map.keys        , Ptr <zebra_column>
+#field _map.values      , Ptr <zebra_column>
 #stoptype
 
-#starttype union zebra_data
-#field b , Ptr Word8
-#field i , Ptr Int64
-#field d , Ptr Double
-#field a.n , Ptr Int64
-#field a.table , <zebra_table>
+#starttype struct zebra_table
+#field row_count        , Int64
+#field row_capacity     , Int64
+#field tag              , <zebra_table_tag>
+#field of               , <zebra_table_variant>
+#stoptype
+
+
+-- Vector (Variant, Column)
+-- Vector (Field, Column)
+#starttype struct zebra_named_columns
+#field count            , Int64
+#field columns          , Ptr <zebra_column>
+#field name_lengths     , Ptr Int64
+#field name_lengths_sum , Int64
+#field name_bytes       , Ptr Word8
+#stoptype
+
+
+-- Zebra.Table.Column
+#integral_t enum zebra_column_tag
+#znum ZEBRA_COLUMN_UNIT
+#znum ZEBRA_COLUMN_INT
+#znum ZEBRA_COLUMN_DOUBLE
+#znum ZEBRA_COLUMN_ENUM
+#znum ZEBRA_COLUMN_STRUCT
+#znum ZEBRA_COLUMN_NESTED
+#znum ZEBRA_COLUMN_REVERSED
+
+#starttype union zebra_column_variant
+-- ZEBRA_COLUMN_UNIT (empty)
+-- ZEBRA_COLUMN_INT
+#field _int.values      , Ptr Int64
+-- ZEBRA_COLUMN_DOUBLE
+#field _double.values   , Ptr Double
+-- ZEBRA_COLUMN_ENUM
+#field _enum.tags       , Ptr Int64
+#field _enum.columns    , <zebra_named_columns>
+-- ZEBRA_COLUMN_STRUCT
+#field _struct.columns  , <zebra_named_columns>
+-- ZEBRA_COLUMN_NESTED
+#field _nested.indices  , Ptr Int64
+#field _nested.table    , <zebra_table>
+-- ZEBRA_COLUMN_REVERSED
+#field _reversed.column , Ptr <zebra_column>
 #stoptype
 
 #starttype struct zebra_column
-#field type , <zebra_type>
-#field data , <zebra_data>
+#field tag              , <zebra_column_tag>
+#field of               , <zebra_column_variant>
 #stoptype
 
+
+---------------------------
+-- Attributes and entities
+---------------------------
 #starttype struct zebra_attribute
 #field times , Ptr Int64
 #field factset_ids , Ptr Int64
@@ -93,6 +143,10 @@ import Anemone.Foreign.Mempool (Mempool(..))
 #field tables , Ptr <zebra_table>
 #stoptype
 
+
+---------------------------
+-- Struct for merging entities
+---------------------------
 #starttype struct zebra_merge_many
 #field count , Int64
 #field entities , Ptr <zebra_entity>

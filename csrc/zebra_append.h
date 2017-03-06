@@ -19,14 +19,6 @@ error_t zebra_append_table (
   , int64_t out_count
   );
 
-error_t zebra_append_table_nogrow (
-    anemone_mempool_t *pool
-  , const zebra_table_t *in
-  , int64_t ix
-  , zebra_table_t *out_into
-  , int64_t out_count
-  );
-
 
 // Append an entity to a block.
 // If *block is null, a new block will be allocated.

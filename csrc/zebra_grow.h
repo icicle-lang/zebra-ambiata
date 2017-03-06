@@ -6,18 +6,20 @@
 error_t zebra_grow_column (
     anemone_mempool_t *pool
   , zebra_column_t *column
-  , int64_t old_capacity
+  , int64_t old_count
   , int64_t new_capacity
   );
 
 error_t zebra_grow_table (
     anemone_mempool_t *pool
   , zebra_table_t *table
+  , int64_t grow_by
   );
 
 error_t zebra_grow_attribute (
     anemone_mempool_t *pool
   , zebra_attribute_t *attribute
+  , int64_t grow_by
   );
 
 //
@@ -39,7 +41,7 @@ int64_t zebra_grow_array_capacity(int64_t count)
 
 ANEMONE_STATIC
 ANEMONE_INLINE
-void* zebra_grow_array (anemone_mempool_t *pool, void *old, size_t size, int64_t old_capacity, int64_t new_capacity)
+void* zebra_grow_array (anemone_mempool_t *pool, void *old, size_t size, int64_t old_count, int64_t new_capacity)
 {
     void *new = anemone_mempool_alloc (pool, new_capacity * size);
 
@@ -49,7 +51,7 @@ void* zebra_grow_array (anemone_mempool_t *pool, void *old, size_t size, int64_t
     // null pointer is technically undefined.
     //
     if (old) {
-        memcpy (new, old, old_capacity * size);
+        memcpy (new, old, old_count * size);
     }
 
     return new;
