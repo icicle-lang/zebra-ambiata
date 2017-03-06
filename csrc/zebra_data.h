@@ -16,28 +16,76 @@
 
 typedef int64_t bool64_t;
 
-typedef enum zebra_type {
-    ZEBRA_BYTE,
-    ZEBRA_INT,
-    ZEBRA_DOUBLE,
-    ZEBRA_ARRAY,
-} zebra_type_t;
-
+// Forward declarations for recursive structures
 struct zebra_column;
 typedef struct zebra_column zebra_column_t;
+
+// ------------------------
+// Zebra.Table.Table
+// ------------------------
+typedef enum zebra_table_tag {
+    ZEBRA_TABLE_BINARY,
+    ZEBRA_TABLE_ARRAY,
+    ZEBRA_TABLE_MAP,
+} zebra_table_tag_t;
+
+typedef union zebra_table_variant {
+    // ZEBRA_TABLE_BINARY
+    struct {
+        char* bytes;
+    } _binary;
+    // ZEBRA_TABLE_ARRAY
+    struct {
+        zebra_column_t* values;
+    } _array;
+    // ZEBRA_TABLE_MAP
+    struct {
+        zebra_column_t* keys;
+        zebra_column_t* values;
+    } _map;
+} zebra_table_variant_t;
 
 typedef struct zebra_table {
     int64_t row_count;
     int64_t row_capacity;
-    int64_t column_count;
-    zebra_column_t *columns;
+    zebra_table_tag_t tag;
+    zebra_table_variant_t of;
 } zebra_table_t;
 
-typedef union zebra_data {
-    uint8_t *b;
-    int64_t *i;
-    double *d;
+
+// ------------------------
+// Zebra.Table.Column
+// ------------------------
+typedef enum zebra_column_tag {
+    ZEBRA_COLUMN_UNIT,
+    ZEBRA_COLUMN_INT,
+    ZEBRA_COLUMN_DOUBLE,
+    ZEBRA_COLUMN_ENUM,
+    ZEBRA_COLUMN_STRUCT,
+    ZEBRA_COLUMN_NESTED,
+    ZEBRA_COLUMNT_REVERSED,
+} zebra_column_tag_t;
+
+typedef union zebra_column_variant {
     struct {
+    } _unit;
+    struct {
+        int64_t *values;
+    } _int;
+    struct {
+        double *values;
+    } _double;
+    struct {
+        int64_t *tags;
+        int64_t column_count;
+        zebra_column_t *columns;
+    } _enum;
+    struct {
+        int64_t column_count;
+        zebra_column_t *columns;
+    } _struct;
+    struct {
+
         // Lengths are stored as an prefix sum of length + 1.
         // Usually, a prefix sum would always start with 0, but we
         // generalise this to allow any offset at the start.
@@ -63,16 +111,20 @@ typedef union zebra_data {
         // 
         // The inner table's row count is the total number of elements:
         //  table.row_count = Scans[length] - Scans[0]
-        int64_t *n;
+        int64_t *indices;
         zebra_table_t table;
-    } a;
-} zebra_data_t;
+    } _nested;
+} zebra_column_variant_t;
 
 struct zebra_column {
-    zebra_type_t type;
-    zebra_data_t data;
+    zebra_column_tag_t tag;
+    zebra_column_variant_t of;
 }; // zebra_column_t
 
+
+// ------------------------
+// Attributes and entities
+// ------------------------
 typedef struct zebra_attribute {
     int64_t *times;
     int64_t *factset_ids;
@@ -111,23 +163,5 @@ typedef struct zebra_block {
     int64_t table_count;
     zebra_table_t *tables;
 } zebra_block_t;
-
-error_t zebra_alloc_table (
-    anemone_mempool_t *pool
-  , zebra_table_t *table
-  , const uint8_t **pp_schema
-  , const uint8_t *pe_schema
-  );
-
-error_t zebra_add_row (
-    anemone_mempool_t *pool
-  , zebra_entity_t *entity
-  , int32_t attribute_id
-  , int64_t time
-  , int64_t factset_id
-  , bool64_t tombstone
-  , zebra_column_t **out_columns
-  , int64_t *out_index
-  );
 
 #endif//__ZEBRA_DATA_H

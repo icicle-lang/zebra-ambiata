@@ -113,7 +113,6 @@ library
                        csrc/zebra_append.c
                        csrc/zebra_block_split.c
                        csrc/zebra_clone.c
-                       csrc/zebra_data.c
                        csrc/zebra_grow.c
                        csrc/zebra_merge.c
                        csrc/zebra_merge_many.c
