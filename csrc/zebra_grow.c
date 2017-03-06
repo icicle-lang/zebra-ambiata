@@ -2,25 +2,45 @@
 
 error_t zebra_grow_column (anemone_mempool_t *pool, zebra_column_t *column, int64_t old_capacity, int64_t new_capacity)
 {
-    zebra_type_t type = column->type;
-    zebra_data_t *data = &column->data;
+    error_t err;
 
-    switch (type) {
-        case ZEBRA_BYTE:
-            data->b = zebra_grow_array (pool, data->b, sizeof (data->b[0]), old_capacity, new_capacity);
+    zebra_column_variant_t *variant = &column->of;
+
+    switch (column->tag) {
+        case ZEBRA_COLUMN_UNIT:
             return ZEBRA_SUCCESS;
 
-        case ZEBRA_INT:
-            data->i = zebra_grow_array (pool, data->i, sizeof (data->i[0]), old_capacity, new_capacity);
+        case ZEBRA_COLUMN_INT:
+            variant->_int.values = ZEBRA_GROW_ARRAY (pool, variant->_int.values, old_capacity, new_capacity);
             return ZEBRA_SUCCESS;
 
-        case ZEBRA_DOUBLE:
-            data->d = zebra_grow_array (pool, data->d, sizeof (data->d[0]), old_capacity, new_capacity);
+        case ZEBRA_COLUMN_DOUBLE:
+            variant->_double.values = ZEBRA_GROW_ARRAY (pool, variant->_double.values, old_capacity, new_capacity);
             return ZEBRA_SUCCESS;
 
-        case ZEBRA_ARRAY:
+        case ZEBRA_COLUMN_ENUM: {
+            variant->_enum.tags = ZEBRA_GROW_ARRAY (pool, variant->_enum.tags, old_capacity, new_capacity);
+            int64_t c = variant->_enum.column_count;
+            for (int64_t i = 0; i != c; ++i) {
+                err = zebra_grow_column (pool, variant->_enum.columns[i], old_capacity, new_capacity);
+                if (err) return err;
+            }
+            return ZEBRA_SUCCESS;
+        }
+
+        case ZEBRA_COLUMN_STRUCT: {
+            int64_t c = variant->_struct.column_count;
+            for (int64_t i = 0; i != c; ++i) {
+                err = zebra_grow_column (pool, variant->_struct.columns[i], old_capacity, new_capacity);
+                if (err) return err;
+            }
+            return ZEBRA_SUCCESS;
+        }
+
+
+        case ZEBRA_COLUMN_NESTED:
             // Don't forget to keep the extra one element for the offset
-            data->a.n = zebra_grow_array (pool, data->a.n, sizeof (data->a.n[0]), old_capacity + 1, new_capacity + 1);
+            variant->_nested.indices = ZEBRA_GROW_ARRAY (pool, variant->_nested.indices, old_capacity + 1, new_capacity + 1);
             return ZEBRA_SUCCESS;
 
         default:
@@ -30,6 +50,8 @@ error_t zebra_grow_column (anemone_mempool_t *pool, zebra_column_t *column, int6
 
 error_t zebra_grow_table (anemone_mempool_t *pool, zebra_table_t *table)
 {
+    error_t err;
+
     int64_t row_count = table->row_count;
     int64_t row_capacity = table->row_capacity;
 
@@ -49,17 +71,24 @@ error_t zebra_grow_table (anemone_mempool_t *pool, zebra_table_t *table)
     int64_t new_row_capacity = zebra_grow_array_capacity(row_count);
     table->row_capacity = new_row_capacity;
 
-    int64_t column_count = table->column_count;
-    zebra_column_t *columns = table->columns;
+    zebra_table_variant_t *variant = &table->of;
 
-    error_t err;
+    switch (table->tag) {
+        case ZEBRA_TABLE_BINARY:
+            variant->_binary = ZEBRA_GROW_ARRAY (pool, variant->_binary, row_capacity, new_row_capacity);
+            return ZEBRA_SUCCESS;
 
-    for (int64_t i = 0; i < column_count; i++) {
-        err = zebra_grow_column (pool, columns + i, row_capacity, new_row_capacity);
-        if (err) return err;
+        case ZEBRA_TABLE_ARRAY:
+            return zebra_grow_column (pool, variant->_array.values, row_capacity, new_row_capacity);
+
+        case ZEBRA_TABLE_MAP:
+            err = zebra_grow_column (pool, variant->_map.keys, row_capacity, new_row_capacity);
+            if (err) return err;
+            return zebra_grow_column (pool, variant->_map.values, row_capacity, new_row_capacity);
+
+        default:
+            return ZEBRA_INVALID_COLUMN_TYPE;
     }
-
-    return ZEBRA_SUCCESS;
 }
 
 error_t zebra_grow_attribute (anemone_mempool_t *pool, zebra_attribute_t *attribute)
