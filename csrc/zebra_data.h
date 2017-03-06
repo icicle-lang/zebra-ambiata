@@ -63,7 +63,7 @@ typedef enum zebra_column_tag {
     ZEBRA_COLUMN_ENUM,
     ZEBRA_COLUMN_STRUCT,
     ZEBRA_COLUMN_NESTED,
-    ZEBRA_COLUMNT_REVERSED,
+    ZEBRA_COLUMN_REVERSED,
 } zebra_column_tag_t;
 
 typedef union zebra_column_variant {

@@ -9,10 +9,17 @@ error_t zebra_agile_clone_attribute (
   , const zebra_attribute_t *attribute
   , zebra_attribute_t *into
   );
+
 error_t zebra_agile_clone_table (
     anemone_mempool_t *pool
   , const zebra_table_t *table
   , zebra_table_t *into
+  );
+
+error_t zebra_agile_clone_column (
+    anemone_mempool_t *pool
+  , const zebra_column_t *column
+  , zebra_column_t *into
   );
 
 
