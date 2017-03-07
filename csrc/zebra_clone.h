@@ -4,6 +4,9 @@
 #include "zebra_data.h"
 
 
+// ------------------------
+// Agile clone: copy the structure, but throw away and clear the content.
+// ------------------------
 error_t zebra_agile_clone_attribute (
     anemone_mempool_t *pool
   , const zebra_attribute_t *attribute
@@ -23,19 +26,9 @@ error_t zebra_agile_clone_column (
   );
 
 
-error_t zebra_neritic_clone_table (
-    anemone_mempool_t *pool
-  , zebra_table_t *in_table
-  , zebra_table_t *out_table
-  );
-
-error_t zebra_neritic_clone_columns (
-    anemone_mempool_t *pool
-  , int64_t column_count
-  , zebra_column_t *in_columns
-  , zebra_column_t **out_columns
-  );
-
+// ------------------------
+// Neritic clone: deep copy the structure, shallow copy the content
+// ------------------------
 error_t zebra_neritic_clone_table (
     anemone_mempool_t *pool
   , zebra_table_t *in_table
@@ -49,19 +42,29 @@ error_t zebra_neritic_clone_tables (
   , zebra_table_t **out_tables
   );
 
-void *zebra_clone_array (
+error_t zebra_neritic_clone_column (
     anemone_mempool_t *pool
-  , const void *in
-  , int64_t num_elements
-  , int64_t element_size
+  , zebra_column_t *in_column
+  , zebra_column_t *out_column
   );
-#define ZEBRA_CLONE_ARRAY(pool, in, num_elements) zebra_clone_array (pool, in, num_elements, sizeof (*in) )
 
+
+// ------------------------
+// Deep clone: deep copy structure and content
+// ------------------------
 error_t zebra_deep_clone_table (
     anemone_mempool_t *pool
   , const zebra_table_t *table
   , zebra_table_t *into
   );
+
+error_t zebra_deep_clone_column (
+    anemone_mempool_t *pool
+  , int64_t row_count
+  , const zebra_column_t *in_column
+  , zebra_column_t *out_column
+  );
+
 
 error_t zebra_deep_clone_attribute (
     anemone_mempool_t *pool
@@ -74,5 +77,23 @@ error_t zebra_deep_clone_entity (
   , const zebra_entity_t *entity
   , zebra_entity_t *into
   );
+
+
+ANEMONE_STATIC
+ANEMONE_INLINE
+void *zebra_clone_array (
+    anemone_mempool_t *pool
+  , const void *in
+  , int64_t num_elements
+  , int64_t element_size
+  )
+{
+    int64_t bytes = num_elements * element_size;
+    void *out = anemone_mempool_alloc (pool, bytes);
+    if (in) memcpy (out, in, bytes);
+    return out;
+}
+
+#define ZEBRA_CLONE_ARRAY(pool, in, num_elements) zebra_clone_array (pool, in, num_elements, sizeof (*in) )
 
 #endif//__ZEBRA_CLONE_H

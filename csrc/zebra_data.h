@@ -47,6 +47,12 @@ typedef union zebra_table_variant {
 
 typedef struct zebra_table {
     int64_t row_count;
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Note: zebra_table.row_capacity
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // This should *usually* be a power of two, but not always.
+    // To compute the ideal row_capacity, use "zebra_grow_array_capacity (row_count)".
+    // For example, zebra_neritic_clone_table sets the row_capacity = row_count to signify the array must be copied if it needs to grow.
     int64_t row_capacity;
     zebra_table_tag_t tag;
     zebra_table_variant_t of;
@@ -81,11 +87,16 @@ typedef union zebra_column_variant {
         zebra_column_t *columns;
     } _enum;
     struct {
+        // XXX: It might be worth adding a void* padding here, so this matches _enum above.
+        // Could allow some operations to act the same for structs and enums.
         int64_t column_count;
         zebra_column_t *columns;
     } _struct;
     struct {
 
+        // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // Note: zebra_column._nested.indices
+        // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         // Lengths are stored as an prefix sum of length + 1.
         // Usually, a prefix sum would always start with 0, but we
         // generalise this to allow any offset at the start.

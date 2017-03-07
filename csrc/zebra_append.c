@@ -13,8 +13,7 @@ error_t zebra_append_attribute (anemone_mempool_t *pool, const zebra_attribute_t
 
     int64_t out_ix = out_into->table.row_count;
 
-    out_into->table.row_count += out_count;
-    err = zebra_grow_attribute (pool, out_into);
+    err = zebra_grow_attribute (pool, out_into, out_count);
     if (err) return err;
 
     err = zebra_append_table_nogrow (pool, &in->table, ix, &out_into->table, out_count);
@@ -84,8 +83,7 @@ error_t zebra_append_table (anemone_mempool_t *pool, const zebra_table_t *in, in
 {
     error_t err;
 
-    out_into->row_count += count;
-    err = zebra_grow_table (pool, out_into);
+    err = zebra_grow_table (pool, out_into, count);
     if (err) return err;
 
     return zebra_append_table_nogrow (pool, in, in_ix, out_into, count);
