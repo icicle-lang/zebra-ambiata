@@ -21,52 +21,73 @@ error_t zebra_column_pop_rows (
   , zebra_column_t *in_column
   , zebra_column_t *out_column )
 {
-    zebra_type_t type = in_column->type;
+    zebra_column_tag_t tag = in_column->tag;
 
-    out_column->type = type;
+    out_column->tag = tag;
 
-    zebra_data_t *in_data = &in_column->data;
-    zebra_data_t *out_data = &out_column->data;
+    zebra_column_variant_t *in_data = &in_column->of;
+    zebra_column_variant_t *out_data = &out_column->of;
 
-    switch (type) {
-        case ZEBRA_BYTE:
-        {
-            uint8_t *b = in_data->b;
+    switch (tag) {
+        case ZEBRA_COLUMN_UNIT: {
+            return ZEBRA_SUCCESS;
+        }
 
-            out_data->b = b;
-            in_data->b = b + n_rows;
+        case ZEBRA_COLUMN_INT: {
+            int64_t *i = in_data->_int.values;
+            out_data->_int.values = i;
+            in_data->_int.values = i + n_rows;
 
             return ZEBRA_SUCCESS;
         }
 
-        case ZEBRA_INT:
-        {
-            int64_t *i = in_data->i;
-
-            out_data->i = i;
-            in_data->i = i + n_rows;
+        case ZEBRA_COLUMN_DOUBLE: {
+            double *d = in_data->_double.values;
+            out_data->_double.values = d;
+            in_data->_double.values = d + n_rows;
 
             return ZEBRA_SUCCESS;
         }
 
-        case ZEBRA_DOUBLE:
-        {
-            double *d = in_data->d;
+        case ZEBRA_COLUMN_ENUM: {
+            int64_t *tags = in_data->_enum.tags;
+            out_data->_enum.tags = tags;
+            in_data->_enum.tags = tags + n_rows;
 
-            out_data->d = d;
-            in_data->d = d + n_rows;
+            int64_t c = in_data->_enum.column_count;
+            out_data->_enum.columns = anemone_mempool_alloc (pool, c * sizeof (zebra_column_t) );
+
+            for (int64_t i = 0; i != c; ++i) {
+                error_t err = zebra_column_pop_rows (pool, n_rows, in_data->_enum.columns + i, out_data->_enum.columns + i);
+                if (err) return err;
+            }
 
             return ZEBRA_SUCCESS;
         }
 
-        case ZEBRA_ARRAY:
-        {
-            int64_t *n = in_data->a.n;
-            out_data->a.n = n;
-            in_data->a.n = n + n_rows;
+        case ZEBRA_COLUMN_STRUCT: {
+            int64_t c = in_data->_struct.column_count;
+            out_data->_struct.columns = anemone_mempool_alloc (pool, c * sizeof (zebra_column_t) );
+
+            for (int64_t i = 0; i != c; ++i) {
+                error_t err = zebra_column_pop_rows (pool, n_rows, in_data->_struct.columns + i, out_data->_struct.columns + i);
+                if (err) return err;
+            }
+
+            return ZEBRA_SUCCESS;
+        }
+
+        case ZEBRA_COLUMN_NESTED: {
+            int64_t *n = in_data->_nested.indices;
+            out_data->_nested.indices = n;
+            in_data->_nested.indices = n + n_rows;
             int64_t n_inner_rows = n[n_rows] - n[0];
 
-            return zebra_table_pop_rows (pool, n_inner_rows, &in_data->a.table, &out_data->a.table);
+            return zebra_table_pop_rows (pool, n_inner_rows, &in_data->_nested.table, &out_data->_nested.table);
+        }
+
+        case ZEBRA_COLUMN_REVERSED: {
+            // XXX TODO reverse
         }
 
         default:
@@ -87,19 +108,34 @@ error_t zebra_table_pop_rows (
     in_table->row_count -= n_rows;
     out_table->row_count = n_rows;
     out_table->row_capacity = n_rows;
+    out_table->tag = in_table->tag;
 
-    int64_t column_count = in_table->column_count;
-    zebra_column_t *in_columns = in_table->columns;
-    zebra_column_t *out_columns = anemone_mempool_alloc (pool, column_count * sizeof (zebra_column_t));
+    switch (in_table->tag) {
+        case ZEBRA_TABLE_BINARY: {
+            char *bytes = in_table->of._binary.bytes;
+            out_table->of._binary.bytes = bytes;
+            in_table->of._binary.bytes = bytes + n_rows;
 
-    out_table->column_count = column_count;
-    out_table->columns = out_columns;
+            return ZEBRA_SUCCESS;
+        }
 
-    for (int64_t i = 0; i < column_count; i++) {
-        zebra_column_pop_rows (pool, n_rows, in_columns + i, out_columns + i);
+        case ZEBRA_TABLE_ARRAY: {
+            out_table->of._array.values = anemone_mempool_alloc (pool, sizeof (zebra_column_t) );
+            return zebra_column_pop_rows (pool, n_rows, in_table->of._array.values, out_table->of._array.values);
+        }
+
+        case ZEBRA_TABLE_MAP: {
+            out_table->of._map.keys = anemone_mempool_alloc (pool, sizeof (zebra_column_t) );
+            out_table->of._map.values = anemone_mempool_alloc (pool, sizeof (zebra_column_t) );
+            error_t err = zebra_column_pop_rows (pool, n_rows, in_table->of._map.keys, out_table->of._map.keys);
+            if (err) return err;
+            return zebra_column_pop_rows (pool, n_rows, in_table->of._map.values, out_table->of._map.values);
+        }
+
+        default: {
+            return ZEBRA_INVALID_COLUMN_TYPE;
+        }
     }
-
-    return ZEBRA_SUCCESS;
 }
 
 error_t zebra_entities_of_block (
@@ -165,7 +201,7 @@ error_t zebra_entities_of_block (
 
         //
         // We need to use all the input attributes, otherwise something is wrong.
-        // They are out of order or refer to a non-existent attribute. 
+        // They are out of order or refer to a non-existent attribute.
         //
         if (aix != attribute_count) {
             return ZEBRA_ATTRIBUTE_NOT_FOUND;
