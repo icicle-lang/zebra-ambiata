@@ -168,19 +168,19 @@ pOutputBlockFacts =
 
 pOutputFormat :: Parser ZebraVersion
 pOutputFormat =
-  fromMaybe ZebraV1 <$> optional (pOutputV1 <|> pOutputV2)
+  fromMaybe ZebraV2 <$> optional (pOutputV1 <|> pOutputV2)
 
 pOutputV1 :: Parser ZebraVersion
 pOutputV1 =
   Options.flag' ZebraV1 $
     Options.long "output-v1" <>
-    Options.help "Force merge to output files in version 1 format. (default)"
+    Options.help "Force merge to output files in version 1 format."
 
 pOutputV2 :: Parser ZebraVersion
 pOutputV2 =
   Options.flag' ZebraV2 $
     Options.long "output-v2" <>
-    Options.help "Force merge to output files in version 2 format."
+    Options.help "Force merge to output files in version 2 format. (default)"
 
 run :: Command -> IO ()
 run c = case c of
