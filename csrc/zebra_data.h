@@ -60,6 +60,22 @@ typedef struct zebra_table {
 
 
 // ------------------------
+// Vector (Variant, Column)
+// Vector (Field,   Column)
+// ------------------------
+typedef struct zebra_named_columns {
+    int64_t count;
+    zebra_column_t *columns;
+    // name_lengths_sum == name_length[0..count)
+    int64_t *name_lengths;
+    int64_t name_lengths_sum;
+    // let indices = scan name_lengths
+    // forall i. FIELD_NAME[i] = name_bytes[ indices[i] .. indices[i+1] )
+    char *name_bytes;
+} zebra_named_columns_t;
+
+
+// ------------------------
 // Zebra.Table.Column
 // ------------------------
 typedef enum zebra_column_tag {
@@ -83,17 +99,12 @@ typedef union zebra_column_variant {
     } _double;
     struct {
         int64_t *tags;
-        int64_t column_count;
-        zebra_column_t *columns;
+        zebra_named_columns_t columns;
     } _enum;
     struct {
-        // XXX: It might be worth adding a void* padding here, so this matches _enum above.
-        // Could allow some operations to act the same for structs and enums.
-        int64_t column_count;
-        zebra_column_t *columns;
+        zebra_named_columns_t columns;
     } _struct;
     struct {
-
         // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         // Note: zebra_column._nested.indices
         // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -125,6 +136,9 @@ typedef union zebra_column_variant {
         int64_t *indices;
         zebra_table_t table;
     } _nested;
+    struct {
+        zebra_column_t *column;
+    } _reversed;
 } zebra_column_variant_t;
 
 struct zebra_column {

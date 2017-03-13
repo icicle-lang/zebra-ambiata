@@ -1,9 +1,23 @@
 #include "zebra_grow.h"
 
+ANEMONE_STATIC
+ANEMONE_INLINE
+error_t zebra_grow_named_columns (
+    anemone_mempool_t *pool
+  , zebra_named_columns_t *columns
+  , int64_t old_count
+  , int64_t new_capacity)
+{
+    int64_t c = columns->count;
+    for (int64_t i = 0; i != c; ++i) {
+        error_t err = zebra_grow_column (pool, columns->columns+i, old_count, new_capacity);
+        if (err) return err;
+    }
+    return ZEBRA_SUCCESS;
+}
+
 error_t zebra_grow_column (anemone_mempool_t *pool, zebra_column_t *column, int64_t old_count, int64_t new_capacity)
 {
-    error_t err;
-
     zebra_column_variant_t *variant = &column->of;
 
     switch (column->tag) {
@@ -18,24 +32,12 @@ error_t zebra_grow_column (anemone_mempool_t *pool, zebra_column_t *column, int6
             variant->_double.values = ZEBRA_GROW_ARRAY (pool, variant->_double.values, old_count, new_capacity);
             return ZEBRA_SUCCESS;
 
-        case ZEBRA_COLUMN_ENUM: {
+        case ZEBRA_COLUMN_ENUM:
             variant->_enum.tags = ZEBRA_GROW_ARRAY (pool, variant->_enum.tags, old_count, new_capacity);
-            int64_t c = variant->_enum.column_count;
-            for (int64_t i = 0; i != c; ++i) {
-                err = zebra_grow_column (pool, variant->_enum.columns+i, old_count, new_capacity);
-                if (err) return err;
-            }
-            return ZEBRA_SUCCESS;
-        }
+            return zebra_grow_named_columns (pool, &variant->_enum.columns, old_count, new_capacity);
 
-        case ZEBRA_COLUMN_STRUCT: {
-            int64_t c = variant->_struct.column_count;
-            for (int64_t i = 0; i != c; ++i) {
-                err = zebra_grow_column (pool, variant->_struct.columns+i, old_count, new_capacity);
-                if (err) return err;
-            }
-            return ZEBRA_SUCCESS;
-        }
+        case ZEBRA_COLUMN_STRUCT:
+            return zebra_grow_named_columns (pool, &variant->_struct.columns, old_count, new_capacity);
 
         case ZEBRA_COLUMN_NESTED:
             // See Note: zebra_column._nested.indices
@@ -43,6 +45,9 @@ error_t zebra_grow_column (anemone_mempool_t *pool, zebra_column_t *column, int6
             // Don't forget to keep the extra one element for the offset
             variant->_nested.indices = ZEBRA_GROW_ARRAY (pool, variant->_nested.indices, old_count + 1, new_capacity + 1);
             return ZEBRA_SUCCESS;
+
+        case ZEBRA_COLUMN_REVERSED:
+            return zebra_grow_column (pool, variant->_reversed.column, old_count, new_capacity);
 
         default:
             return ZEBRA_INVALID_COLUMN_TYPE;

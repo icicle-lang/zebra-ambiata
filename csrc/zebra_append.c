@@ -64,56 +64,54 @@ error_t zebra_append_column_nested (anemone_mempool_t *pool, const zebra_column_
 }
 
 ANEMONE_STATIC
+error_t zebra_append_column (anemone_mempool_t *pool, const zebra_column_t *in, int64_t in_ix, zebra_column_t *out_into, int64_t out_ix, int64_t out_count);
+
+ANEMONE_STATIC
 ANEMONE_INLINE
+error_t zebra_append_named_columns (anemone_mempool_t *pool, const zebra_named_columns_t *in, int64_t in_ix, zebra_named_columns_t *out_into, int64_t out_ix, int64_t out_count)
+{
+    if (in->count != out_into->count) return ZEBRA_MERGE_DIFFERENT_COLUMN_TYPES;
+
+    int64_t c = in->count;
+    for (int64_t i = 0; i != c; ++i) {
+        error_t err = zebra_append_column (pool, in->columns + i, in_ix, out_into->columns + i, out_ix, out_count);
+        if (err) return err;
+    }
+    return ZEBRA_SUCCESS;
+}
+
+ANEMONE_STATIC
 error_t zebra_append_column (anemone_mempool_t *pool, const zebra_column_t *in, int64_t in_ix, zebra_column_t *out_into, int64_t out_ix, int64_t out_count)
 {
     if (in->tag != out_into->tag) return ZEBRA_MERGE_DIFFERENT_COLUMN_TYPES;
 
     switch (in->tag) {
-        case ZEBRA_COLUMN_UNIT: {
+        case ZEBRA_COLUMN_UNIT:
             return ZEBRA_SUCCESS;
-        }
 
-        case ZEBRA_COLUMN_INT: {
+        case ZEBRA_COLUMN_INT:
             memcpy (out_into->of._int.values + out_ix, in->of._int.values + in_ix, out_count * sizeof(int64_t));
             return ZEBRA_SUCCESS;
-        }
 
-        case ZEBRA_COLUMN_DOUBLE: {
+        case ZEBRA_COLUMN_DOUBLE:
             memcpy (out_into->of._double.values + out_ix, in->of._double.values + in_ix, out_count * sizeof(double));
             return ZEBRA_SUCCESS;
-        }
 
-        case ZEBRA_COLUMN_ENUM: {
-            if (in->of._enum.column_count != out_into->of._enum.column_count) return ZEBRA_MERGE_DIFFERENT_COLUMN_TYPES;
-
+        case ZEBRA_COLUMN_ENUM:
             memcpy (out_into->of._enum.tags + out_ix, in->of._enum.tags + in_ix, out_count * sizeof(double));
-            int64_t c = in->of._enum.column_count;
-            for (int64_t i = 0; i != c; ++i) {
-                error_t err = zebra_append_column (pool, in->of._enum.columns + i, in_ix, out_into->of._enum.columns + i, out_ix, out_count);
-                if (err) return err;
-            }
-            return ZEBRA_SUCCESS;
-        }
+            return zebra_append_named_columns (pool, &in->of._enum.columns, in_ix, &out_into->of._enum.columns, out_ix, out_count);
 
-        case ZEBRA_COLUMN_STRUCT: {
-            if (in->of._struct.column_count != out_into->of._struct.column_count) return ZEBRA_MERGE_DIFFERENT_COLUMN_TYPES;
+        case ZEBRA_COLUMN_STRUCT:
+            return zebra_append_named_columns (pool, &in->of._struct.columns, in_ix, &out_into->of._struct.columns, out_ix, out_count);
 
-            int64_t c = in->of._struct.column_count;
-            for (int64_t i = 0; i != c; ++i) {
-                error_t err = zebra_append_column (pool, in->of._struct.columns + i, in_ix, out_into->of._struct.columns + i, out_ix, out_count);
-                if (err) return err;
-            }
-            return ZEBRA_SUCCESS;
-        }
-
-        case ZEBRA_COLUMN_NESTED: {
+        case ZEBRA_COLUMN_NESTED:
             return zebra_append_column_nested (pool, in, in_ix, out_into, out_ix, out_count);
-        }
 
-        default: {
+        case ZEBRA_COLUMN_REVERSED:
+            return zebra_append_column (pool, in->of._reversed.column, in_ix, out_into->of._reversed.column, out_ix, out_count);
+
+        default:
             return ZEBRA_INVALID_COLUMN_TYPE;
-        }
     }
 }
 

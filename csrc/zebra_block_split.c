@@ -19,6 +19,38 @@ error_t zebra_column_pop_rows (
     anemone_mempool_t *pool
   , int64_t n_rows
   , zebra_column_t *in_column
+  , zebra_column_t *out_column
+  );
+
+ANEMONE_STATIC
+ANEMONE_INLINE
+error_t zebra_named_columns_pop_rows (
+    anemone_mempool_t *pool
+  , int64_t n_rows
+  , zebra_named_columns_t *in
+  , zebra_named_columns_t *out )
+{
+    int64_t c = in->count;
+
+    out->count = c;
+    out->columns = anemone_mempool_alloc (pool, c * sizeof (zebra_column_t) );
+    out->name_lengths = in->name_lengths;
+    out->name_lengths_sum = in->name_lengths_sum;
+    out->name_bytes = in->name_bytes;
+
+    for (int64_t i = 0; i != c; ++i) {
+        error_t err = zebra_column_pop_rows (pool, n_rows, in->columns + i, out->columns + i);
+        if (err) return err;
+    }
+
+    return ZEBRA_SUCCESS;
+}
+
+ANEMONE_STATIC
+error_t zebra_column_pop_rows (
+    anemone_mempool_t *pool
+  , int64_t n_rows
+  , zebra_column_t *in_column
   , zebra_column_t *out_column )
 {
     zebra_column_tag_t tag = in_column->tag;
@@ -54,27 +86,11 @@ error_t zebra_column_pop_rows (
             out_data->_enum.tags = tags;
             in_data->_enum.tags = tags + n_rows;
 
-            int64_t c = in_data->_enum.column_count;
-            out_data->_enum.columns = anemone_mempool_alloc (pool, c * sizeof (zebra_column_t) );
-
-            for (int64_t i = 0; i != c; ++i) {
-                error_t err = zebra_column_pop_rows (pool, n_rows, in_data->_enum.columns + i, out_data->_enum.columns + i);
-                if (err) return err;
-            }
-
-            return ZEBRA_SUCCESS;
+            return zebra_named_columns_pop_rows (pool, n_rows, &in_data->_enum.columns, &out_data->_enum.columns);
         }
 
         case ZEBRA_COLUMN_STRUCT: {
-            int64_t c = in_data->_struct.column_count;
-            out_data->_struct.columns = anemone_mempool_alloc (pool, c * sizeof (zebra_column_t) );
-
-            for (int64_t i = 0; i != c; ++i) {
-                error_t err = zebra_column_pop_rows (pool, n_rows, in_data->_struct.columns + i, out_data->_struct.columns + i);
-                if (err) return err;
-            }
-
-            return ZEBRA_SUCCESS;
+            return zebra_named_columns_pop_rows (pool, n_rows, &in_data->_struct.columns, &out_data->_struct.columns);
         }
 
         case ZEBRA_COLUMN_NESTED: {
@@ -87,7 +103,8 @@ error_t zebra_column_pop_rows (
         }
 
         case ZEBRA_COLUMN_REVERSED: {
-            // XXX TODO reverse
+            out_data->_reversed.column = anemone_mempool_alloc (pool, sizeof (zebra_column_t) );
+            return zebra_column_pop_rows (pool, n_rows, in_data->_reversed.column, out_data->_reversed.column);
         }
 
         default:
