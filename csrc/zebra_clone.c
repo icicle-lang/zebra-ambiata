@@ -1,4 +1,5 @@
 #include "zebra_clone.h"
+#include "zebra_grow.h"
 
 
 //
@@ -20,24 +21,98 @@ error_t zebra_agile_clone_table (anemone_mempool_t *pool, const zebra_table_t *t
 {
     into->row_count = 0;
     into->row_capacity = 0;
-    int64_t count = table->column_count;
-    into->column_count = count;
-    zebra_column_t *in_columns = table->columns;
-    zebra_column_t *out_columns = anemone_mempool_alloc (pool, count * sizeof (zebra_column_t));
-    into->columns = out_columns;
+    into->tag = table->tag;
+    
+    switch (table->tag) {
+        case ZEBRA_TABLE_BINARY: {
+            into->of._binary.bytes = NULL;
+            return ZEBRA_SUCCESS;
+        }
 
-    for (int64_t c = 0; c < count; ++c) {
-        zebra_column_t *in_column = in_columns + c;
-        zebra_column_t *out_column = out_columns + c;
-        zebra_type_t type = in_column->type;
-        out_column->type = type;
-        // zero out first pointer
-        out_column->data.b = NULL;
-        if (type == ZEBRA_ARRAY) {
-            zebra_agile_clone_table (pool, &in_column->data.a.table, &out_column->data.a.table);
+        case ZEBRA_TABLE_ARRAY: {
+            into->of._array.values = anemone_mempool_alloc (pool, sizeof (zebra_column_t) );
+            return zebra_agile_clone_column (pool, table->of._array.values, into->of._array.values);
+        }
+
+        case ZEBRA_TABLE_MAP: {
+            into->of._map.keys = anemone_mempool_alloc (pool, sizeof (zebra_column_t) );
+            into->of._map.values = anemone_mempool_alloc (pool, sizeof (zebra_column_t) );
+
+            error_t err = zebra_agile_clone_column (pool, table->of._map.keys, into->of._map.keys);
+            if (err) return err;
+            return zebra_agile_clone_column (pool, table->of._map.values, into->of._map.values);
+        }
+
+        default: {
+            return ZEBRA_INVALID_TABLE_TYPE;
         }
     }
+}
+
+ANEMONE_STATIC
+ANEMONE_INLINE
+error_t zebra_agile_clone_named_column (
+    anemone_mempool_t *pool
+  , const zebra_named_columns_t *in
+  , zebra_named_columns_t *out
+  )
+{
+    int64_t c = in->count;
+
+    out->count = c;
+    out->columns = anemone_mempool_alloc (pool, c * sizeof (zebra_column_t) );
+    out->name_lengths = in->name_lengths;
+    out->name_lengths_sum = in->name_lengths_sum;
+    out->name_bytes = in->name_bytes;
+
+    for (int64_t i = 0; i != c; ++i) {
+        error_t err = zebra_agile_clone_column (pool, in->columns + i, out->columns + i);
+        if (err) return err;
+    }
     return ZEBRA_SUCCESS;
+}
+
+error_t zebra_agile_clone_column (
+    anemone_mempool_t *pool
+  , const zebra_column_t *in_column
+  , zebra_column_t *out_column
+  )
+{
+    zebra_column_tag_t tag = in_column->tag;
+    out_column->tag = tag;
+    const zebra_column_variant_t *in_data = &in_column->of;
+    zebra_column_variant_t *out_data = &out_column->of;
+
+    switch (tag) {
+        case ZEBRA_COLUMN_UNIT:
+            return ZEBRA_SUCCESS;
+
+        case ZEBRA_COLUMN_INT:
+            out_data->_int.values = NULL;
+            return ZEBRA_SUCCESS;
+
+        case ZEBRA_COLUMN_DOUBLE:
+            out_data->_double.values = NULL;
+            return ZEBRA_SUCCESS;
+
+        case ZEBRA_COLUMN_ENUM:
+            out_data->_enum.tags = NULL;
+            return zebra_agile_clone_named_column (pool, &in_data->_enum.columns, &out_data->_enum.columns);
+
+        case ZEBRA_COLUMN_STRUCT:
+            return zebra_agile_clone_named_column (pool, &in_data->_struct.columns, &out_data->_struct.columns);
+
+        case ZEBRA_COLUMN_NESTED:
+            out_data->_nested.indices = NULL;
+            return zebra_agile_clone_table (pool, &in_data->_nested.table, &out_data->_nested.table);
+
+        case ZEBRA_COLUMN_REVERSED:
+            out_data->_reversed.column = anemone_mempool_alloc (pool, sizeof (zebra_column_t) );
+            return zebra_agile_clone_column (pool, in_data->_reversed.column, out_data->_reversed.column);
+
+        default:
+            return ZEBRA_INVALID_COLUMN_TYPE;
+    }
 }
 
 
@@ -47,73 +122,113 @@ error_t zebra_agile_clone_table (anemone_mempool_t *pool, const zebra_table_t *t
 // structure is deep, but the clone of the data is shallow.
 //
 
-error_t zebra_neritic_clone_column (
-    anemone_mempool_t *pool
-  , zebra_column_t *in_column
-  , zebra_column_t *out_column )
-{
-    zebra_type_t type = in_column->type;
-
-    out_column->type = type;
-
-    zebra_data_t *in_data = &in_column->data;
-    zebra_data_t *out_data = &out_column->data;
-
-    switch (type) {
-        case ZEBRA_BYTE:
-            out_data->b = in_data->b;
-            return ZEBRA_SUCCESS;
-
-        case ZEBRA_INT:
-            out_data->i = in_data->i;
-            return ZEBRA_SUCCESS;
-
-        case ZEBRA_DOUBLE:
-            out_data->d = in_data->d;
-            return ZEBRA_SUCCESS;
-
-        case ZEBRA_ARRAY:
-            out_data->a.n = in_data->a.n;
-            return zebra_neritic_clone_table (pool, &in_data->a.table, &out_data->a.table);
-
-        default:
-            return ZEBRA_INVALID_COLUMN_TYPE;
-    }
-}
-
-error_t zebra_neritic_clone_columns (
-    anemone_mempool_t *pool
-  , int64_t column_count
-  , zebra_column_t *in_columns
-  , zebra_column_t **out_columns )
-{
-    error_t err;
-
-    zebra_column_t *columns = anemone_mempool_alloc (pool, column_count * sizeof (zebra_column_t));
-
-    for (int64_t i = 0; i < column_count; i++) {
-        err = zebra_neritic_clone_column (pool, in_columns + i, columns + i);
-        if (err) return err;
-    }
-
-    *out_columns = columns;
-
-    return ZEBRA_SUCCESS;
-}
-
 error_t zebra_neritic_clone_table (
     anemone_mempool_t *pool
   , zebra_table_t *in_table
   , zebra_table_t *out_table )
 {
     out_table->row_count = in_table->row_count;
-    out_table->row_capacity = 0;
+    // See Note: zebra_table.row_capacity
+    // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    // Append is more or less the only thing we do that mutates table data.
+    // We want to ensure that if the cloned table has values appended, it does not affect the original one.
+    // Setting the row_capacity to row_count ensures this because when append calls "grow", it decides it has to copy.
+    out_table->row_capacity = in_table->row_count;
 
-    int64_t column_count = in_table->column_count;
-    out_table->column_count = column_count;
+    zebra_table_tag_t tag = in_table->tag;
+    out_table->tag = tag;
+    switch (tag) {
+        case ZEBRA_TABLE_BINARY: {
+            out_table->of._binary.bytes = in_table->of._binary.bytes;
+            return ZEBRA_SUCCESS;
+        }
 
-    return zebra_neritic_clone_columns (pool, column_count, in_table->columns, &out_table->columns);
+        case ZEBRA_TABLE_ARRAY: {
+            out_table->of._array.values = anemone_mempool_alloc (pool, sizeof (zebra_column_t) );
+            return zebra_neritic_clone_column (pool, in_table->of._array.values, out_table->of._array.values); 
+        }
+
+        case ZEBRA_TABLE_MAP: {
+            out_table->of._map.keys = anemone_mempool_alloc (pool, sizeof (zebra_column_t) );
+            out_table->of._map.values = anemone_mempool_alloc (pool, sizeof (zebra_column_t) );
+
+            error_t err = zebra_neritic_clone_column (pool, in_table->of._map.keys, out_table->of._map.keys); 
+            if (err) return err;
+            return zebra_neritic_clone_column (pool, in_table->of._map.values, out_table->of._map.values); 
+        }
+
+        default: {
+            return ZEBRA_INVALID_TABLE_TYPE;
+        }
+    }
 }
+
+ANEMONE_STATIC
+ANEMONE_INLINE
+error_t zebra_neritic_clone_named_column (
+    anemone_mempool_t *pool
+  , const zebra_named_columns_t *in
+  , zebra_named_columns_t *out
+  )
+{
+    int64_t c = in->count;
+
+    out->count = c;
+    out->columns = anemone_mempool_alloc (pool, c * sizeof (zebra_column_t) );
+    out->name_lengths = in->name_lengths;
+    out->name_lengths_sum = in->name_lengths_sum;
+    out->name_bytes = ZEBRA_CLONE_ARRAY (pool, in->name_bytes, in->name_lengths_sum);
+
+    for (int64_t i = 0; i != c; ++i) {
+        error_t err = zebra_neritic_clone_column (pool, in->columns + i, out->columns + i);
+        if (err) return err;
+    }
+    return ZEBRA_SUCCESS;
+}
+
+
+error_t zebra_neritic_clone_column (
+    anemone_mempool_t *pool
+  , zebra_column_t *in_column
+  , zebra_column_t *out_column )
+{
+    zebra_column_tag_t tag = in_column->tag;
+    out_column->tag = tag;
+    zebra_column_variant_t *in_data = &in_column->of;
+    zebra_column_variant_t *out_data = &out_column->of;
+
+    switch (tag) {
+        case ZEBRA_COLUMN_UNIT:
+            return ZEBRA_SUCCESS;
+
+        case ZEBRA_COLUMN_INT:
+            out_data->_int.values = in_data->_int.values;
+            return ZEBRA_SUCCESS;
+
+        case ZEBRA_COLUMN_DOUBLE:
+            out_data->_double.values = in_data->_double.values;
+            return ZEBRA_SUCCESS;
+
+        case ZEBRA_COLUMN_ENUM:
+            out_data->_enum.tags = in_data->_enum.tags;
+            return zebra_neritic_clone_named_column (pool, &in_data->_enum.columns, &out_data->_enum.columns);
+
+        case ZEBRA_COLUMN_STRUCT:
+            return zebra_neritic_clone_named_column (pool, &in_data->_struct.columns, &out_data->_struct.columns);
+
+        case ZEBRA_COLUMN_NESTED:
+            out_data->_nested.indices = in_data->_nested.indices;
+            return zebra_neritic_clone_table (pool, &in_data->_nested.table, &out_data->_nested.table);
+
+        case ZEBRA_COLUMN_REVERSED:
+            out_data->_reversed.column = anemone_mempool_alloc (pool, sizeof (zebra_column_t) );
+            return zebra_neritic_clone_column (pool, in_data->_reversed.column, out_data->_reversed.column);
+
+        default:
+            return ZEBRA_INVALID_COLUMN_TYPE;
+    }
+}
+
 
 error_t zebra_neritic_clone_tables (
     anemone_mempool_t *pool
@@ -121,12 +236,10 @@ error_t zebra_neritic_clone_tables (
   , zebra_table_t *in_tables
   , zebra_table_t **out_tables )
 {
-    error_t err;
-
     zebra_table_t *tables = anemone_mempool_alloc (pool, table_count * sizeof (zebra_table_t));
 
     for (int64_t i = 0; i < table_count; i++) {
-        err = zebra_neritic_clone_table (pool, in_tables + i, tables + i);
+        error_t err = zebra_neritic_clone_table (pool, in_tables + i, tables + i);
         if (err) return err;
     }
 
@@ -140,61 +253,116 @@ error_t zebra_neritic_clone_tables (
 // Deep clones
 //
 
-void *zebra_clone_array (anemone_mempool_t *pool, const void *in, int64_t num_elements, int64_t element_size)
+
+error_t zebra_deep_clone_table (anemone_mempool_t *pool, const zebra_table_t *in_table, zebra_table_t *out_table)
 {
-    int64_t bytes = num_elements * element_size;
-    void *out = anemone_mempool_alloc (pool, bytes);
-    if (in) memcpy (out, in, bytes);
-    return out;
-}
+    int64_t row_count = in_table->row_count;
+    int64_t row_capacity = in_table->row_capacity;
+    zebra_table_tag_t tag = in_table->tag;
 
-error_t zebra_deep_clone_table (anemone_mempool_t *pool, const zebra_table_t *table, zebra_table_t *into)
-{
-    error_t err;
+    out_table->row_count = row_count;
+    out_table->row_capacity = row_capacity;
+    out_table->tag = tag;
 
-    int64_t row_count = table->row_count;
-    int64_t row_capacity = table->row_capacity;
-    into->row_count = row_count;
-    into->row_capacity = row_capacity;
+    switch (tag) {
+        case ZEBRA_TABLE_BINARY: {
+            out_table->of._binary.bytes = ZEBRA_CLONE_ARRAY (pool, in_table->of._binary.bytes, row_capacity);
+            return ZEBRA_SUCCESS;
+        }
 
-    int64_t count = table->column_count;
-    into->column_count = count;
-    into->columns = anemone_mempool_alloc (pool, count * sizeof (zebra_column_t));
-    for (int64_t c = 0; c < count; ++c) {
-        zebra_data_t *table_data = &table->columns[c].data;
-        zebra_data_t *into_data = &into->columns[c].data;
+        case ZEBRA_TABLE_ARRAY: {
+            out_table->of._array.values = anemone_mempool_alloc (pool, sizeof (zebra_column_t) );
+            return zebra_deep_clone_column (pool, row_capacity, in_table->of._array.values, out_table->of._array.values); 
+        }
 
-        zebra_type_t type = table->columns[c].type;
-        into->columns[c].type = type;
+        case ZEBRA_TABLE_MAP: {
+            out_table->of._map.keys = anemone_mempool_alloc (pool, sizeof (zebra_column_t) );
+            out_table->of._map.values = anemone_mempool_alloc (pool, sizeof (zebra_column_t) );
 
-        switch (type) {
-            case ZEBRA_BYTE:
-                into_data->b = ZEBRA_CLONE_ARRAY (pool, table_data->b, row_capacity );
-                break;
-            case ZEBRA_INT:
-                into_data->i = ZEBRA_CLONE_ARRAY (pool, table_data->i, row_capacity );
-                break;
-            case ZEBRA_DOUBLE:
-                into_data->d = ZEBRA_CLONE_ARRAY (pool, table_data->d, row_capacity );
-                break;
-            case ZEBRA_ARRAY:
-                into_data->a.n = ZEBRA_CLONE_ARRAY (pool, table_data->a.n, row_capacity + 1);
-                err = zebra_deep_clone_table (pool, &table_data->a.table, &into_data->a.table);
-                if (err) return err;
-                break;
+            error_t err = zebra_deep_clone_column (pool, row_capacity, in_table->of._map.keys, out_table->of._map.keys); 
+            if (err) return err;
+            return zebra_deep_clone_column (pool, row_capacity, in_table->of._map.values, out_table->of._map.values); 
+        }
 
-            default:
-                return ZEBRA_INVALID_COLUMN_TYPE;
-
+        default: {
+            return ZEBRA_INVALID_TABLE_TYPE;
         }
     }
+}
 
+ANEMONE_STATIC
+ANEMONE_INLINE
+error_t zebra_deep_clone_named_column (
+    anemone_mempool_t *pool
+  , int64_t capacity
+  , const zebra_named_columns_t *in
+  , zebra_named_columns_t *out
+  )
+{
+    int64_t c = in->count;
+
+    out->count = c;
+    out->columns = anemone_mempool_alloc (pool, c * sizeof (zebra_column_t) );
+    out->name_lengths = in->name_lengths;
+    out->name_lengths_sum = in->name_lengths_sum;
+    out->name_bytes = ZEBRA_CLONE_ARRAY (pool, in->name_bytes, in->name_lengths_sum);
+
+    for (int64_t i = 0; i != c; ++i) {
+        error_t err = zebra_deep_clone_column (pool, capacity, in->columns + i, out->columns + i);
+        if (err) return err;
+    }
     return ZEBRA_SUCCESS;
 }
 
+error_t zebra_deep_clone_column (
+    anemone_mempool_t *pool
+  , int64_t capacity
+  , const zebra_column_t *in_column
+  , zebra_column_t *out_column
+  )
+{
+
+    zebra_column_tag_t tag = in_column->tag;
+    out_column->tag = tag;
+    const zebra_column_variant_t *in_data = &in_column->of;
+    zebra_column_variant_t *out_data = &out_column->of;
+
+    switch (tag) {
+        case ZEBRA_COLUMN_UNIT:
+            return ZEBRA_SUCCESS;
+
+        case ZEBRA_COLUMN_INT:
+            out_data->_int.values = ZEBRA_CLONE_ARRAY (pool, in_data->_int.values, capacity);
+            return ZEBRA_SUCCESS;
+
+        case ZEBRA_COLUMN_DOUBLE:
+            out_data->_double.values = ZEBRA_CLONE_ARRAY (pool, in_data->_double.values, capacity);
+            return ZEBRA_SUCCESS;
+
+        case ZEBRA_COLUMN_ENUM:
+            out_data->_enum.tags = ZEBRA_CLONE_ARRAY (pool, in_data->_enum.tags, capacity);
+            return zebra_deep_clone_named_column (pool, capacity, &in_data->_enum.columns, &out_data->_enum.columns);
+
+        case ZEBRA_COLUMN_STRUCT:
+            return zebra_deep_clone_named_column (pool, capacity, &in_data->_struct.columns, &out_data->_struct.columns);
+
+        case ZEBRA_COLUMN_NESTED:
+            out_data->_nested.indices = ZEBRA_CLONE_ARRAY (pool, in_data->_nested.indices, capacity);
+            return zebra_deep_clone_table (pool, &in_data->_nested.table, &out_data->_nested.table);
+
+        case ZEBRA_COLUMN_REVERSED:
+            out_data->_reversed.column = anemone_mempool_alloc (pool, sizeof (zebra_column_t) );
+            return zebra_deep_clone_column (pool, capacity, in_data->_reversed.column, out_data->_reversed.column);
+
+        default:
+            return ZEBRA_INVALID_COLUMN_TYPE;
+    }
+}
+
+
 error_t zebra_deep_clone_attribute (anemone_mempool_t *pool, const zebra_attribute_t *attribute, zebra_attribute_t *into)
 {
-    int64_t capacity = attribute->table.row_capacity;
+    int64_t capacity = zebra_grow_array_capacity (attribute->table.row_count);
     into->times = ZEBRA_CLONE_ARRAY (pool, attribute->times, capacity );
     into->factset_ids = ZEBRA_CLONE_ARRAY (pool, attribute->factset_ids, capacity );
     into->tombstones = ZEBRA_CLONE_ARRAY (pool, attribute->tombstones, capacity );
@@ -203,8 +371,6 @@ error_t zebra_deep_clone_attribute (anemone_mempool_t *pool, const zebra_attribu
 
 error_t zebra_deep_clone_entity (anemone_mempool_t *pool, const zebra_entity_t *entity, zebra_entity_t *into)
 {
-    error_t err;
-
     into->hash            = entity->hash;
     into->id_length       = entity->id_length;
     into->id_bytes        = ZEBRA_CLONE_ARRAY (pool, entity->id_bytes, entity->id_length );
@@ -212,7 +378,7 @@ error_t zebra_deep_clone_entity (anemone_mempool_t *pool, const zebra_entity_t *
 
     into->attributes = anemone_mempool_alloc (pool, sizeof (zebra_attribute_t) * into->attribute_count );
     for (int64_t c = 0; c < into->attribute_count; ++c) {
-        err = zebra_deep_clone_attribute (pool, entity->attributes + c, into->attributes + c);
+        error_t err = zebra_deep_clone_attribute (pool, entity->attributes + c, into->attributes + c);
         if (err) return err;
     }
 
