@@ -1,5 +1,7 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE PatternSynonyms #-}
 module Zebra.Foreign.Util (
@@ -17,6 +19,9 @@ module Zebra.Foreign.Util (
   , pokeVector
   , peekMany
   , pokeMany
+
+  , packedBytesOfVector
+  , vectorOfPackedBytes
   ) where
 
 import           Anemone.Foreign.Data (CError)
@@ -26,6 +31,8 @@ import           Control.Monad.IO.Class (MonadIO(..))
 
 import           Data.ByteString.Internal (ByteString(..))
 import qualified Data.ByteString.Internal as B
+import qualified Data.ByteString          as B
+import qualified X.Data.ByteString.Unsafe as B
 import qualified Data.Vector.Generic as Generic
 import qualified Data.Vector.Storable as Storable
 import           Data.Word (Word8)
@@ -171,3 +178,20 @@ pokeMany ptr0 xs pokeOne =
     in
       pokeOne ptr x
 {-# INLINE pokeMany #-}
+
+
+-- Move this out of here later
+-- For zebra_named_columns
+packedBytesOfVector :: (Generic.Vector v ByteString, Generic.Vector v Int64) => v ByteString -> (Storable.Vector Int64, Int64, ByteString)
+packedBytesOfVector strings
+ = let lens  = Storable.convert $ Generic.map (fromIntegral . B.length) strings
+       bytes = B.concat $ Generic.toList strings
+       total = fromIntegral $ B.length bytes
+   in (lens, total, bytes)
+{-# INLINE packedBytesOfVector #-}
+
+vectorOfPackedBytes :: Generic.Vector v ByteString => ByteString -> Storable.Vector Int64 -> v ByteString
+vectorOfPackedBytes bytes lens
+ = B.unsafeSplits id bytes (Storable.map fromIntegral lens)
+{-# INLINE vectorOfPackedBytes #-}
+
