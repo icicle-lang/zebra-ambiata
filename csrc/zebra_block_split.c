@@ -150,7 +150,7 @@ error_t zebra_table_pop_rows (
         }
 
         default: {
-            return ZEBRA_INVALID_COLUMN_TYPE;
+            return ZEBRA_INVALID_TABLE_TYPE;
         }
     }
 }

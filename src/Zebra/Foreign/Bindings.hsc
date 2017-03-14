@@ -25,38 +25,67 @@ import Anemone.Foreign.Mempool (Mempool(..))
 
 #znum ZEBRA_SUCCESS
 #znum ZEBRA_INVALID_COLUMN_TYPE
+#znum ZEBRA_INVALID_TABLE_TYPE
 #znum ZEBRA_ATTRIBUTE_NOT_FOUND
 #znum ZEBRA_NOT_ENOUGH_BYTES
 #znum ZEBRA_NOT_ENOUGH_ROWS
-#znum ZEBRA_MERGE_DIFFERENT_COLUMN_TYPES
 #znum ZEBRA_MERGE_NO_ENTITIES
+#znum ZEBRA_APPEND_DIFFERENT_COLUMN_TYPES
 #znum ZEBRA_APPEND_DIFFERENT_ATTRIBUTE_COUNT
 
-#integral_t enum zebra_type
-#znum ZEBRA_BYTE
-#znum ZEBRA_INT
-#znum ZEBRA_DOUBLE
-#znum ZEBRA_ARRAY
+#integral_t enum zebra_table_tag
+#znum ZEBRA_TABLE_BINARY
+#znum ZEBRA_TABLE_ARRAY
+#znum ZEBRA_TABLE_MAP
 
-#starttype struct zebra_table
-#field row_count , Int64
-#field row_capacity , Int64
-#field column_count , Int64
-#field columns , Ptr <zebra_column>
+#starttype union zebra_table_variant
+#field _binary.bytes    , Ptr Word8
+#field _array.values    , Ptr <zebra_column>
+#field _map.keys        , Ptr <zebra_column>
+#field _map.values      , Ptr <zebra_column>
 #stoptype
 
-#starttype union zebra_data
-#field b , Ptr Word8
-#field i , Ptr Int64
-#field d , Ptr Double
-#field a.n , Ptr Int64
-#field a.table , <zebra_table>
+#starttype struct zebra_table
+#field row_count        , Int64
+#field row_capacity     , Int64
+#field tag              , <zebra_table_tag>
+#field of               , <zebra_table_variant>
+#stoptype
+
+
+#starttype struct zebra_named_columns
+#field count            , Int64
+#field columns          , Ptr <zebra_column>
+#field name_lengths     , Ptr Int64
+#field name_lengths_sum , Int64
+#field name_bytes       , Ptr Word8
+#stoptype
+
+#integral_t enum zebra_column_tag
+#znum ZEBRA_COLUMN_UNIT
+#znum ZEBRA_COLUMN_INT
+#znum ZEBRA_COLUMN_DOUBLE
+#znum ZEBRA_COLUMN_ENUM
+#znum ZEBRA_COLUMN_STRUCT
+#znum ZEBRA_COLUMN_NESTED
+#znum ZEBRA_COLUMN_REVERSED
+
+#starttype union zebra_column_variant
+#field _int.values      , Ptr Int64
+#field _double.values   , Ptr Double
+#field _enum.tags       , Ptr Int64
+#field _enum.columns    , <zebra_named_columns>
+#field _struct.columns  , <zebra_named_columns>
+#field _nested.indices  , Ptr Int64
+#field _nested.table    , <zebra_table>
+#field _reversed.column , Ptr <zebra_column>
 #stoptype
 
 #starttype struct zebra_column
-#field type , <zebra_type>
-#field data , <zebra_data>
+#field tag              , <zebra_column_tag>
+#field of               , <zebra_column_variant>
 #stoptype
+
 
 #starttype struct zebra_attribute
 #field times , Ptr Int64

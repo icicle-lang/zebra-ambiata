@@ -70,7 +70,7 @@ ANEMONE_STATIC
 ANEMONE_INLINE
 error_t zebra_append_named_columns (anemone_mempool_t *pool, const zebra_named_columns_t *in, int64_t in_ix, zebra_named_columns_t *out_into, int64_t out_ix, int64_t out_count)
 {
-    if (in->count != out_into->count) return ZEBRA_MERGE_DIFFERENT_COLUMN_TYPES;
+    if (in->count != out_into->count) return ZEBRA_APPEND_DIFFERENT_COLUMN_TYPES;
 
     int64_t c = in->count;
     for (int64_t i = 0; i != c; ++i) {
@@ -83,7 +83,7 @@ error_t zebra_append_named_columns (anemone_mempool_t *pool, const zebra_named_c
 ANEMONE_STATIC
 error_t zebra_append_column (anemone_mempool_t *pool, const zebra_column_t *in, int64_t in_ix, zebra_column_t *out_into, int64_t out_ix, int64_t out_count)
 {
-    if (in->tag != out_into->tag) return ZEBRA_MERGE_DIFFERENT_COLUMN_TYPES;
+    if (in->tag != out_into->tag) return ZEBRA_APPEND_DIFFERENT_COLUMN_TYPES;
 
     switch (in->tag) {
         case ZEBRA_COLUMN_UNIT:
@@ -125,7 +125,7 @@ error_t zebra_append_table (anemone_mempool_t *pool, const zebra_table_t *in, in
 
 error_t zebra_append_table_nogrow (anemone_mempool_t *pool, const zebra_table_t *in, int64_t in_ix, zebra_table_t *out_into, int64_t count)
 {
-    if (in->tag != out_into->tag) return ZEBRA_MERGE_DIFFERENT_COLUMN_TYPES;
+    if (in->tag != out_into->tag) return ZEBRA_APPEND_DIFFERENT_COLUMN_TYPES;
     if (count == 0) return ZEBRA_SUCCESS;
 
     // The table has already been grown, so the row_count includes the values we're about to append
@@ -147,7 +147,7 @@ error_t zebra_append_table_nogrow (anemone_mempool_t *pool, const zebra_table_t 
         }
 
         default: {
-            return ZEBRA_INVALID_COLUMN_TYPE;
+            return ZEBRA_INVALID_TABLE_TYPE;
         }
     }
 }

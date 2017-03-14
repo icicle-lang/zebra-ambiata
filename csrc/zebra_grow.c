@@ -96,7 +96,7 @@ error_t zebra_grow_table (anemone_mempool_t *pool, zebra_table_t *table, int64_t
             return zebra_grow_column (pool, variant->_map.values, row_count, new_row_capacity);
 
         default:
-            return ZEBRA_INVALID_COLUMN_TYPE;
+            return ZEBRA_INVALID_TABLE_TYPE;
     }
 }
 

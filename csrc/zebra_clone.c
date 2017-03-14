@@ -44,7 +44,7 @@ error_t zebra_agile_clone_table (anemone_mempool_t *pool, const zebra_table_t *t
         }
 
         default: {
-            return ZEBRA_INVALID_COLUMN_TYPE;
+            return ZEBRA_INVALID_TABLE_TYPE;
         }
     }
 }
@@ -158,7 +158,7 @@ error_t zebra_neritic_clone_table (
         }
 
         default: {
-            return ZEBRA_INVALID_COLUMN_TYPE;
+            return ZEBRA_INVALID_TABLE_TYPE;
         }
     }
 }
@@ -285,7 +285,7 @@ error_t zebra_deep_clone_table (anemone_mempool_t *pool, const zebra_table_t *in
         }
 
         default: {
-            return ZEBRA_INVALID_COLUMN_TYPE;
+            return ZEBRA_INVALID_TABLE_TYPE;
         }
     }
 }

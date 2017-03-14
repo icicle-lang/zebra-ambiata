@@ -51,11 +51,12 @@ data ForeignError =
     ForeignInvalidAttributeCount !Int !Int
   | ForeignTableNotEnoughCapacity
   | ForeignInvalidColumnType
+  | ForeignInvalidTableType
   | ForeignAttributeNotFound
   | ForeignNotEnoughBytes
   | ForeignNotEnoughRows
-  | ForeignMergeDifferentColumnTypes
   | ForeignMergeNoEntities
+  | ForeignAppendDifferentColumnTypes
   | ForeignAppendDifferentAttributeCount
   | ForeignUnknownError !CError
     deriving (Eq, Ord, Show)
@@ -66,16 +67,18 @@ fromCError = \case
     Right ()
   C'ZEBRA_INVALID_COLUMN_TYPE ->
     Left ForeignInvalidColumnType
+  C'ZEBRA_INVALID_TABLE_TYPE ->
+    Left ForeignInvalidTableType
   C'ZEBRA_ATTRIBUTE_NOT_FOUND ->
     Left ForeignAttributeNotFound
   C'ZEBRA_NOT_ENOUGH_BYTES ->
     Left ForeignNotEnoughBytes
   C'ZEBRA_NOT_ENOUGH_ROWS ->
     Left ForeignNotEnoughRows
-  C'ZEBRA_MERGE_DIFFERENT_COLUMN_TYPES ->
-    Left ForeignMergeDifferentColumnTypes
   C'ZEBRA_MERGE_NO_ENTITIES ->
     Left ForeignMergeNoEntities
+  C'ZEBRA_APPEND_DIFFERENT_COLUMN_TYPES ->
+    Left ForeignAppendDifferentColumnTypes
   C'ZEBRA_APPEND_DIFFERENT_ATTRIBUTE_COUNT ->
     Left ForeignAppendDifferentAttributeCount
   err ->
