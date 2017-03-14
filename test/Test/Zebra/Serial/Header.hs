@@ -15,21 +15,13 @@ import           System.IO (IO)
 import           Test.Zebra.Jack
 import           Test.Zebra.Util
 
-import           Zebra.Data.Encoding
 import           Zebra.Data.Core (ZebraVersion(..))
 import           Zebra.Serial.Header
 
 
-prop_roundtrip_header_v1 :: Property
-prop_roundtrip_header_v1 =
-  gamble (mapOf jAttributeName jEncoding) $
-    trippingSerial
-      (bHeader ZebraV1 . fmap recoverSchemaOfEncoding)
-      (fmap encodingOfSchema <$> getHeader)
-
 prop_roundtrip_header_v2 :: Property
 prop_roundtrip_header_v2 =
-  gamble (mapOf jAttributeName jSchema) $
+  gamble (mapOf jAttributeName jTableSchema) $
     trippingSerial
       (bHeader ZebraV2)
       getHeader

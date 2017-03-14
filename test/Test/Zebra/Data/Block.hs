@@ -82,15 +82,10 @@ trippingBoth to from x =
     counterexample "" .
     counterexample "Roundtrip failed." .
     counterexample "" .
-    counterexample "=== Original ===" .
-    counterexample (ppShow original) .
-    counterexample "" .
     counterexample "=== Intermediate ===" .
     counterexample (ppShow intermediate) .
-    counterexample "" .
-    counterexample "=== Roundtrip ===" .
-    counterexample (ppShow roundtrip) $
-      property (roundtrip == original)
+    counterexample "" $
+      property (original === roundtrip)
 
 return []
 tests :: IO Bool

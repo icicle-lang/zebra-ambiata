@@ -11,7 +11,7 @@ module Zebra.Merge.Block
   ( mergeFiles
   ) where
 
-import Zebra.Data
+import Zebra.Data.Block
 import Zebra.Merge.Base
 import Zebra.Merge.Entity
 
@@ -28,9 +28,9 @@ import P
 -- We need to be very careful that streams are not stored inside vectors,
 -- because then they would be stored as a thunk and good codegen / fusion is impossible.
 mergeFiles :: Monad m
-  => (c -> Stream.Stream m (Block a))
+  => (c -> Stream.Stream m Block)
   -> Boxed.Vector c
-  -> Stream.Stream m (Either (MergeError a) (EntityMerged a))
+  -> Stream.Stream m (Either MergeError EntityMerged)
 mergeFiles f_map fs
  = Stream.map entityMergedOfEntityValues
  $ treeFold mergeEntityValues Stream.empty getEntities

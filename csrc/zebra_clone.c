@@ -61,9 +61,9 @@ error_t zebra_agile_clone_named_column (
 
     out->count = c;
     out->columns = anemone_mempool_alloc (pool, c * sizeof (zebra_column_t) );
-    out->name_lengths = in->name_lengths;
+    out->name_lengths = ZEBRA_CLONE_ARRAY (pool, in->name_lengths, c);
     out->name_lengths_sum = in->name_lengths_sum;
-    out->name_bytes = in->name_bytes;
+    out->name_bytes = ZEBRA_CLONE_ARRAY (pool, in->name_bytes, in->name_lengths_sum);
 
     for (int64_t i = 0; i != c; ++i) {
         error_t err = zebra_agile_clone_column (pool, in->columns + i, out->columns + i);
@@ -175,7 +175,7 @@ error_t zebra_neritic_clone_named_column (
 
     out->count = c;
     out->columns = anemone_mempool_alloc (pool, c * sizeof (zebra_column_t) );
-    out->name_lengths = in->name_lengths;
+    out->name_lengths = ZEBRA_CLONE_ARRAY (pool, in->name_lengths, c);
     out->name_lengths_sum = in->name_lengths_sum;
     out->name_bytes = ZEBRA_CLONE_ARRAY (pool, in->name_bytes, in->name_lengths_sum);
 
@@ -183,6 +183,7 @@ error_t zebra_neritic_clone_named_column (
         error_t err = zebra_neritic_clone_column (pool, in->columns + i, out->columns + i);
         if (err) return err;
     }
+
     return ZEBRA_SUCCESS;
 }
 
@@ -303,7 +304,7 @@ error_t zebra_deep_clone_named_column (
 
     out->count = c;
     out->columns = anemone_mempool_alloc (pool, c * sizeof (zebra_column_t) );
-    out->name_lengths = in->name_lengths;
+    out->name_lengths = ZEBRA_CLONE_ARRAY (pool, in->name_lengths, c);
     out->name_lengths_sum = in->name_lengths_sum;
     out->name_bytes = ZEBRA_CLONE_ARRAY (pool, in->name_bytes, in->name_lengths_sum);
 
@@ -347,7 +348,7 @@ error_t zebra_deep_clone_column (
             return zebra_deep_clone_named_column (pool, capacity, &in_data->_struct.columns, &out_data->_struct.columns);
 
         case ZEBRA_COLUMN_NESTED:
-            out_data->_nested.indices = ZEBRA_CLONE_ARRAY (pool, in_data->_nested.indices, capacity);
+            out_data->_nested.indices = ZEBRA_CLONE_ARRAY (pool, in_data->_nested.indices, capacity + 1);
             return zebra_deep_clone_table (pool, &in_data->_nested.table, &out_data->_nested.table);
 
         case ZEBRA_COLUMN_REVERSED:

@@ -21,6 +21,7 @@ import           P
 
 import qualified X.Data.Vector as Boxed
 import qualified X.Data.Vector.Storable as Storable
+import           X.Data.Vector.Unboxed (Unbox)
 import qualified X.Data.Vector.Unboxed as Unboxed
 
 import           Zebra.Data.Block.Block
@@ -234,8 +235,12 @@ takeEntityKey column = do
       Left $ BlockExpectedEntityFields (fmap (fmap Table.schemaColumn) fields)
 
 takeAttributeRowCount :: Column -> Either BlockTableError (Unboxed.Vector Int64)
-takeAttributeRowCount =
-  fmap (Unboxed.convert . fst) . first BlockTableSchemaError . Table.takeNested
+takeAttributeRowCount column = do
+  (k_counts, table) <- first BlockTableSchemaError $ Table.takeNested column
+  (_k, v) <- first BlockTableSchemaError $ Table.takeMap table
+  (v_counts, _) <- first BlockTableSchemaError $ Table.takeNested v
+  first BlockIndexLengthMismatch . fmap (Unboxed.convert . fmap Storable.sum) $
+    Segment.reify k_counts v_counts
 
 fromDenseRowCounts :: Unboxed.Vector Int64 -> Unboxed.Vector BlockAttribute
 fromDenseRowCounts =
@@ -294,21 +299,34 @@ fromTag = \case
   _ ->
     Tombstone
 
-takeTombstone :: Column -> Either BlockTableError (Unboxed.Vector Tombstone)
+takeTombstone :: Column -> Either BlockTableError (Storable.Vector Int64, Unboxed.Vector Tombstone)
 takeTombstone nested = do
-  array <- fmap snd . first BlockTableSchemaError $ Table.takeNested nested
+  (counts, array) <- first BlockTableSchemaError $ Table.takeNested nested
   enum <- first BlockTableSchemaError $ Table.takeArray array
   column <- fmap fst . first BlockTableSchemaError $ Table.takeEnum enum
-  pure . Unboxed.convert $ Storable.map fromTag column
+  pure (counts, Unboxed.convert $ Storable.map fromTag column)
+
+replicates :: Unbox a => Storable.Vector Int64 -> Unboxed.Vector a -> Unboxed.Vector a
+replicates ns xs =
+  Unboxed.concatMap (uncurry Unboxed.replicate) $
+  Unboxed.zip (Unboxed.map fromIntegral $ Storable.convert ns) xs
 
 takeIndex :: Column -> Either BlockTableError (Boxed.Vector (Unboxed.Vector BlockIndex))
 takeIndex column = do
-  (ns, table) <- first BlockTableSchemaError $ Table.takeNested column
+  (k_counts, table) <- first BlockTableSchemaError $ Table.takeNested column
   (k, v) <- first BlockTableSchemaError $ Table.takeMap table
-  indices <- Unboxed.zipWith (uncurry BlockIndex) <$> takeIndexKey k <*> takeTombstone v
+
+  (v_counts, tombstones) <- takeTombstone v
+  ikey <- replicates v_counts <$> takeIndexKey k
+
+  let
+    indices =
+      Unboxed.zipWith (uncurry BlockIndex) ikey tombstones
+
+  kv_counts <- first BlockIndexLengthMismatch . fmap (fmap Storable.sum) $ Segment.reify k_counts v_counts
 
   first BlockIndexLengthMismatch $
-    Segment.reify ns indices
+    Segment.reify kv_counts indices
 
 takeIndices :: Column -> Either BlockTableError (Unboxed.Vector BlockIndex)
 takeIndices column = do

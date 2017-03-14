@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -106,11 +107,11 @@ unsafeSlice =
 {-# INLINE unsafeSlice #-}
 
 -- | Reify nested segments in to a vector of segments.
-reify :: Segment a => Storable.Vector Int64 -> a -> Either SegmentError (Boxed.Vector a)
+reify :: (Segment a, Generic.Vector v Int64) => v Int64 -> a -> Either SegmentError (Boxed.Vector a)
 reify ns xs =
   let
     !n_sum =
-      fromIntegral (Storable.sum ns)
+      fromIntegral (Generic.sum ns)
 
     !n_xs =
       length xs
@@ -124,15 +125,15 @@ reify ns xs =
 data IdxOff =
   IdxOff !Int !Int
 
-unsafeReify :: Segment a => Storable.Vector Int64 -> a -> Boxed.Vector a
+unsafeReify :: (Segment a, Generic.Vector v Int64) => v Int64 -> a -> Boxed.Vector a
 unsafeReify ns xs =
   let
     loop (IdxOff idx off) =
       let
         !len =
-          fromIntegral (Storable.unsafeIndex ns idx)
+          fromIntegral (Generic.unsafeIndex ns idx)
       in
         Just (unsafeSlice off len xs, IdxOff (idx + 1) (off + len))
   in
-    Generic.unfoldrN (Storable.length ns) loop (IdxOff 0 0)
+    Generic.unfoldrN (Generic.length ns) loop (IdxOff 0 0)
 {-# INLINE unsafeReify #-}

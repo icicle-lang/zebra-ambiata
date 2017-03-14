@@ -2,6 +2,7 @@
 module Test.Zebra.Util (
     liftE
   , trippingIO
+  , trippingByIO
   , trippingSerial
   , runGetEither
   , runGetEitherConsumeAll
@@ -50,7 +51,22 @@ trippingIO ::
   (b -> EitherT y IO a) ->
   a ->
   IO Property
-trippingIO to from a = do
+trippingIO =
+  trippingByIO id
+
+trippingByIO ::
+  Eq c =>
+  Eq x =>
+  Eq y =>
+  Show c =>
+  Show x =>
+  Show y =>
+  (a -> c) ->
+  (a -> EitherT x IO b) ->
+  (b -> EitherT y IO a) ->
+  a ->
+  IO Property
+trippingByIO select to from a = do
   roundtrip <-
     runEitherT $ do
       b <- firstT EncodeError $ to a
@@ -62,14 +78,14 @@ trippingIO to from a = do
 
     comparison =
       "=== Original ===" <>
-      "\n" <> ppShow original <>
+      "\n" <> ppShow (fmap select original) <>
       "\n" <>
       "\n=== Roundtrip ===" <>
-      "\n" <> ppShow roundtrip
+      "\n" <> ppShow (fmap select roundtrip)
 
     diff = do
-      o <- Pretty.reify original
-      r <- Pretty.reify roundtrip
+      o <- Pretty.reify (fmap select original)
+      r <- Pretty.reify (fmap select roundtrip)
       pure $
         "=== - Original / + Roundtrip ===" <>
         "\n" <> renderDiffs o r
@@ -79,7 +95,7 @@ trippingIO to from a = do
     counterexample "Roundtrip failed." .
     counterexample "" .
     counterexample (fromMaybe comparison diff) $
-      property (roundtrip == original)
+      property (fmap select roundtrip == fmap select original)
 
 trippingSerial :: (Eq a, Show a) => (a -> Builder) -> Get a -> a -> Property
 trippingSerial build get =

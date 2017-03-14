@@ -40,14 +40,13 @@ import           Zebra.Data.Core (ZebraVersion(..))
 import qualified Zebra.Data.Core as Core
 import qualified Zebra.Data.Entity as Entity
 import qualified Zebra.Data.Fact as Fact
--- import qualified Zebra.Foreign.Block as Foreign
--- import qualified Zebra.Foreign.Entity as Foreign
--- import qualified Zebra.Merge.BlockC as Merge
+import qualified Zebra.Foreign.Block as Foreign
+import qualified Zebra.Foreign.Entity as Foreign
+import qualified Zebra.Merge.BlockC as Merge
 import qualified Zebra.Merge.Puller.File as Merge
 import           Zebra.Schema (TableSchema)
 import qualified Zebra.Serial as Serial
 import qualified Zebra.Serial.File as Serial
-import qualified Zebra.Table as Table
 
 
 main :: IO ()
@@ -169,13 +168,7 @@ pOutputBlockFacts =
 
 pOutputFormat :: Parser ZebraVersion
 pOutputFormat =
-  fromMaybe ZebraV2 <$> optional (pOutputV1 <|> pOutputV2)
-
-pOutputV1 :: Parser ZebraVersion
-pOutputV1 =
-  Options.flag' ZebraV1 $
-    Options.long "output-v1" <>
-    Options.help "Force merge to output files in version 1 format."
+  fromMaybe ZebraV2 <$> optional pOutputV2
 
 pOutputV2 :: Parser ZebraVersion
 pOutputV2 =
@@ -190,7 +183,7 @@ run c = case c of
     when (catHeader opts) $ lift $ do
       IO.putStrLn "Header information:"
       IO.putStrLn (ppShow header)
-    catBlocks opts (Boxed.fromList $ Map.keys header) blocks
+    catBlocks opts blocks
 
   FileFacts f -> orDie id $ do
     (header,blocks) <- firstTshow $ Serial.fileOfFilePath f
@@ -200,76 +193,72 @@ run c = case c of
     IO.putStrLn "Merge: No files"
     Exit.exitFailure
 
-  MergeFiles _ _ _ -> do
-    IO.putStrLn "Merge: DISABLED"
-    Exit.exitFailure
+  MergeFiles ins@(in1:_) outputPath opts -> orDie id $ do
+    (puller, pullids) <- firstTshow $ Merge.blockChainPuller (Boxed.fromList ins)
+    let withPusher = case outputPath of
+          Just out -> withOutputPusher opts in1 out
+          Nothing  -> withPrintPusher
 
---  MergeFiles ins@(in1:_) outputPath opts -> orDie id $ do
---    (puller, pullids) <- firstTshow $ Merge.blockChainPuller (Boxed.fromList ins)
---    let withPusher = case outputPath of
---          Just out -> withOutputPusher opts in1 out
---          Nothing  -> withPrintPusher
---
---    withPusher $ \pusher -> do
---    let runOpts = Merge.MergeOptions (firstTshow . puller) pusher $ truncate (mergeGcGigabytes opts * 1024 * 1024 * 1024)
---    joinErrors (Text.pack . show) id $ Merge.mergeBlocks runOpts pullids
+    withPusher $ \pusher -> do
+    let runOpts = Merge.MergeOptions (firstTshow . puller) pusher $ truncate (mergeGcGigabytes opts * 1024 * 1024 * 1024)
+    joinErrors (Text.pack . show) id $ Merge.mergeBlocks runOpts pullids
 
---withPrintPusher :: ((Foreign.CEntity -> EitherT Text IO ()) -> EitherT Text IO ()) -> EitherT Text IO ()
---withPrintPusher runWith = do
---  let pusher e = do
---      eid     <- firstTshow $ Foreign.peekEntityId $ Foreign.unCEntity e
---      lift $ IO.putStrLn (show eid)
---
---  runWith pusher
+withPrintPusher :: ((Foreign.CEntity -> EitherT Text IO ()) -> EitherT Text IO ()) -> EitherT Text IO ()
+withPrintPusher runWith = do
+  let pusher e = do
+      eid     <- firstTshow $ Foreign.peekEntityId $ Foreign.unCEntity e
+      lift $ IO.putStrLn (show eid)
 
---withOutputPusher ::
---  MergeOptions ->
---  FilePath ->
---  FilePath ->
---  ((Foreign.CEntity -> EitherT Text IO ()) -> EitherT Text IO ()) ->
---  EitherT Text IO ()
---withOutputPusher opts inputfile outputfile runWith = do
---  (fileheader,_) <- firstTshow $ Serial.fileOfFilePath inputfile
---  outfd <- lift $ IO.openBinaryFile outputfile IO.WriteMode
---  lift $ Builder.hPutBuilder outfd $ Serial.bHeader (mergeOutputFormat opts) fileheader
---
---  pool0    <- lift $ Mempool.create
---
---  let freePool poolRef = do
---      pool <- lift $ IORef.readIORef poolRef
---      lift $ Mempool.free pool
---
---  blockRef <- lift $ IORef.newIORef Nothing
---  bracketEitherT' (lift $ IORef.newIORef pool0) freePool $ \poolRef -> do
---
---  let checkPurge block = do
---      is <- Foreign.peekBlockRowCount (Foreign.unCBlock block)
---      return (is >= mergeOutputBlockFacts opts)
---
---  let doPurge block = do
---      pool <- lift $ IORef.readIORef poolRef
---      outblock <- firstTshow $ Foreign.blockOfForeign block
---      lift $ Builder.hPutBuilder outfd (Serial.bBlock outblock)
---      pool' <- lift $ Mempool.create
---      lift $ IORef.writeIORef poolRef pool'
---      lift $ Mempool.free pool
---      lift $ IORef.writeIORef blockRef Nothing
---
---  let pusher e = do
---      pool    <- lift $ IORef.readIORef poolRef
---      block   <- lift $ IORef.readIORef blockRef
---      block'  <- firstTshow $ Foreign.appendEntityToBlock pool e block
---      ifpurge <- checkPurge block'
---      if ifpurge
---        then doPurge block'
---        else lift $ IORef.writeIORef blockRef (Just block')
---
---  runWith pusher
---
---  mblock  <- lift $ IORef.readIORef blockRef
---  -- This final purge will actually create a new Mempool, but it will be freed by the bracket anyway
---  maybe (return ()) doPurge mblock
---  lift $ IO.hClose outfd
+  runWith pusher
+
+withOutputPusher ::
+  MergeOptions ->
+  FilePath ->
+  FilePath ->
+  ((Foreign.CEntity -> EitherT Text IO ()) -> EitherT Text IO ()) ->
+  EitherT Text IO ()
+withOutputPusher opts inputfile outputfile runWith = do
+  (fileheader,_) <- firstTshow $ Serial.fileOfFilePath inputfile
+  outfd <- lift $ IO.openBinaryFile outputfile IO.WriteMode
+  lift $ Builder.hPutBuilder outfd $ Serial.bHeader (mergeOutputFormat opts) fileheader
+
+  pool0    <- lift $ Mempool.create
+
+  let freePool poolRef = do
+      pool <- lift $ IORef.readIORef poolRef
+      lift $ Mempool.free pool
+
+  blockRef <- lift $ IORef.newIORef Nothing
+  bracketEitherT' (lift $ IORef.newIORef pool0) freePool $ \poolRef -> do
+
+  let checkPurge block = do
+      is <- Foreign.peekBlockRowCount (Foreign.unCBlock block)
+      return (is >= mergeOutputBlockFacts opts)
+
+  let doPurge block = do
+      pool <- lift $ IORef.readIORef poolRef
+      outblock <- firstTshow $ Foreign.blockOfForeign block
+      lift $ Builder.hPutBuilder outfd (Serial.bBlock outblock)
+      pool' <- lift $ Mempool.create
+      lift $ IORef.writeIORef poolRef pool'
+      lift $ Mempool.free pool
+      lift $ IORef.writeIORef blockRef Nothing
+
+  let pusher e = do
+      pool    <- lift $ IORef.readIORef poolRef
+      block   <- lift $ IORef.readIORef blockRef
+      block'  <- firstTshow $ Foreign.appendEntityToBlock pool e block
+      ifpurge <- checkPurge block'
+      if ifpurge
+        then doPurge block'
+        else lift $ IORef.writeIORef blockRef (Just block')
+
+  runWith pusher
+
+  mblock  <- lift $ IORef.readIORef blockRef
+  -- This final purge will actually create a new Mempool, but it will be freed by the bracket anyway
+  maybe (return ()) doPurge mblock
+  lift $ IO.hClose outfd
 
 catFacts :: [TableSchema] -> Stream.Stream (EitherT Serial.DecodeError IO) Block.Block -> EitherT Text IO ()
 catFacts schemas0 blocks =
@@ -293,8 +282,8 @@ catFacts schemas0 blocks =
   in
     Stream.mapM_ go blocks'
 
-catBlocks :: CatOptions -> Boxed.Vector Core.AttributeName -> Stream.Stream (EitherT Serial.DecodeError IO) Block.Block -> EitherT Text IO ()
-catBlocks opts attrs blocks = do
+catBlocks :: CatOptions -> Stream.Stream (EitherT Serial.DecodeError IO) Block.Block -> EitherT Text IO ()
+catBlocks opts blocks = do
   let int0 = 0 :: Int
   totalBlocks <- lift $ IORef.newIORef int0
   totalEnts <- lift $ IORef.newIORef int0

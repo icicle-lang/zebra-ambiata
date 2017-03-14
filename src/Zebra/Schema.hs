@@ -34,6 +34,9 @@ module Zebra.Schema (
 
   , encode
   , decode
+
+  , foreignOfTags
+  , tagsOfForeign
   ) where
 
 import           Data.Aeson ((.=), (.:))
@@ -58,6 +61,7 @@ import           Foreign.Storable (Storable)
 import           P hiding (bool, some)
 
 import qualified X.Data.Vector as Boxed
+import qualified X.Data.Vector.Storable as Storable
 import           X.Text.Show (gshowsPrec)
 
 import           Zebra.Data.Vector.Cons (Cons)
@@ -375,3 +379,15 @@ ppSchemaField (Field (FieldName name) schema) =
     , "column" .=
         ppColumnSchema schema
     ]
+
+------------------------------------------------------------------------
+
+foreignOfTags :: Storable.Vector Tag -> Storable.Vector Int64
+foreignOfTags =
+  Storable.unsafeCast
+{-# INLINE foreignOfTags #-}
+
+tagsOfForeign :: Storable.Vector Int64 -> Storable.Vector Tag
+tagsOfForeign =
+  Storable.unsafeCast
+{-# INLINE tagsOfForeign #-}

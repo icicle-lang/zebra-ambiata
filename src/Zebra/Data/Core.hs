@@ -59,8 +59,9 @@ import           X.Text.Show (gshowsPrec)
 
 
 data ZebraVersion =
-    ZebraV1 -- ^ Encoding is stored in header instead of schema.
-  | ZebraV2 -- ^ Schema is stored in header.
+--  ZebraV0 -- x Initial version.
+--  ZebraV1 -- x Store factset-id instead of priority, this flips sort order.
+    ZebraV2 -- ^ Schema is stored in header, instead of encoding.
     deriving (Eq, Ord, Show, Generic, Typeable)
 
 newtype EntityId =

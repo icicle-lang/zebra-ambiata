@@ -62,7 +62,7 @@ fromForeignError = \case
   err ->
     UnexpectedError $ show err
 
-foreignEntitiesOfBlock' :: Block a -> EitherT ForeignError IO (Boxed.Vector (Entity ()))
+foreignEntitiesOfBlock' :: Block -> EitherT ForeignError IO (Boxed.Vector Entity)
 foreignEntitiesOfBlock' block =
   EitherT .
   bracket Mempool.create Mempool.free $ \pool ->
@@ -71,7 +71,7 @@ foreignEntitiesOfBlock' block =
     fentities <- foreignEntitiesOfBlock pool fblock
     traverse entityOfForeign fentities
 
-foreignBlockOfEntities' :: Boxed.Vector (Entity a) -> EitherT ForeignError IO (Maybe (Block ()))
+foreignBlockOfEntities' :: Boxed.Vector Entity -> EitherT ForeignError IO (Maybe Block)
 foreignBlockOfEntities' entities =
   EitherT .
   bracket Mempool.create Mempool.free $ \pool ->
@@ -93,7 +93,7 @@ check header v0 ev1 =
     Right v1 ->
       v0 === v1
 
-check_entities_of_block :: Show a => (Block a -> EitherT CommonError IO (Boxed.Vector (Entity ()))) -> Block a -> Property
+check_entities_of_block :: (Block -> EitherT CommonError IO (Boxed.Vector Entity)) -> Block -> Property
 check_entities_of_block convert block =
   testIO . withSegv (ppShow block) $ do
     entities <- runEitherT $ convert block
@@ -107,7 +107,7 @@ check_entities_of_block convert block =
       recordCount =
         Unboxed.length $ blockIndices block
 
-      sumAttribute :: (Attribute a -> Int) -> Boxed.Vector (Entity a) -> Int
+      sumAttribute :: (Attribute -> Int) -> Boxed.Vector Entity -> Int
       sumAttribute f es =
         Boxed.sum $
         Boxed.map (Boxed.sum . Boxed.map f . Entity.entityAttributes) es
@@ -126,23 +126,32 @@ check_entities_of_block convert block =
           fmap (sumAttribute $ Storable.length . attributeTombstone) entities
 
       , check "# of table rows" recordCount $
-          fmap (sumAttribute $ Table.rowCount . attributeTable) entities
+          fmap (sumAttribute $ Table.length . attributeTable) entities
       ]
 
+fromEither :: Show x => EitherT x IO Property -> IO Property
+fromEither =
+  fmap (either (\x -> counterexample (ppShow x) False) id) . runEitherT
 
-check_block_of_entities :: Show a => Block a -> Property
+check_block_of_entities :: Block -> Property
 check_block_of_entities block =
-  testIO . withSegv (ppShow block) $ do
-    block' <- runEitherT ( foreignEntitiesOfBlock' block >>= foreignBlockOfEntities')
+  testIO . withSegv (ppShow block) . fromEither $ do
+    entities <- firstT (\x -> (Boxed.empty, x)) $ foreignEntitiesOfBlock' block
+    block' <- firstT (\x -> (entities, x)) $ foreignBlockOfEntities' entities
+
     let expect
           | Boxed.null (blockEntities block)
           = Nothing
           | otherwise
-          = Just (() <$ block)
-    return (Right expect === block')
+          = Just block
+
+    return .
+      counterexample "=== Entities ===" .
+      counterexample (ppShow entities) $
+      expect === block'
 
 
-check_c_vs_haskell :: Show a => Block a -> Property
+check_c_vs_haskell :: Block -> Property
 check_c_vs_haskell block =
   testIO . withSegv (ppShow block) $ do
     entities1 <-
@@ -152,7 +161,6 @@ check_c_vs_haskell block =
 
     let
       entities2 =
-        fmap (fmap (() <$)) .
         first fromEntityError $
         entitiesOfBlock block
 
@@ -174,7 +182,7 @@ prop_compare_entities_of_block_yolo =
 prop_haskell_entities_of_block :: Property
 prop_haskell_entities_of_block =
   gamble jBlock . check_entities_of_block $
-    firstT fromEntityError . hoistEither . fmap (fmap (() <$)) . entitiesOfBlock
+    firstT fromEntityError . hoistEither . entitiesOfBlock
 
 prop_c_entities_of_block :: Property
 prop_c_entities_of_block =
@@ -189,7 +197,7 @@ prop_roundtrip_blocks :: Property
 prop_roundtrip_blocks =
   gamble jYoloBlock $ \block ->
   testIO . bracket Mempool.create Mempool.free $ \pool ->
-    trippingIO (liftE . foreignOfBlock pool) blockOfForeign (() <$ block)
+    trippingIO (liftE . foreignOfBlock pool) blockOfForeign block
 
 return []
 tests :: IO Bool

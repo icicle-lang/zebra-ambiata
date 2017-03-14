@@ -26,10 +26,6 @@ module Test.Zebra.Jack (
   , jFacts
   , jFact
 
-  -- * Zebra.Data.Encoding
-  , jEncoding
-  , jColumnEncoding
-
   -- * Zebra.Schema
   , jField
   , jFieldName
@@ -53,6 +49,7 @@ module Test.Zebra.Jack (
   , jMaybe'
   ) where
 
+import           Data.ByteString (ByteString)
 import qualified Data.ByteString as ByteString
 import qualified Data.ByteString.Char8 as Char8
 import qualified Data.List as List
@@ -79,7 +76,6 @@ import           Text.Show.Pretty (ppShow)
 
 import           Zebra.Data.Block
 import           Zebra.Data.Core
-import           Zebra.Data.Encoding
 import           Zebra.Data.Entity
 import           Zebra.Data.Fact
 
@@ -93,20 +89,6 @@ import qualified Zebra.Table as Table
 import           Zebra.Value (Collection, Value)
 import qualified Zebra.Value as Value
 
-
-jEncoding :: Jack Encoding
-jEncoding =
-  Encoding <$> listOf jColumnEncoding
-
-jColumnEncoding :: Jack ColumnEncoding
-jColumnEncoding =
-  oneOfRec [
-      pure IntEncoding
-    , pure ByteEncoding
-    , pure DoubleEncoding
-    ] [
-      ArrayEncoding <$> jEncoding
-    ]
 
 ------------------------------------------------------------------------
 
@@ -419,12 +401,14 @@ renderTagLookupError tag variants =
 jEntityId :: Jack EntityId
 jEntityId =
   let
+    mkEnt :: ByteString -> Int -> EntityId
     mkEnt name num =
       EntityId $ name <> Char8.pack (printf "-%03d" num)
   in
-    mkEnt
-      <$> elements southpark
-      <*> chooseInt (0, 999)
+    oneOf [
+        mkEnt <$> elements southpark <*> pure 0
+      , mkEnt <$> elements southpark <*> chooseInt (0, 999)
+      ]
 
 jEntityHashId :: Jack (EntityHash, EntityId)
 jEntityHashId =

@@ -77,6 +77,7 @@ error_t zebra_append_named_columns (anemone_mempool_t *pool, const zebra_named_c
         error_t err = zebra_append_column (pool, in->columns + i, in_ix, out_into->columns + i, out_ix, out_count);
         if (err) return err;
     }
+
     return ZEBRA_SUCCESS;
 }
 
@@ -134,6 +135,7 @@ error_t zebra_append_table_nogrow (anemone_mempool_t *pool, const zebra_table_t 
     switch (in->tag) {
         case ZEBRA_TABLE_BINARY: {
             memcpy (out_into->of._binary.bytes + out_ix, in->of._binary.bytes + in_ix, count * sizeof(char));
+            return ZEBRA_SUCCESS;
         }
 
         case ZEBRA_TABLE_ARRAY: {

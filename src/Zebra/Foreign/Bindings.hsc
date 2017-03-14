@@ -152,6 +152,11 @@ import Anemone.Foreign.Mempool (Mempool(..))
 #field entities , Ptr <zebra_entity>
 #stoptype
 
+#ccall_unsafe zebra_deep_clone_table , Mempool -> Ptr <zebra_table> -> Ptr <zebra_table> -> IO CError
+#ccall_unsafe zebra_neritic_clone_table , Mempool -> Ptr <zebra_table> -> Ptr <zebra_table> -> IO CError
+#ccall_unsafe zebra_agile_clone_table , Mempool -> Ptr <zebra_table> -> Ptr <zebra_table> -> IO CError
+#ccall_unsafe zebra_grow_table , Mempool -> Ptr <zebra_table> -> Int64 -> IO CError
+
 #ccall_unsafe zebra_append_block_entity , Mempool -> Ptr <zebra_entity> -> Ptr (Ptr <zebra_block>) -> IO CError
 #ccall_unsafe zebra_entities_of_block , Mempool -> Ptr <zebra_block> -> Ptr Int64 -> Ptr (Ptr <zebra_entity>) -> IO CError
 #ccall_unsafe zebra_merge_entity_pair , Mempool -> Ptr <zebra_entity> -> Ptr <zebra_entity> -> Ptr <zebra_entity> -> IO CError
@@ -162,4 +167,3 @@ import Anemone.Foreign.Mempool (Mempool(..))
 
 #ccall_unsafe zebra_unpack_array , Ptr CChar -> Int64 -> Int64 -> Int64 -> Ptr Int64 -> IO CError
 #ccall_unsafe zebra_pack_array , Ptr (Ptr Word8) -> Ptr Int64 -> Int64 -> IO CError
-

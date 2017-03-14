@@ -16,7 +16,7 @@ import qualified Zebra.Schema as Schema
 
 prop_roundtrip_schema :: Property
 prop_roundtrip_schema =
-  gamble jSchema $
+  gamble jTableSchema $
     tripping Schema.encode Schema.decode
 
 return []

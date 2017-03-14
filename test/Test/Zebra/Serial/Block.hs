@@ -21,17 +21,18 @@ import           Text.Show.Pretty (ppShow)
 
 import           Zebra.Data.Block
 import           Zebra.Data.Core
+import qualified Zebra.Schema as Schema
 import           Zebra.Serial.Block
 import qualified Zebra.Table as Table
 
 
 prop_roundtrip_from_facts :: Property
 prop_roundtrip_from_facts =
-  gamble jSchema $ \schema ->
+  gamble jColumnSchema $ \schema ->
   gamble (listOf $ jFact schema (AttributeId 0)) $ \facts ->
     let
       schemas =
-        Boxed.singleton schema
+        Boxed.singleton $ Schema.Array schema
 
       block =
         either (Savage.error . show) id .
@@ -63,13 +64,12 @@ prop_roundtrip_indices =
 
 prop_roundtrip_tables :: Property
 prop_roundtrip_tables =
-  gamble (Boxed.fromList <$> listOf jAnyTable) $ \xs ->
+  gamble (Boxed.fromList <$> listOf jSizedTable) $ \xs ->
     trippingSerial bTables (getTables $ fmap Table.schema xs) xs
 
 prop_roundtrip_table :: Property
 prop_roundtrip_table =
-  gamble jSchema $ \schema ->
-  gamble (jTable 1 schema) $ \table ->
+  gamble (jTable 1) $ \table ->
     trippingSerial bTable (getTable 1 $ Table.schema table) table
 
 return []
