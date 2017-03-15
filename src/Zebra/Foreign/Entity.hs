@@ -34,7 +34,7 @@ import           Zebra.Data.Entity
 import           Zebra.Foreign.Bindings
 import           Zebra.Foreign.Table
 import           Zebra.Foreign.Util
-import           Zebra.Table
+import qualified Zebra.Table as Table
 
 
 newtype CEntity =
@@ -43,17 +43,17 @@ newtype CEntity =
     }
   deriving Storable
 
-entityOfForeign :: MonadIO m => CEntity -> EitherT ForeignError m (Entity ())
+entityOfForeign :: MonadIO m => CEntity -> EitherT ForeignError m Entity
 entityOfForeign (CEntity c_entity) =
   peekEntity c_entity
 
-foreignOfEntity :: MonadIO m => Mempool -> Entity a -> m CEntity
+foreignOfEntity :: MonadIO m => Mempool -> Entity -> m CEntity
 foreignOfEntity pool entity = do
   c_entity <- liftIO $ alloc pool
   pokeEntity pool c_entity entity
   pure $ CEntity c_entity
 
-peekEntity :: MonadIO m => Ptr C'zebra_entity -> EitherT ForeignError m (Entity ())
+peekEntity :: MonadIO m => Ptr C'zebra_entity -> EitherT ForeignError m Entity
 peekEntity c_entity = do
   hash <- peekEntityHash c_entity
   eid <- peekEntityId c_entity
@@ -63,7 +63,7 @@ peekEntity c_entity = do
 
   fmap (Entity hash eid) $ peekMany c_attributes n_attrs peekAttribute
 
-pokeEntity :: MonadIO m => Mempool -> Ptr C'zebra_entity -> Entity a -> m ()
+pokeEntity :: MonadIO m => Mempool -> Ptr C'zebra_entity -> Entity -> m ()
 pokeEntity pool c_entity (Entity hash eid attributes) = do
   let
     eid_len =
@@ -96,16 +96,17 @@ peekEntityId c_entity = do
 
 
 
-peekAttribute :: MonadIO m => Ptr C'zebra_attribute -> EitherT ForeignError m (Attribute ())
+peekAttribute :: MonadIO m => Ptr C'zebra_attribute -> EitherT ForeignError m Attribute
 peekAttribute c_attribute = do
-  table@(Table _ n_rows _) <- peekTable (p'zebra_attribute'table c_attribute)
+  table <- peekTable (p'zebra_attribute'table c_attribute)
+  let n_rows = Table.length table
   times <- fmap timesOfForeign . peekVector n_rows $ p'zebra_attribute'times c_attribute
   factset_ids <- fmap factsetIdsOfForeign . peekVector n_rows $ p'zebra_attribute'factset_ids c_attribute
   tombstones <- fmap tombstonesOfForeign . peekVector n_rows $ p'zebra_attribute'tombstones c_attribute
 
   pure $ Attribute times factset_ids tombstones table
 
-pokeAttribute :: MonadIO m => Mempool -> Ptr C'zebra_attribute -> Attribute a -> m ()
+pokeAttribute :: MonadIO m => Mempool -> Ptr C'zebra_attribute -> Attribute -> m ()
 pokeAttribute pool c_attribute (Attribute times factset_ids tombstones table) = do
   pokeVector pool (p'zebra_attribute'times c_attribute) $ foreignOfTimes times
   pokeVector pool (p'zebra_attribute'factset_ids c_attribute) $ foreignOfFactsetIds factset_ids

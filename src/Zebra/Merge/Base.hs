@@ -32,7 +32,8 @@ import qualified X.Data.Vector as Boxed
 import qualified X.Data.Vector.Unboxed as Unboxed
 import qualified X.Text.Show as Show
 
-import           Zebra.Data
+import           Zebra.Data.Block
+import           Zebra.Data.Core
 import           Zebra.Table (Table, TableError)
 
 
@@ -49,14 +50,14 @@ derivingUnbox "BlockDataId"
   [| \(BlockDataId x) -> x |]
   [| \x -> BlockDataId x |]
 
-data MergeError a =
-    MergeTableError !(TableError a)
+data MergeError =
+    MergeTableError !TableError
   | MergeAttributeWithoutTable !AttributeId
   | MergeBlockDataWithoutTable !AttributeId !BlockDataId
-    deriving (Eq, Show, Functor, Foldable, Traversable)
+    deriving (Eq, Show)
 
 -- This could certainly be nicer
-renderMergeError :: Show a => MergeError a -> Text
+renderMergeError :: MergeError -> Text
 renderMergeError = \case
   MergeTableError r ->
     -- Wouldn't hurt to add a renderTableError
@@ -69,17 +70,17 @@ renderMergeError = \case
 
 -- | EntityMerged is an entity with all its values, after merging has finished.
 -- These are the real values of the entity.
-data EntityMerged a
+data EntityMerged
  = EntityMerged
  { emEntityHash :: !EntityHash
  , emEntityId   :: !EntityId
  , emIndices    :: !(Boxed.Vector (Unboxed.Vector BlockIndex))
    -- ^ Indices for current entity, indexed by attribute id
- , emTables    :: !(Boxed.Vector (Table a))
+ , emTables    :: !(Boxed.Vector Table)
    -- ^ Table values for current entity, indexed by attribute id
  }
- deriving (Eq, Generic, Functor, Foldable, Traversable)
-instance Show a => Show (EntityMerged a) where
+ deriving (Eq, Generic)
+instance Show EntityMerged where
  showsPrec = Show.gshowsPrec
 
 
@@ -103,16 +104,16 @@ instance Show a => Show (EntityMerged a) where
 --      (each BlockDataId in evIndices refers to a BlockDataId in evTables)
 --      (the converse isn't true: there can be Tables that have no indices)
 --
-data EntityValues a
+data EntityValues
  = EntityValues
  { evEntity    :: !BlockEntity
  , evIndices   :: !(Boxed.Vector (Unboxed.Vector (BlockIndex, BlockDataId)))
    -- ^ Indices for current entity, indexed by attribute id
- , evTables   :: !(Boxed.Vector (Map.Map BlockDataId (Table a)))
+ , evTables   :: !(Boxed.Vector (Map.Map BlockDataId Table))
    -- ^ Table values for current entity, indexed by attribute id
  }
- deriving (Eq, Generic, Functor, Foldable, Traversable)
-instance Show a => Show (EntityValues a) where
+ deriving (Eq, Generic)
+instance Show EntityValues where
  showsPrec = Show.gshowsPrec
 
 

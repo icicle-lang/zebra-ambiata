@@ -1,20 +1,27 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE DeriveFoldable #-}
+{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# OPTIONS_GHC -funbox-strict-fields #-}
 module Zebra.Schema (
-    Schema(..)
+    TableSchema(..)
+  , ColumnSchema(..)
   , Field(..)
   , FieldName(..)
   , Variant(..)
   , VariantName(..)
-  , lookupVariant
-  , focusVariant
+  , Tag(..)
 
-  , unit
+  , hasVariant
+  , forVariant
+  , lookupVariant
+
   , bool
   , false
   , true
@@ -27,6 +34,9 @@ module Zebra.Schema (
 
   , encode
   , decode
+
+  , foreignOfTags
+  , tagsOfForeign
   ) where
 
 import           Data.Aeson ((.=), (.:))
@@ -40,15 +50,22 @@ import           Data.ByteString (ByteString)
 import qualified Data.ByteString.Lazy as Lazy
 import qualified Data.HashMap.Lazy as HashMap
 import qualified Data.List as List
-import qualified Data.Text as T
+import           Data.String (IsString(..))
+import qualified Data.Text as Text
 import           Data.Typeable (Typeable)
 
 import           GHC.Generics (Generic)
 
+import           Foreign.Storable (Storable)
+
 import           P hiding (bool, some)
 
 import qualified X.Data.Vector as Boxed
+import qualified X.Data.Vector.Storable as Storable
 import           X.Text.Show (gshowsPrec)
+
+import           Zebra.Data.Vector.Cons (Cons)
+import qualified Zebra.Data.Vector.Cons as Cons
 
 
 newtype FieldName =
@@ -57,16 +74,20 @@ newtype FieldName =
     } deriving (Eq, Ord, Generic, Typeable)
 
 instance Show FieldName where
-  showsPrec =
-    gshowsPrec
+  showsPrec p =
+    showsPrec p . unFieldName
 
-data Field =
+instance IsString FieldName where
+  fromString =
+    FieldName . Text.pack
+
+data Field a =
   Field {
       fieldName :: !FieldName
-    , fieldSchema :: !Schema
-    } deriving (Eq, Ord, Generic, Typeable)
+    , field :: !a
+    } deriving (Eq, Ord, Generic, Typeable, Functor, Foldable, Traversable)
 
-instance Show Field where
+instance Show a => Show (Field a) where
   showsPrec =
     gshowsPrec
 
@@ -76,26 +97,46 @@ newtype VariantName =
     } deriving (Eq, Ord, Generic, Typeable)
 
 instance Show VariantName where
-  showsPrec =
-    gshowsPrec
+  showsPrec p =
+    showsPrec p . unVariantName
 
-data Variant =
+instance IsString VariantName where
+  fromString =
+    VariantName . Text.pack
+
+data Variant a =
   Variant {
       variantName :: !VariantName
-    , variantSchema :: !Schema
-    } deriving (Eq, Ord, Generic, Typeable)
+    , variant :: !a
+    } deriving (Eq, Ord, Generic, Typeable, Functor, Foldable, Traversable)
 
-instance Show Variant where
+instance Show a => Show (Variant a) where
   showsPrec =
     gshowsPrec
 
-data Schema =
-    Byte
+newtype Tag =
+  Tag {
+      unTag :: Int64
+    } deriving (Eq, Ord, Generic, Typeable, Storable, Num, Enum, Real, Integral)
+
+instance Show Tag where
+  showsPrec =
+    gshowsPrec
+
+data TableSchema =
+    Binary
+  | Array !ColumnSchema
+  | Map !ColumnSchema !ColumnSchema
+    deriving (Eq, Ord, Show, Generic, Typeable)
+
+data ColumnSchema =
+    Unit
   | Int
   | Double
-  | Enum !Variant !(Boxed.Vector Variant)
-  | Struct !(Boxed.Vector Field)
-  | Array !Schema
+  | Enum !(Cons Boxed.Vector (Variant ColumnSchema))
+  | Struct !(Cons Boxed.Vector (Field ColumnSchema))
+  | Nested !TableSchema
+  | Reversed !ColumnSchema
     deriving (Eq, Ord, Show, Generic, Typeable)
 
 data SchemaDecodeError =
@@ -105,65 +146,64 @@ data SchemaDecodeError =
 renderSchemaDecodeError :: SchemaDecodeError -> Text
 renderSchemaDecodeError = \case
   SchemaDecodeError path msg ->
-    T.pack . Aeson.formatError path $ T.unpack msg
-
-lookupVariant :: Int -> Variant -> Boxed.Vector Variant -> Maybe Variant
-lookupVariant ix variant0 variants =
-  case ix of
-    0 ->
-      Just variant0
-    _ ->
-      variants Boxed.!? (ix - 1)
-
-focusVariant :: Int -> Variant -> Boxed.Vector Variant -> Maybe (Boxed.Vector Variant, Variant, Boxed.Vector Variant)
-focusVariant i x0 xs =
-  case i of
-    0 ->
-      Just (Boxed.empty, x0, xs)
-    _ -> do
-      let !j = i - 1
-      x <- xs Boxed.!? j
-      pure (Boxed.cons x0 $ Boxed.take j xs, x, Boxed.drop (j + 1) xs)
+    Text.pack . Aeson.formatError path $ Text.unpack msg
 
 ------------------------------------------------------------------------
 
-unit :: Schema
-unit =
-  Struct Boxed.empty
+hasVariant :: Tag -> Cons Boxed.Vector (Variant a) -> Bool
+hasVariant tag xs =
+  fromIntegral tag < Cons.length xs
+{-# INLINE hasVariant #-}
 
-false :: Variant
+forVariant ::
+  Monad m =>
+  Cons Boxed.Vector (Variant a) ->
+  (Tag -> VariantName -> a -> m b) ->
+  m (Cons Boxed.Vector (Variant b))
+forVariant xs f =
+  Cons.iforM xs $ \i (Variant name x) ->
+    Variant name <$> f (fromIntegral i) name x
+
+lookupVariant :: Tag -> Cons Boxed.Vector (Variant a) -> Maybe (Variant a)
+lookupVariant tag xs =
+  Cons.index (fromIntegral tag) xs
+{-# INLINE lookupVariant #-}
+
+------------------------------------------------------------------------
+
+false :: Variant ColumnSchema
 false =
-  Variant (VariantName "false") unit
+  Variant (VariantName "false") Unit
 
-true :: Variant
+true :: Variant ColumnSchema
 true =
-  Variant (VariantName "true") unit
+  Variant (VariantName "true") Unit
 
-bool :: Schema
+bool :: ColumnSchema
 bool =
-  Enum false $ Boxed.singleton true
+  Enum $ Cons.from2 false true
 
-none :: Variant
+none :: Variant ColumnSchema
 none =
-  Variant (VariantName "none") unit
+  Variant (VariantName "none") Unit
 
-some :: Schema -> Variant
+some :: ColumnSchema -> Variant ColumnSchema
 some =
   Variant (VariantName "some")
 
-option :: Schema -> Schema
+option :: ColumnSchema -> ColumnSchema
 option =
-  Enum none . Boxed.singleton . some
+  Enum . Cons.from2 none . some
 
 ------------------------------------------------------------------------
 
-encode :: Schema -> ByteString
+encode :: TableSchema -> ByteString
 encode =
   Lazy.toStrict . Aeson.encodePretty' aesonConfig . ppTableSchema
 
-decode :: ByteString -> Either SchemaDecodeError Schema
+decode :: ByteString -> Either SchemaDecodeError TableSchema
 decode =
-  first (uncurry SchemaDecodeError . second T.pack) .
+  first (uncurry SchemaDecodeError . second Text.pack) .
     Aeson.eitherDecodeStrictWith Aeson.value' (Aeson.iparse pTableSchema)
 
 aesonConfig :: Aeson.Config
@@ -177,76 +217,77 @@ aesonConfig =
         Aeson.Generic
     }
 
-pTableSchema :: Aeson.Value -> Aeson.Parser Schema
+pTableSchema :: Aeson.Value -> Aeson.Parser TableSchema
 pTableSchema =
   pEnum $ \tag ->
     case tag of
       "binary" ->
-        const $ pure Byte
+        const $ pure Binary
       "array" ->
         Aeson.withObject "object containing array schema" $ \o ->
-          withKey "element" o pColumnSchema
+          Array
+            <$> withKey "element" o pColumnSchema
       "map" ->
-        Aeson.withObject "object containing map schema" $ \o -> do
-          key <- withKey "key" o pColumnSchema
-          value <- withKey "value" o pColumnSchema
-          pure . Struct $ Boxed.fromList [
-              Field (FieldName "key") key
-            , Field (FieldName "value") value
-            ]
+        Aeson.withObject "object containing map schema" $ \o ->
+          Map
+            <$> withKey "key" o pColumnSchema
+            <*> withKey "value" o pColumnSchema
       _ ->
-        const . fail $ "unknown table schema type: " <> T.unpack tag
+        const . fail $ "unknown table schema type: " <> Text.unpack tag
 
-pColumnSchema :: Aeson.Value -> Aeson.Parser Schema
+pColumnSchema :: Aeson.Value -> Aeson.Parser ColumnSchema
 pColumnSchema =
   pEnum $ \tag ->
     case tag of
       "unit" ->
-        const . pure $ Struct Boxed.empty
-      "byte" ->
-        const $ pure Byte
+        const $ pure Unit
       "int" ->
         const $ pure Int
       "double" ->
         const $ pure Double
       "enum" ->
         Aeson.withObject "object containing enum column schema" $ \o ->
-          uncurry Enum <$> withKey "variants" o pSchemaEnumVariants
+          Enum <$> withKey "variants" o pSchemaEnumVariants
       "struct" ->
         Aeson.withObject "object containing struct column schema" $ \o ->
           Struct <$> withKey "fields" o pSchemaStructFields
       "nested" ->
         Aeson.withObject "object containing nested column schema" $ \o ->
-          Array <$> withKey "table" o pTableSchema
+          Nested <$> withKey "table" o pTableSchema
       "reversed" ->
         Aeson.withObject "object containing reversed column schema" $ \o ->
-          withKey "column" o pColumnSchema
+          Reversed <$> withKey "column" o pColumnSchema
       _ ->
-        const . fail $ "unknown column schema type: " <> T.unpack tag
+        const . fail $ "unknown column schema type: " <> Text.unpack tag
 
-pSchemaEnumVariants :: Aeson.Value -> Aeson.Parser (Variant, Boxed.Vector Variant)
+pSchemaEnumVariants :: Aeson.Value -> Aeson.Parser (Cons Boxed.Vector (Variant ColumnSchema))
 pSchemaEnumVariants =
   Aeson.withArray "non-empty array of enum variants" $ \xs -> do
     vs0 <- kmapM pSchemaVariant xs
     case Boxed.uncons vs0 of
       Nothing ->
         fail "enums must have at least one variant"
-      Just vs ->
-        pure vs
+      Just (v0, vs) ->
+        pure $ Cons.from v0 vs
 
-pSchemaVariant :: Aeson.Value -> Aeson.Parser Variant
+pSchemaVariant :: Aeson.Value -> Aeson.Parser (Variant ColumnSchema)
 pSchemaVariant =
   Aeson.withObject "object containing an enum variant" $ \o ->
     Variant
       <$> withKey "name" o (pure . VariantName)
       <*> withKey "column" o pColumnSchema
 
-pSchemaStructFields :: Aeson.Value -> Aeson.Parser (Boxed.Vector Field)
+pSchemaStructFields :: Aeson.Value -> Aeson.Parser (Cons Boxed.Vector (Field ColumnSchema))
 pSchemaStructFields =
   Aeson.withArray "array of struct fields" $ \xs -> do
-    kmapM pSchemaField xs
+    fs0 <- kmapM pSchemaField xs
+    case Boxed.uncons fs0 of
+      Nothing ->
+        fail "structs must have at least one field"
+      Just (f0, fs) ->
+        pure $ Cons.from f0 fs
 
-pSchemaField :: Aeson.Value -> Aeson.Parser Field
+pSchemaField :: Aeson.Value -> Aeson.Parser (Field ColumnSchema)
 pSchemaField =
   Aeson.withObject "object containing a struct field" $ \o ->
     Field
@@ -267,7 +308,7 @@ pEnum f =
         fail $
           "expected an object containing an enum (i.e. a single member)," <>
           "\nbut found an object with more than one member:" <>
-          "\n  " <> List.intercalate ", " (fmap (T.unpack . fst) kvs)
+          "\n  " <> List.intercalate ", " (fmap (Text.unpack . fst) kvs)
 
 withKey :: Aeson.FromJSON a => Text -> Aeson.Object ->  (a -> Aeson.Parser b) -> Aeson.Parser b
 withKey key o p = do
@@ -279,34 +320,37 @@ kmapM f =
   Boxed.imapM $ \i x ->
     f x <?> Aeson.Index i
 
-ppTableSchema :: Schema -> Aeson.Value
+ppTableSchema :: TableSchema -> Aeson.Value
 ppTableSchema = \case
-  Byte ->
+  Binary ->
     ppEnum "binary" ppUnit
-  e ->
+  Array e ->
     ppEnum "array" $
       Aeson.object ["element" .= ppColumnSchema e]
+  Map k v ->
+    ppEnum "map" $
+      Aeson.object ["key" .= ppColumnSchema k, "value" .= ppColumnSchema v]
 
-ppColumnSchema :: Schema -> Aeson.Value
+ppColumnSchema :: ColumnSchema -> Aeson.Value
 ppColumnSchema = \case
-  Byte ->
-    ppEnum "byte" ppUnit
+  Unit ->
+    ppEnum "unit" ppUnit
   Int ->
     ppEnum "int" ppUnit
   Double ->
     ppEnum "double" ppUnit
-  Enum v0 vs ->
+  Enum vs ->
     ppEnum "enum" $
-      Aeson.object ["variants" .= Aeson.Array (fmap ppSchemaVariant $ Boxed.cons v0 vs)]
+      Aeson.object ["variants" .= Aeson.Array (Cons.toVector $ fmap ppSchemaVariant vs)]
   Struct fs ->
-    if Boxed.null fs then
-      ppEnum "unit" ppUnit
-    else
-      ppEnum "struct" $
-        Aeson.object ["fields" .= Aeson.Array (fmap ppSchemaField fs)]
-  Array s ->
+    ppEnum "struct" $
+      Aeson.object ["fields" .= Aeson.Array (Cons.toVector $ fmap ppSchemaField fs)]
+  Nested s ->
     ppEnum "nested" $
       Aeson.object ["table" .= ppTableSchema s]
+  Reversed s ->
+    ppEnum "reversed" $
+      Aeson.object ["column" .= ppColumnSchema s]
 
 ppEnum :: Text -> Aeson.Value -> Aeson.Value
 ppEnum tag value =
@@ -318,7 +362,7 @@ ppUnit :: Aeson.Value
 ppUnit =
   Aeson.Object HashMap.empty
 
-ppSchemaVariant :: Variant -> Aeson.Value
+ppSchemaVariant :: Variant ColumnSchema -> Aeson.Value
 ppSchemaVariant (Variant (VariantName name) schema) =
   Aeson.object [
       "name" .=
@@ -327,7 +371,7 @@ ppSchemaVariant (Variant (VariantName name) schema) =
         ppColumnSchema schema
     ]
 
-ppSchemaField :: Field -> Aeson.Value
+ppSchemaField :: Field ColumnSchema -> Aeson.Value
 ppSchemaField (Field (FieldName name) schema) =
   Aeson.object [
       "name" .=
@@ -335,3 +379,15 @@ ppSchemaField (Field (FieldName name) schema) =
     , "column" .=
         ppColumnSchema schema
     ]
+
+------------------------------------------------------------------------
+
+foreignOfTags :: Storable.Vector Tag -> Storable.Vector Int64
+foreignOfTags =
+  Storable.unsafeCast
+{-# INLINE foreignOfTags #-}
+
+tagsOfForeign :: Storable.Vector Int64 -> Storable.Vector Tag
+tagsOfForeign =
+  Storable.unsafeCast
+{-# INLINE tagsOfForeign #-}

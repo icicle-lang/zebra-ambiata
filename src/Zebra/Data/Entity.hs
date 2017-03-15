@@ -20,25 +20,25 @@ import           Zebra.Data.Core
 import           Zebra.Table
 
 
-data Attribute a =
+data Attribute =
   Attribute {
       attributeTime :: !(Storable.Vector Time)
     , attributeFactsetId :: !(Storable.Vector FactsetId)
     , attributeTombstone :: !(Storable.Vector Tombstone)
-    , attributeTable :: !(Table a)
-    } deriving (Eq, Ord, Generic, Typeable, Functor, Foldable, Traversable)
+    , attributeTable :: !Table
+    } deriving (Eq, Ord, Generic, Typeable)
 
-data Entity a =
+data Entity =
   Entity {
       entityHash :: !EntityHash
     , entityId :: !EntityId
-    , entityAttributes :: !(Boxed.Vector (Attribute a))
-    } deriving (Eq, Ord, Generic, Typeable, Functor, Foldable, Traversable)
+    , entityAttributes :: !(Boxed.Vector Attribute)
+    } deriving (Eq, Ord, Generic, Typeable)
 
-instance Show a => Show (Attribute a) where
+instance Show Attribute where
   showsPrec =
     gshowsPrec
 
-instance Show a => Show (Entity a) where
+instance Show Entity where
   showsPrec =
     gshowsPrec

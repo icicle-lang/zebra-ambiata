@@ -1,9 +1,8 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 module Test.Zebra.Jack (
-  -- * Zebra.Data.Block
+  -- -- * Zebra.Data.Block
     jBlock
-
   , jYoloBlock
   , jBlockEntity
   , jBlockAttribute
@@ -19,7 +18,7 @@ module Test.Zebra.Jack (
   , jDay
   , jFactsetId
 
-  -- * Zebra.Data.Entity
+  -- -- * Zebra.Data.Entity
   , jEntity
   , jAttribute
 
@@ -27,35 +26,38 @@ module Test.Zebra.Jack (
   , jFacts
   , jFact
 
-  -- * Zebra.Data.Encoding
-  , jEncoding
-  , jColumnEncoding
-
   -- * Zebra.Schema
-  , jSchema
   , jField
   , jFieldName
   , jVariant
   , jVariantName
 
-  -- * Zebra.Value
-  , jValue
+  -- * Zebra.Schema
+  , jTableSchema
+  , jColumnSchema
 
   -- * Zebra.Table
-  , jAnyTable
+  , jSizedTable
   , jTable
+  , jColumn
+
+  -- * Zebra.Value
+  , jSizedCollection
+  , jCollection
+  , jValue
 
   , jMaybe'
   ) where
 
-import qualified Data.ByteString as B
+import           Data.ByteString (ByteString)
+import qualified Data.ByteString as ByteString
 import qualified Data.ByteString.Char8 as Char8
 import qualified Data.List as List
+import qualified Data.Map as Map
 import           Data.Thyme.Calendar (Year, Day, YearMonthDay(..), gregorianValid)
 import qualified Data.Vector as Boxed
 import qualified Data.Vector.Storable as Storable
 import qualified Data.Vector.Unboxed as Unboxed
-import           Data.Word (Word8)
 
 import           Disorder.Corpus (muppets, southpark, boats, weather)
 import           Disorder.Jack (Jack, mkJack, reshrink, shrinkTowards, sized, scale)
@@ -74,87 +76,258 @@ import           Text.Show.Pretty (ppShow)
 
 import           Zebra.Data.Block
 import           Zebra.Data.Core
-import           Zebra.Data.Encoding
 import           Zebra.Data.Entity
 import           Zebra.Data.Fact
-import           Zebra.Schema (Schema, Variant(..), VariantName(..), Field(..), FieldName(..))
+
+import           Zebra.Data.Vector.Cons (Cons)
+import qualified Zebra.Data.Vector.Cons as Cons
+import           Zebra.Schema (TableSchema, ColumnSchema)
+import           Zebra.Schema (Variant(..), VariantName(..), Field(..), FieldName(..), Tag)
 import qualified Zebra.Schema as Schema
-import           Zebra.Table (Table(..), Column(..))
+import           Zebra.Table (Table, Column)
 import qualified Zebra.Table as Table
-import           Zebra.Value (Value)
+import           Zebra.Value (Collection, Value)
 import qualified Zebra.Value as Value
 
 
-jEncoding :: Jack Encoding
-jEncoding =
-  Encoding <$> listOf jColumnEncoding
+------------------------------------------------------------------------
 
-jColumnEncoding :: Jack ColumnEncoding
-jColumnEncoding =
-  oneOfRec [
-      pure IntEncoding
-    , pure ByteEncoding
-    , pure DoubleEncoding
-    ] [
-      ArrayEncoding <$> jEncoding
-    ]
-
-schemaSubterms :: Schema -> [Schema]
-schemaSubterms = \case
-  Schema.Byte ->
-    []
-  Schema.Int ->
-    []
-  Schema.Double ->
-    []
-  Schema.Enum variant0 variants ->
-    fmap Schema.variantSchema $ variant0 : Boxed.toList variants
-  Schema.Struct ss ->
-    fmap fieldSchema $ Boxed.toList ss
-  Schema.Array item ->
-    [item]
-
-jSchema :: Jack Schema
-jSchema =
-  reshrink schemaSubterms $
-  oneOfRec [
-      pure Schema.Byte
-    , pure Schema.Int
-    , pure Schema.Double
-    ] [
-      Schema.Enum <$> jVariant <*> (Boxed.fromList <$> smallListOf jVariant)
-    , Schema.Struct . Boxed.fromList <$> smallListOf jField
-    , Schema.Array <$> jSchema
-    ]
-
-smallListOf :: Jack a -> Jack [a]
-smallListOf gen =
-  sized $ \n ->
-    listOfN 0 (n `div` 10) gen
-
-jField :: Jack Field
-jField =
-  Field <$> jFieldName <*> jSchema
+jField :: Jack a -> Jack (Field a)
+jField gen =
+  Field <$> jFieldName <*> gen
 
 jFieldName :: Jack FieldName
 jFieldName =
   FieldName <$> elements boats
 
-jVariant :: Jack Variant
-jVariant =
-  Variant <$> jVariantName <*> jSchema
+jVariant :: Jack a -> Jack (Variant a)
+jVariant gen =
+  Variant <$> jVariantName <*> gen
 
 jVariantName :: Jack VariantName
 jVariantName =
   VariantName <$> elements weather
 
-jFacts :: [Schema] -> Jack [Fact]
+------------------------------------------------------------------------
+
+tableSchemaTables :: TableSchema -> [TableSchema]
+tableSchemaTables = \case
+  Schema.Binary ->
+    []
+  Schema.Array x ->
+    columnSchemaTables x
+  Schema.Map k v ->
+    columnSchemaTables k <>
+    columnSchemaTables v
+
+tableSchemaColumns :: TableSchema -> [ColumnSchema]
+tableSchemaColumns = \case
+  Schema.Binary ->
+    []
+  Schema.Array x ->
+    [x]
+  Schema.Map k v ->
+    [k, v]
+
+columnSchemaTables :: ColumnSchema -> [TableSchema]
+columnSchemaTables = \case
+  Schema.Unit ->
+    []
+  Schema.Int ->
+    []
+  Schema.Double ->
+    []
+  Schema.Enum variants ->
+    concatMap columnSchemaTables . fmap Schema.variant $
+      Cons.toList variants
+  Schema.Struct fields ->
+    concatMap columnSchemaTables . fmap Schema.field $
+      Cons.toList fields
+  Schema.Nested table ->
+    [table]
+  Schema.Reversed schema ->
+    columnSchemaTables schema
+
+columnSchemaColumns :: ColumnSchema -> [ColumnSchema]
+columnSchemaColumns = \case
+  Schema.Unit ->
+    []
+  Schema.Int ->
+    []
+  Schema.Double ->
+    []
+  Schema.Enum variants ->
+    fmap Schema.variant $ Cons.toList variants
+  Schema.Struct fields ->
+    fmap Schema.field $ Cons.toList fields
+  Schema.Nested table ->
+    tableSchemaColumns table
+  Schema.Reversed schema ->
+    [schema]
+
+jTableSchema :: Jack TableSchema
+jTableSchema =
+  reshrink tableSchemaTables $
+  oneOfRec [
+      pure Schema.Binary
+    ] [
+      Schema.Array <$> jColumnSchema
+    , Schema.Map <$> jColumnSchema <*> jColumnSchema
+    ]
+
+jColumnSchema :: Jack ColumnSchema
+jColumnSchema =
+  reshrink columnSchemaColumns $
+  oneOfRec [
+      pure Schema.Int
+    , pure Schema.Double
+    ] [
+      Schema.Enum <$> smallConsOf (jVariant jColumnSchema)
+    , Schema.Struct <$> smallConsOf (jField jColumnSchema)
+    , Schema.Nested <$> jTableSchema
+    , Schema.Reversed <$> jColumnSchema
+    ]
+
+------------------------------------------------------------------------
+
+tableTables :: Table -> [Table]
+tableTables = \case
+  Table.Binary _ ->
+    []
+  Table.Array x ->
+    columnTables x
+  Table.Map k v ->
+    columnTables k <>
+    columnTables v
+
+tableColumns :: Table -> [Column]
+tableColumns = \case
+  Table.Binary _ ->
+    []
+  Table.Array x ->
+    [x]
+  Table.Map k v ->
+    [k, v]
+
+columnTables :: Column -> [Table]
+columnTables = \case
+  Table.Unit _ ->
+    []
+  Table.Int _ ->
+    []
+  Table.Double _ ->
+    []
+  Table.Enum _ variants ->
+    concatMap columnTables $
+      fmap Schema.variant (Cons.toList variants)
+  Table.Struct fields ->
+    concatMap columnTables $
+      fmap Schema.field (Cons.toList fields)
+  Table.Nested _ table ->
+    [table]
+  Table.Reversed column ->
+    columnTables column
+
+columnColumns :: Column -> [Column]
+columnColumns = \case
+  Table.Unit _ ->
+    []
+  Table.Int _ ->
+    []
+  Table.Double _ ->
+    []
+  Table.Enum _ variants ->
+    fmap Schema.variant $ Cons.toList variants
+  Table.Struct fields ->
+    fmap Schema.field $ Cons.toList fields
+  Table.Nested _ table ->
+    tableColumns table
+  Table.Reversed column ->
+    columnColumns column
+
+jSizedTable :: Jack Table
+jSizedTable =
+  sized $ \size ->
+    jTable =<< chooseInt (0, size `div` 5)
+
+jTable :: Int -> Jack Table
+jTable n =
+  reshrink tableTables $
+  oneOfRec [
+      jBinaryTable n
+    ] [
+      jArrayTable n
+    , jMapTable n
+    ]
+
+jBinaryTable  :: Int -> Jack Table
+jBinaryTable n =
+  Table.Binary . ByteString.pack <$> vectorOf n arbitrary
+
+jArrayTable :: Int -> Jack Table
+jArrayTable n = do
+  Table.Array
+    <$> jColumn n
+
+jMapTable :: Int -> Jack Table
+jMapTable n = do
+  Table.Map
+    <$> jColumn n
+    <*> jColumn n
+
+jColumn :: Int -> Jack Column
+jColumn n =
+  reshrink columnColumns $
+  oneOfRec [
+      jIntColumn n
+    , jDoubleColumn n
+    ] [
+      jEnumColumn n
+    , jStructColumn n
+    , jNestedColumn n
+    , jReversedColumn n
+    ]
+
+jIntColumn :: Int -> Jack Column
+jIntColumn n =
+  Table.Int . Storable.fromList <$> vectorOf n sizedBounded
+
+jDoubleColumn :: Int -> Jack Column
+jDoubleColumn n =
+  Table.Double . Storable.fromList <$> vectorOf n arbitrary
+
+jEnumColumn :: Int -> Jack Column
+jEnumColumn n = do
+  sized $ \size -> do
+    ntags <- chooseInt (1, 1 + (size `div` 10))
+    tags <- Storable.fromList . fmap fromIntegral <$> vectorOf n (chooseInt (0, ntags - 1))
+    vs <- Cons.unsafeFromList <$> vectorOf ntags (jVariant . jColumn $ Storable.length tags)
+    pure $
+      Table.Enum tags vs
+
+jStructColumn :: Int -> Jack Column
+jStructColumn n =
+  Table.Struct <$> smallConsOf (jField (jColumn n))
+
+jNestedColumn :: Int -> Jack Column
+jNestedColumn n =
+  sized $ \size -> do
+    ns <- Storable.fromList . fmap fromIntegral <$> vectorOf n (chooseInt (0, size `div` 10))
+    Table.Nested ns <$> jTable (fromIntegral $ Storable.sum ns)
+
+jReversedColumn :: Int -> Jack Column
+jReversedColumn n =
+  Table.Reversed <$> jColumn n
+
+------------------------------------------------------------------------
+
+jFacts :: [ColumnSchema] -> Jack [Fact]
 jFacts schemas =
   fmap (List.sort . List.concat) .
   scale (`div` max 1 (length schemas)) $
   zipWithM (\e a -> listOf $ jFact e a) schemas (fmap AttributeId [0..])
 
-jFact :: Schema -> AttributeId -> Jack Fact
+jFact :: ColumnSchema -> AttributeId -> Jack Fact
 jFact schema aid =
   uncurry Fact
     <$> jEntityHashId
@@ -163,47 +336,87 @@ jFact schema aid =
     <*> jFactsetId
     <*> (strictMaybe <$> maybeOf (jValue schema))
 
-jValue :: Schema -> Jack Value
+jSizedCollection :: TableSchema -> Jack Collection
+jSizedCollection schema =
+  sized $ \size ->
+    jCollection schema =<< chooseInt (0, size `div` 5)
+
+jCollection :: TableSchema -> Int -> Jack Collection
+jCollection tschema n =
+  case tschema of
+    Schema.Binary ->
+      Value.Binary . ByteString.pack <$> vectorOf n arbitrary
+    Schema.Array x ->
+      Value.Array . Boxed.fromList <$> vectorOf n (jValue x)
+    Schema.Map k v ->
+      Value.Map . Map.fromList <$> vectorOf n (jMapping k v)
+
+jMapping :: ColumnSchema -> ColumnSchema -> Jack (Value, Value)
+jMapping k v =
+  (,) <$> jValue k <*> jValue v
+
+jTag :: Cons Boxed.Vector (Variant a) -> Jack Tag
+jTag xs =
+  fromIntegral <$> choose (0, Cons.length xs - 1)
+
+jValue :: ColumnSchema -> Jack Value
 jValue = \case
-  Schema.Byte ->
-    Value.Byte <$> sizedBounded
+  Schema.Unit ->
+    pure Value.Unit
+
   Schema.Int ->
     Value.Int <$> sizedBounded
+
   Schema.Double ->
     Value.Double <$> arbitrary
-  Schema.Enum variant0 variants -> do
-    tag <- choose (0, Boxed.length variants)
-    case Schema.lookupVariant tag variant0 variants of
+
+  Schema.Enum variants -> do
+    tag <- jTag variants
+    case Schema.lookupVariant tag variants of
       Nothing ->
-        Savage.error $ renderTagLookupError tag variant0 variants
+        Savage.error $ renderTagLookupError tag variants
       Just (Variant _ schema) ->
         Value.Enum tag <$> jValue schema
-  Schema.Struct fields ->
-    Value.Struct <$> traverse (jValue . fieldSchema) fields
-  Schema.Array Schema.Byte ->
-    Value.ByteArray <$> arbitrary
-  Schema.Array schema ->
-    Value.Array . Boxed.fromList <$> listOfN 0 10 (jValue schema)
 
-renderTagLookupError :: Int -> Variant -> Boxed.Vector Variant -> [Char]
-renderTagLookupError tag variant0 variants =
+  Schema.Struct fields ->
+    Value.Struct <$> traverse (jValue . Schema.field) fields
+
+  Schema.Nested tschema ->
+    sized $ \size -> do
+      fmap Value.Nested $ jCollection tschema =<< chooseInt (0, size `div` 10)
+
+  Schema.Reversed schema ->
+    Value.Reversed <$> jValue schema
+
+renderTagLookupError :: Show a => Tag -> Cons Boxed.Vector (Variant a) -> [Char]
+renderTagLookupError tag variants =
   "jValue: internal error, tag not found" <>
   "\n" <>
   "\n  tag = " <> show tag <>
   "\n" <>
   "\n  variants =" <>
-  (List.concatMap ("\n    " <>) . List.lines . ppShow $ Boxed.cons variant0 variants) <>
+  (List.concatMap ("\n    " <>) . List.lines $ ppShow variants) <>
   "\n"
 
 jEntityId :: Jack EntityId
 jEntityId =
   let
+    mkEnt :: ByteString -> Int -> EntityId
     mkEnt name num =
       EntityId $ name <> Char8.pack (printf "-%03d" num)
   in
-    mkEnt
-      <$> elements southpark
-      <*> chooseInt (0, 999)
+    oneOf [
+        mkEnt <$> elements southpark <*> pure 0
+      , mkEnt <$> elements southpark <*> chooseInt (0, 999)
+      ]
+
+jEntityHashId :: Jack (EntityHash, EntityId)
+jEntityHashId =
+  let
+    hash eid =
+      EntityHash $ unEntityHash (hashEntityId eid) `mod` 10
+  in
+    (\eid -> (hash eid, eid)) <$> jEntityId
 
 jAttributeId :: Jack AttributeId
 jAttributeId =
@@ -215,7 +428,10 @@ jAttributeName =
 
 jTime :: Jack Time
 jTime =
-  fromDay <$> jDay
+  oneOf [
+      Time <$> choose (0, 5)
+    , fromDay <$> jDay
+    ]
 
 jDay :: Jack Day
 jDay =
@@ -231,35 +447,30 @@ jYear =
 
 jFactsetId :: Jack FactsetId
 jFactsetId =
-  FactsetId <$> choose (0, 100000)
+  oneOf [
+      FactsetId <$> choose (0, 5)
+    , FactsetId <$> choose (0, 100000)
+    ]
 
-jBlock :: Jack (Block Schema)
+jBlock :: Jack Block
 jBlock = do
-  schemas <- listOfN 0 5 jSchema
+  schemas <- listOfN 0 5 jColumnSchema
   facts <- jFacts schemas
   pure $
-    case blockOfFacts (Boxed.fromList schemas) (Boxed.fromList facts) of
+    case blockOfFacts (fmap Schema.Array $ Boxed.fromList schemas) (Boxed.fromList facts) of
       Left x ->
         Savage.error $ "Test.Zebra.Jack.jBlock: invariant failed: " <> show x
       Right x ->
         x
 
 -- The blocks generated by this can contain data with broken invariants.
-jYoloBlock :: Jack (Block Schema)
+jYoloBlock :: Jack Block
 jYoloBlock = do
   sized $ \size ->
     Block
       <$> (Boxed.fromList <$> listOfN 0 (size `div` 5) jBlockEntity)
       <*> (Unboxed.fromList <$> listOfN 0 (size `div` 5) jBlockIndex)
-      <*> (Boxed.fromList <$> listOfN 0 (size `div` 5) jAnyTable)
-
-jEntityHashId :: Jack (EntityHash, EntityId)
-jEntityHashId =
-  let
-    hash eid =
-      EntityHash $ unEntityHash (hashEntityId eid) `mod` 10
-  in
-    (\eid -> (hash eid, eid)) <$> jEntityId
+      <*> (Boxed.fromList <$> listOfN 0 (size `div` 5) jSizedTable)
 
 jBlockEntity :: Jack BlockEntity
 jBlockEntity =
@@ -280,21 +491,20 @@ jBlockIndex =
     <*> jFactsetId
     <*> jTombstone
 
-jEntity :: Jack (Entity Schema)
+jEntity :: Jack Entity
 jEntity =
   uncurry Entity
     <$> jEntityHashId
     <*> (Boxed.fromList <$> listOf jAttribute)
 
-jAttribute :: Jack (Attribute Schema)
+jAttribute :: Jack Attribute
 jAttribute = do
   (ts, ps, bs) <- List.unzip3 <$> listOf ((,,) <$> jTime <*> jFactsetId <*> jTombstone)
-  schema <- jSchema
   Attribute
     <$> pure (Storable.fromList ts)
     <*> pure (Storable.fromList ps)
     <*> pure (Storable.fromList bs)
-    <*> jTable (List.length ts) schema
+    <*> jArrayTable (List.length ts)
 
 jTombstone :: Jack Tombstone
 jTombstone =
@@ -303,78 +513,11 @@ jTombstone =
     , Tombstone
     ]
 
-jAnyTable :: Jack (Table Schema)
-jAnyTable =
-  sized $ \size -> do
-    n <- chooseInt (0, size `div` 5)
-    schema <- jSchema
-    jTable n schema
-
-jTable :: Int -> Schema -> Jack (Table Schema)
-jTable n = \case
-  Schema.Byte ->
-    jByteTable n
-  Schema.Int ->
-    jIntTable n
-  Schema.Double ->
-    jDoubleTable n
-  Schema.Enum variant0 variants ->
-    jEnumTable n variant0 variants
-  Schema.Struct fields ->
-    jStructTable n fields
-  Schema.Array item ->
-    jArrayTable n item
-
-jByteTable :: Int -> Jack (Table Schema)
-jByteTable n =
-  Table Schema.Byte n . mkByteColumn <$>
-    vectorOf n arbitrary
-
-jIntTable :: Int -> Jack (Table Schema)
-jIntTable n =
-  Table Schema.Int n . mkIntColumn <$>
-    vectorOf n arbitrary
-
-jDoubleTable :: Int -> Jack (Table Schema)
-jDoubleTable n =
-  Table Schema.Double n . mkDoubleColumn <$>
-    vectorOf n arbitrary
-
-jEnumTable :: Int -> Variant -> Boxed.Vector Variant -> Jack (Table Schema)
-jEnumTable n variant0 variants =
-  Table (Schema.Enum variant0 variants) n <$> do
-    tags <- mkIntColumn <$> replicateM n (choose (0, fromIntegral $ Boxed.length variants))
-    v <- Table.columns <$> jTable n (Schema.variantSchema variant0)
-    vs <- Boxed.concatMap Table.columns <$> traverse (jTable n . Schema.variantSchema) variants
-    pure $ tags <> v <> vs
-
-jStructTable :: Int -> Boxed.Vector Field -> Jack (Table Schema)
-jStructTable n fields =
-  Table (Schema.Struct fields) n <$>
-    Boxed.concatMap Table.columns <$> traverse (jTable n . Schema.fieldSchema) fields
-
-jArrayTable :: Int -> Schema -> Jack (Table Schema)
-jArrayTable n schema =
-  fmap (Table (Schema.Array schema) n) . sized $ \size -> do
-    lengths <- vectorOf n $ chooseInt (0, size `div` 10)
-    mkArrayColumn lengths <$> jTable (sum lengths) schema
-
-mkByteColumn :: [Word8] -> Boxed.Vector (Column Schema)
-mkByteColumn =
-  Boxed.singleton . ByteColumn . B.pack
-
-mkIntColumn :: [Int64] -> Boxed.Vector (Column Schema)
-mkIntColumn =
-  Boxed.singleton . IntColumn . Storable.fromList
-
-mkDoubleColumn :: [Double] -> Boxed.Vector (Column Schema)
-mkDoubleColumn =
-  Boxed.singleton . DoubleColumn . Storable.fromList
-
-mkArrayColumn :: [Int] -> Table Schema -> Boxed.Vector (Column Schema)
-mkArrayColumn lengths =
-  Boxed.singleton . ArrayColumn (Storable.fromList $ fmap fromIntegral lengths)
-
 jMaybe' :: Jack a -> Jack (Maybe' a)
 jMaybe' j =
   oneOfRec [ pure Nothing' ] [ Just' <$> j ]
+
+smallConsOf :: Jack a -> Jack (Cons Boxed.Vector a)
+smallConsOf gen =
+  sized $ \n ->
+    Cons.unsafeFromList <$> listOfN 1 (1 + (n `div` 10)) gen

@@ -27,12 +27,12 @@ import           P
 import           X.Control.Monad.Trans.Either (EitherT, left)
 import qualified X.Data.Vector as Boxed
 
-import           Zebra.Data
+import           Zebra.Data.Block
+import           Zebra.Data.Core
 import           Zebra.Foreign.Block
 import           Zebra.Foreign.Entity
 import           Zebra.Foreign.Merge
 import           Zebra.Foreign.Util
-import           Zebra.Schema (Schema)
 
 
 data MergeError =
@@ -43,7 +43,7 @@ data MergeError =
 
 data MergeOptions c m =
   MergeOptions
-  { optionPullBlock  :: c -> m (Maybe (Block Schema))
+  { optionPullBlock  :: c -> m (Maybe Block)
   , optionPushEntity :: CEntity -> m ()
   , optionGCAfterBytes :: !Int64
   }

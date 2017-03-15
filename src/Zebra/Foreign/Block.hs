@@ -47,11 +47,11 @@ newtype CBlock =
       unCBlock :: Ptr C'zebra_block
     }
 
-blockOfForeign :: MonadIO m => CBlock -> EitherT ForeignError m (Block ())
+blockOfForeign :: MonadIO m => CBlock -> EitherT ForeignError m Block
 blockOfForeign (CBlock c_block) =
   peekBlock c_block
 
-foreignOfBlock :: MonadIO m => Mempool -> Block a -> m CBlock
+foreignOfBlock :: MonadIO m => Mempool -> Block -> m CBlock
 foreignOfBlock pool block = do
   c_block <- liftIO $ alloc pool
   pokeBlock pool c_block block
@@ -80,7 +80,7 @@ appendEntityToBlock pool (CEntity c_entity) c_block =
     liftCError $ unsafe'c'zebra_append_block_entity pool c_entity pp_block
     CBlock <$> peekIO pp_block
 
-peekBlock :: MonadIO m => Ptr C'zebra_block -> EitherT ForeignError m (Block ())
+peekBlock :: MonadIO m => Ptr C'zebra_block -> EitherT ForeignError m Block
 peekBlock c_block = do
   n_entities <- fmap fromIntegral . peekIO $ p'zebra_block'entity_count c_block
   c_entities <- peekIO $ p'zebra_block'entities c_block
@@ -104,7 +104,7 @@ peekBlock c_block = do
 
   pure $ Block entities indices tables
 
-pokeBlock :: MonadIO m => Mempool -> Ptr C'zebra_block -> Block a -> m ()
+pokeBlock :: MonadIO m => Mempool -> Ptr C'zebra_block -> Block -> m ()
 pokeBlock pool c_block (Block entities indices tables) = do
   let
     n_entities =

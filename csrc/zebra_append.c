@@ -3,6 +3,14 @@
 #include "zebra_grow.h"
 
 
+error_t zebra_append_table_nogrow (
+    anemone_mempool_t *pool
+  , const zebra_table_t *in
+  , int64_t ix
+  , zebra_table_t *out_into
+  , int64_t out_count
+  );
+
 //
 // Append: push a single value onto the end of an attribute.
 // Take the value of attribute "in" at index "ix", and add it to the end of "out_into".
@@ -13,8 +21,7 @@ error_t zebra_append_attribute (anemone_mempool_t *pool, const zebra_attribute_t
 
     int64_t out_ix = out_into->table.row_count;
 
-    out_into->table.row_count += out_count;
-    err = zebra_grow_attribute (pool, out_into);
+    err = zebra_grow_attribute (pool, out_into, out_count);
     if (err) return err;
 
     err = zebra_append_table_nogrow (pool, &in->table, ix, &out_into->table, out_count);
@@ -29,10 +36,10 @@ error_t zebra_append_attribute (anemone_mempool_t *pool, const zebra_attribute_t
 
 ANEMONE_STATIC
 ANEMONE_INLINE
-error_t zebra_append_column_array (anemone_mempool_t *pool, const zebra_column_t *in, int64_t in_ix, zebra_column_t *out_into, int64_t out_ix, int64_t out_count)
+error_t zebra_append_column_nested (anemone_mempool_t *pool, const zebra_column_t *in, int64_t in_ix, zebra_column_t *out_into, int64_t out_ix, int64_t out_count)
 {
-    int64_t* in_n = in->data.a.n + in_ix;
-    int64_t* out_n = out_into->data.a.n + out_ix;
+    int64_t* in_n = in->of._nested.indices + in_ix;
+    int64_t* out_n = out_into->of._nested.indices + out_ix;
     int64_t in_scan_start = in_n[0];
 
 
@@ -40,41 +47,70 @@ error_t zebra_append_column_array (anemone_mempool_t *pool, const zebra_column_t
     int64_t out_scan_start = out_n[0];
 
     for (int64_t ix = 0; ix != out_count; ++ix) {
+        // See Note: zebra_column._nested.indices
+        // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        // The indices array is one longer than the length
         int64_t in_scan = in_n[ix + 1] - in_scan_start;
         out_n[ix + 1] = out_scan_start + in_scan;
     }
 
-    int64_t in_offs = in->data.a.n[0];
+    int64_t in_offs = in->of._nested.indices[0];
     // how many nested values to skip in the input
     int64_t in_skip = in_scan_start - in_offs;
     // and how many to copy
     int64_t in_scan_count = in_n[out_count];
     int64_t in_copy = in_scan_count - in_scan_start;
-    return zebra_append_table (pool, &in->data.a.table, in_skip, &out_into->data.a.table, in_copy);
+    return zebra_append_table (pool, &in->of._nested.table, in_skip, &out_into->of._nested.table, in_copy);
 }
 
 ANEMONE_STATIC
+error_t zebra_append_column (anemone_mempool_t *pool, const zebra_column_t *in, int64_t in_ix, zebra_column_t *out_into, int64_t out_ix, int64_t out_count);
+
+ANEMONE_STATIC
 ANEMONE_INLINE
+error_t zebra_append_named_columns (anemone_mempool_t *pool, const zebra_named_columns_t *in, int64_t in_ix, zebra_named_columns_t *out_into, int64_t out_ix, int64_t out_count)
+{
+    if (in->count != out_into->count) return ZEBRA_APPEND_DIFFERENT_COLUMN_TYPES;
+
+    int64_t c = in->count;
+    for (int64_t i = 0; i != c; ++i) {
+        error_t err = zebra_append_column (pool, in->columns + i, in_ix, out_into->columns + i, out_ix, out_count);
+        if (err) return err;
+    }
+
+    return ZEBRA_SUCCESS;
+}
+
+ANEMONE_STATIC
 error_t zebra_append_column (anemone_mempool_t *pool, const zebra_column_t *in, int64_t in_ix, zebra_column_t *out_into, int64_t out_ix, int64_t out_count)
 {
-    if (in->type != out_into->type) return ZEBRA_MERGE_DIFFERENT_COLUMN_TYPES;
-    if (out_count == 0) return ZEBRA_SUCCESS;
+    if (in->tag != out_into->tag) return ZEBRA_APPEND_DIFFERENT_COLUMN_TYPES;
 
-    switch (in->type) {
-        case ZEBRA_BYTE:
-            memcpy(out_into->data.b + out_ix, in->data.b + in_ix, out_count * sizeof(uint8_t));
+    switch (in->tag) {
+        case ZEBRA_COLUMN_UNIT:
             return ZEBRA_SUCCESS;
 
-        case ZEBRA_INT:
-            memcpy(out_into->data.i + out_ix, in->data.i + in_ix, out_count * sizeof(uint64_t));
+        case ZEBRA_COLUMN_INT:
+            memcpy (out_into->of._int.values + out_ix, in->of._int.values + in_ix, out_count * sizeof(int64_t));
             return ZEBRA_SUCCESS;
 
-        case ZEBRA_DOUBLE:
-            memcpy(out_into->data.d + out_ix, in->data.d + in_ix, out_count * sizeof(double));
+        case ZEBRA_COLUMN_DOUBLE:
+            memcpy (out_into->of._double.values + out_ix, in->of._double.values + in_ix, out_count * sizeof(double));
             return ZEBRA_SUCCESS;
 
-        case ZEBRA_ARRAY:
-            return zebra_append_column_array (pool, in, in_ix, out_into, out_ix, out_count);
+        case ZEBRA_COLUMN_ENUM:
+            memcpy (out_into->of._enum.tags + out_ix, in->of._enum.tags + in_ix, out_count * sizeof(double));
+            return zebra_append_named_columns (pool, &in->of._enum.columns, in_ix, &out_into->of._enum.columns, out_ix, out_count);
+
+        case ZEBRA_COLUMN_STRUCT:
+            return zebra_append_named_columns (pool, &in->of._struct.columns, in_ix, &out_into->of._struct.columns, out_ix, out_count);
+
+        case ZEBRA_COLUMN_NESTED:
+            return zebra_append_column_nested (pool, in, in_ix, out_into, out_ix, out_count);
+
+        case ZEBRA_COLUMN_REVERSED:
+            return zebra_append_column (pool, in->of._reversed.column, in_ix, out_into->of._reversed.column, out_ix, out_count);
+
         default:
             return ZEBRA_INVALID_COLUMN_TYPE;
     }
@@ -82,10 +118,7 @@ error_t zebra_append_column (anemone_mempool_t *pool, const zebra_column_t *in, 
 
 error_t zebra_append_table (anemone_mempool_t *pool, const zebra_table_t *in, int64_t in_ix, zebra_table_t *out_into, int64_t count)
 {
-    error_t err;
-
-    out_into->row_count += count;
-    err = zebra_grow_table (pool, out_into);
+    error_t err = zebra_grow_table (pool, out_into, count);
     if (err) return err;
 
     return zebra_append_table_nogrow (pool, in, in_ix, out_into, count);
@@ -93,15 +126,32 @@ error_t zebra_append_table (anemone_mempool_t *pool, const zebra_table_t *in, in
 
 error_t zebra_append_table_nogrow (anemone_mempool_t *pool, const zebra_table_t *in, int64_t in_ix, zebra_table_t *out_into, int64_t count)
 {
-    error_t err;
+    if (in->tag != out_into->tag) return ZEBRA_APPEND_DIFFERENT_COLUMN_TYPES;
+    if (count == 0) return ZEBRA_SUCCESS;
 
+    // The table has already been grown, so the row_count includes the values we're about to append
     int64_t out_ix = out_into->row_count - count;
-    for (int64_t c = 0; c < in->column_count; ++c) {
-        err = zebra_append_column (pool, in->columns + c, in_ix, out_into->columns + c, out_ix, count);
-        if (err) return err;
-    }
 
-    return ZEBRA_SUCCESS;
+    switch (in->tag) {
+        case ZEBRA_TABLE_BINARY: {
+            memcpy (out_into->of._binary.bytes + out_ix, in->of._binary.bytes + in_ix, count * sizeof(char));
+            return ZEBRA_SUCCESS;
+        }
+
+        case ZEBRA_TABLE_ARRAY: {
+            return zebra_append_column (pool, in->of._array.values, in_ix, out_into->of._array.values, out_ix, count);
+        }
+
+        case ZEBRA_TABLE_MAP: {
+            error_t err = zebra_append_column (pool, in->of._map.keys, in_ix, out_into->of._map.keys, out_ix, count);
+            if (err) return err;
+            return zebra_append_column (pool, in->of._map.values, in_ix, out_into->of._map.values, out_ix, count);
+        }
+
+        default: {
+            return ZEBRA_INVALID_TABLE_TYPE;
+        }
+    }
 }
 
 ANEMONE_STATIC

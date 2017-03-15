@@ -35,8 +35,8 @@ import qualified X.Data.Vector.Unboxed as Unboxed
 import           X.Options.Applicative (Parser, Mod, CommandFields)
 import qualified X.Options.Applicative as Options
 
-import           Zebra.Data (ZebraVersion(..))
 import qualified Zebra.Data.Block as Block
+import           Zebra.Data.Core (ZebraVersion(..))
 import qualified Zebra.Data.Core as Core
 import qualified Zebra.Data.Entity as Entity
 import qualified Zebra.Data.Fact as Fact
@@ -44,7 +44,7 @@ import qualified Zebra.Foreign.Block as Foreign
 import qualified Zebra.Foreign.Entity as Foreign
 import qualified Zebra.Merge.BlockC as Merge
 import qualified Zebra.Merge.Puller.File as Merge
-import           Zebra.Schema (Schema)
+import           Zebra.Schema (TableSchema)
 import qualified Zebra.Serial as Serial
 import qualified Zebra.Serial.File as Serial
 
@@ -168,13 +168,7 @@ pOutputBlockFacts =
 
 pOutputFormat :: Parser ZebraVersion
 pOutputFormat =
-  fromMaybe ZebraV2 <$> optional (pOutputV1 <|> pOutputV2)
-
-pOutputV1 :: Parser ZebraVersion
-pOutputV1 =
-  Options.flag' ZebraV1 $
-    Options.long "output-v1" <>
-    Options.help "Force merge to output files in version 1 format."
+  fromMaybe ZebraV2 <$> optional pOutputV2
 
 pOutputV2 :: Parser ZebraVersion
 pOutputV2 =
@@ -266,21 +260,21 @@ withOutputPusher opts inputfile outputfile runWith = do
   maybe (return ()) doPurge mblock
   lift $ IO.hClose outfd
 
-catFacts :: Show a => [Schema] -> Stream.Stream (EitherT Serial.DecodeError IO) (Block.Block a) -> EitherT Text IO ()
+catFacts :: [TableSchema] -> Stream.Stream (EitherT Serial.DecodeError IO) Block.Block -> EitherT Text IO ()
 catFacts schemas0 blocks =
   let
     schemas =
       Boxed.fromList schemas0
 
     putFact fact =
-      case Fact.renderFact schemas fact of
+      case Fact.render schemas fact of
         Left err ->
           Text.hPutStrLn stderr $ Fact.renderFactRenderError err
         Right bs ->
           Char8.putStrLn bs
 
     go block = do
-      facts <- firstTshow . hoistEither $ Block.factsOfBlock schemas block
+      facts <- firstTshow . hoistEither $ Block.factsOfBlock block
       Boxed.mapM_ (liftIO . putFact) facts
 
     blocks' =
@@ -288,7 +282,7 @@ catFacts schemas0 blocks =
   in
     Stream.mapM_ go blocks'
 
-catBlocks :: Show a => CatOptions -> Stream.Stream (EitherT Serial.DecodeError IO) (Block.Block a) -> EitherT Text IO ()
+catBlocks :: CatOptions -> Stream.Stream (EitherT Serial.DecodeError IO) Block.Block -> EitherT Text IO ()
 catBlocks opts blocks = do
   let int0 = 0 :: Int
   totalBlocks <- lift $ IORef.newIORef int0
@@ -330,7 +324,7 @@ catBlocks opts blocks = do
 
   return ()
 
-catEntity :: Show a => CatOptions -> Entity.Entity a -> EitherT Text IO ()
+catEntity :: CatOptions -> Entity.Entity -> EitherT Text IO ()
 catEntity opts entity = lift $ do
   IO.putStrLn ("    " <> show (Entity.entityId entity) <> " (" <> show (Entity.entityHash entity) <> ")")
 
@@ -355,7 +349,7 @@ catEntity opts entity = lift $ do
    | otherwise
    = showf (Boxed.minimum inps) <> "..." <> showf (Boxed.maximum inps)
 
-catEntityFacts :: Show a => Entity.Entity a -> IO ()
+catEntityFacts :: Entity.Entity -> IO ()
 catEntityFacts entity = do
   IO.putStrLn ("      Values:")
   let facts' = Boxed.filter ((>0) . Storable.length . Entity.attributeTime . snd)

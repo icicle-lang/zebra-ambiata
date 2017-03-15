@@ -28,9 +28,8 @@ import           X.Control.Monad.Trans.Either (EitherT, left)
 import qualified X.Data.Vector as Boxed
 import qualified X.Data.Vector.Stream as Stream
 
-import           Zebra.Data
+import           Zebra.Data.Block
 import           Zebra.Foreign.Util
-import           Zebra.Schema (Schema)
 import           Zebra.Serial.File
 
 
@@ -47,7 +46,7 @@ newtype PullId =
 
 blockChainPuller :: MonadIO m
   => Boxed.Vector FilePath
-  -> EitherT PullerError m (PullId -> EitherT DecodeError m (Maybe (Block Schema)), Boxed.Vector PullId)
+  -> EitherT PullerError m (PullId -> EitherT DecodeError m (Maybe Block), Boxed.Vector PullId)
 blockChainPuller files
  | Just (file0, _) <- Boxed.uncons files
  = do

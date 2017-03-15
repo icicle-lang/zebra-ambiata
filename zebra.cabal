@@ -23,6 +23,7 @@ library
                     , aeson                           >= 1.0        && < 1.2
                     , aeson-pretty                    == 0.8.*
                     , attoparsec                      >= 0.13       && < 0.14
+                    , bifunctors                      >= 4.2        && < 5.5
                     , binary                          >= 0.7.2      && < 0.9
                     , bindings-DSL                    >= 1.0.0      && <= 1.0.23
                     , bytestring                      == 0.10.*
@@ -48,19 +49,21 @@ library
 
   exposed-modules:
                     Zebra.Schema
+                    Zebra.Segment
                     Zebra.Table
-                    Zebra.Table.Mutable
                     Zebra.Value
 
-                    Zebra.Data
                     Zebra.Data.Block
                     Zebra.Data.Block.Block
                     Zebra.Data.Block.Entity
                     Zebra.Data.Block.Index
+                    Zebra.Data.Block.Table
                     Zebra.Data.Core
-                    Zebra.Data.Encoding
                     Zebra.Data.Entity
                     Zebra.Data.Fact
+                    Zebra.Data.Vector.Cons
+                    Zebra.Data.Vector.Generic
+                    Zebra.Data.Vector.Storable
 
                     Zebra.Foreign.Bindings
                     Zebra.Foreign.Block
@@ -113,7 +116,6 @@ library
                        csrc/zebra_append.c
                        csrc/zebra_block_split.c
                        csrc/zebra_clone.c
-                       csrc/zebra_data.c
                        csrc/zebra_grow.c
                        csrc/zebra_merge.c
                        csrc/zebra_merge_many.c

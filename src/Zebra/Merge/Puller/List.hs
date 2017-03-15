@@ -18,14 +18,13 @@ import           System.IO (IO)
 import           X.Control.Monad.Trans.Either (EitherT, joinEitherT)
 import qualified X.Data.Vector as Boxed
 
-import           Zebra.Data
+import           Zebra.Data.Block
 import           Zebra.Data.Entity
 import           Zebra.Foreign.Entity
 import           Zebra.Merge.BlockC
-import           Zebra.Schema (Schema)
 
 
-mergeLists :: Int64 -> [[Block Schema]] -> EitherT MergeError IO [Entity ()]
+mergeLists :: Int64 -> [[Block]] -> EitherT MergeError IO [Entity]
 mergeLists gcEvery blocks0 = do
   blockRef <- liftIO $ Ref.newIORef blocks0
   entityRef <- liftIO $ Ref.newIORef []

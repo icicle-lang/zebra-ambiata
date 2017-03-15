@@ -39,22 +39,23 @@ import qualified X.Data.Vector.Stream as Stream
 
 import           Zebra.Data.Block
 import           Zebra.Data.Core
-import           Zebra.Schema (Schema)
+import qualified Zebra.Data.Vector.Cons as Cons
+import           Zebra.Schema (TableSchema, ColumnSchema, Tag)
 import qualified Zebra.Schema as Schema
 import           Zebra.Serial.Array
-import           Zebra.Table (Table(..), Column(..))
+import           Zebra.Table (Table, Column)
 import qualified Zebra.Table as Table
 
 
 -- | Encode a zebra block.
 --
-bBlock :: Block a -> Builder
+bBlock :: Block -> Builder
 bBlock block =
   bEntities (blockEntities block) <>
   bIndices (blockIndices block) <>
   bTables (blockTables block)
 
-getBlock :: Boxed.Vector Schema -> Get (Block Schema)
+getBlock :: Boxed.Vector TableSchema -> Get Block
 getBlock schemas = do
   entities <- getEntities
   indices <- getIndices
@@ -270,7 +271,7 @@ getIndices = do
 --   /invariant: table_count == count of unique attr_ids/
 --   /invariant: table_id contains all ids referenced by attr_ids/
 --
-bTables :: Boxed.Vector (Table a) -> Builder
+bTables :: Boxed.Vector Table -> Builder
 bTables xs =
   let
     n =
@@ -285,14 +286,14 @@ bTables xs =
 
     counts =
       Storable.convert $
-      fmap (fromIntegral . Table.rowCount) xs
+      fmap (fromIntegral . Table.length) xs
   in
     Build.word32LE tcount <>
     bIntArray ids <>
     bIntArray counts <>
     foldMap bTable xs
 
-getTables :: Boxed.Vector Schema -> Get (Boxed.Vector (Table Schema))
+getTables :: Boxed.Vector TableSchema -> Get (Boxed.Vector Table)
 getTables schemas = do
   tcount <- fromIntegral <$> Get.getWord32le
   ids <- fmap fromIntegral . Boxed.convert <$> getIntArray tcount
@@ -308,66 +309,102 @@ getTables schemas = do
 
   Boxed.zipWithM get ids counts
 
-bTable :: Table a -> Builder
-bTable =
-  foldMap bColumn . Table.columns
-
-bColumn :: Column a -> Builder
-bColumn = \case
-  ByteColumn bs ->
+bTable :: Table -> Builder
+bTable = \case
+  Table.Binary bs ->
     bByteArray bs
-  IntColumn xs ->
+
+  Table.Array c ->
+    bColumn c
+
+  Table.Map k v ->
+    bColumn k <>
+    bColumn v
+
+bColumn :: Column -> Builder
+bColumn = \case
+  Table.Unit _ ->
+    mempty
+
+  Table.Int xs ->
     bIntArray xs
-  DoubleColumn xs ->
-    bIntArray $ coerce xs
-  ArrayColumn ns rec ->
+
+  Table.Double xs ->
+    bDoubleArray xs
+
+  Table.Enum tags vs ->
+    bTagArray tags <>
+    foldMap (bColumn . Schema.variant) vs
+
+  Table.Struct fs ->
+    foldMap (bColumn . Schema.field) fs
+
+  Table.Nested ns x ->
     bIntArray ns <>
-    Build.word32LE (fromIntegral $ Table.rowCount rec) <>
-    bTable rec
+    Build.word32LE (fromIntegral $ Table.length x) <>
+    bTable x
 
-getTable :: Int -> Schema -> Get (Table Schema)
-getTable n schema =
-  case schema of
-    Schema.Byte ->
-      Table schema n . Boxed.singleton <$> getByteColumn n
+  Table.Reversed x ->
+    bColumn x
 
-    Schema.Int ->
-      Table schema n . Boxed.singleton <$> getIntColumn n
+getTable :: Int -> TableSchema -> Get Table
+getTable n = \case
+  Schema.Binary ->
+    Table.Binary
+      <$> getByteArray
 
-    Schema.Double ->
-      Table schema n . Boxed.singleton <$> getDoubleColumn n
+  Schema.Array e ->
+    Table.Array
+      <$> getColumn n e
 
-    Schema.Enum variant0 variants -> do
-      tags <- getIntColumn n
-      cols <- concatMapM (fmap Table.columns . getTable n . Schema.variantSchema) (Boxed.cons variant0 variants)
-      pure . Table schema n $ Boxed.cons tags cols
+  Schema.Map k v ->
+    Table.Map
+      <$> getColumn n k
+      <*> getColumn n v
 
-    Schema.Struct fields -> do
-      cols <- concatMapM (fmap Table.columns . getTable n . Schema.fieldSchema) fields
-      pure $ Table schema n cols
+getColumn :: Int -> ColumnSchema -> Get Column
+getColumn n = \case
+  Schema.Unit ->
+    pure $ Table.Unit n
 
-    Schema.Array element -> do
-      counts <- getIntArray n
-      total <- fromIntegral <$> Get.getWord32le
-      inner <- getTable total element
-      pure . Table schema n . Boxed.singleton $
-        ArrayColumn counts inner
+  Schema.Int ->
+    Table.Int
+      <$> getIntArray n
 
-getByteColumn :: Int -> Get (Column a)
-getByteColumn _n =
-  ByteColumn <$> getByteArray
+  Schema.Double ->
+    Table.Double
+      <$> getDoubleArray n
 
-getIntColumn :: Int -> Get (Column a)
-getIntColumn n =
-  IntColumn <$> getIntArray n
+  Schema.Enum vs ->
+    Table.Enum
+      <$> getTagArray n
+      <*> Cons.mapM (traverse $ getColumn n) vs
 
-getDoubleColumn :: Int -> Get (Column a)
-getDoubleColumn n =
-  DoubleColumn . coerce <$> getIntArray n
+  Schema.Struct fs ->
+    Table.Struct
+      <$> Cons.mapM (traverse $ getColumn n) fs
 
-concatMapM :: Monad m => (a -> m (Boxed.Vector b)) -> Boxed.Vector a -> m (Boxed.Vector b)
-concatMapM f =
-  Stream.vectorOfStreamM .
-  Stream.concatMapM (fmap Stream.streamOfVectorM . f) .
-  Stream.streamOfVectorM
-{-# INLINE concatMapM #-}
+  Schema.Nested t ->
+    Table.Nested
+      <$> getIntArray n
+      <*> (flip getTable t . fromIntegral =<< Get.getWord32le)
+
+  Schema.Reversed c ->
+    Table.Reversed
+      <$> getColumn n c
+
+bTagArray :: Storable.Vector Tag -> Builder
+bTagArray =
+  bIntArray . coerce
+
+getTagArray :: Int -> Get (Storable.Vector Tag)
+getTagArray n =
+  coerce <$> getIntArray n
+
+bDoubleArray :: Storable.Vector Double -> Builder
+bDoubleArray =
+  bIntArray . coerce
+
+getDoubleArray :: Int -> Get (Storable.Vector Double)
+getDoubleArray n =
+  coerce <$> getIntArray n
