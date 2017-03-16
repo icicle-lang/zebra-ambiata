@@ -33,6 +33,7 @@ library
                     , old-locale                      == 1.0.*
                     , pretty-show                     == 1.6.*
                     , primitive                       == 0.6.*
+                    , semigroups                      == 0.18.*
                     , text                            == 1.2.*
                     , thyme                           == 0.3.*
                     , transformers                    == 0.5.*
@@ -79,6 +80,7 @@ library
                     Zebra.Merge.Entity
                     Zebra.Merge.Puller.File
                     Zebra.Merge.Puller.List
+                    Zebra.Merge.Table
 
                     Zebra.Serial
                     Zebra.Serial.Array

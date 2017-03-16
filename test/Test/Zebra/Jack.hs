@@ -35,6 +35,7 @@ module Test.Zebra.Jack (
 
   -- * Zebra.Schema
   , jTableSchema
+  , jMapSchema
   , jColumnSchema
 
   -- * Zebra.Table
@@ -49,11 +50,17 @@ module Test.Zebra.Jack (
   , jValue
 
   , jMaybe'
+
+  -- * Normalization
+  , normalizeTable
+  , normalizeCollection
+  , normalizeValue
   ) where
 
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString as ByteString
 import qualified Data.ByteString.Char8 as Char8
+import qualified Data.Char as Char
 import qualified Data.List as List
 import qualified Data.Map as Map
 import           Data.Thyme.Calendar (Year, Day, YearMonthDay(..), gregorianValid)
@@ -65,6 +72,7 @@ import           Disorder.Corpus (muppets, southpark, boats, weather)
 import           Disorder.Jack (Jack, mkJack, reshrink, shrinkTowards, sized, scale)
 import           Disorder.Jack (elements, arbitrary, choose, chooseInt, sizedBounded)
 import           Disorder.Jack (oneOf, oneOfRec, listOf, listOfN, vectorOf, justOf, maybeOf)
+import           Disorder.Jack (boundedEnum)
 
 import           P
 
@@ -173,8 +181,12 @@ jTableSchema =
       pure Schema.Binary
     ] [
       Schema.Array <$> jColumnSchema
-    , Schema.Map <$> jColumnSchema <*> jColumnSchema
+    , jMapSchema
     ]
+
+jMapSchema :: Jack TableSchema
+jMapSchema =
+  Schema.Map <$> jColumnSchema <*> jColumnSchema
 
 jColumnSchema :: Jack ColumnSchema
 jColumnSchema =
@@ -261,9 +273,16 @@ jTable n =
     , jMapTable n
     ]
 
+jByteString :: Int -> Jack ByteString
+jByteString n =
+  oneOf [
+      Char8.pack <$> vectorOf n (fmap Char.chr $ chooseInt (Char.ord 'a', Char.ord 'z'))
+    , ByteString.pack <$> vectorOf n boundedEnum
+    ]
+
 jBinaryTable  :: Int -> Jack Table
 jBinaryTable n =
-  Table.Binary . ByteString.pack <$> vectorOf n arbitrary
+  Table.Binary <$> jByteString n
 
 jArrayTable :: Int -> Jack Table
 jArrayTable n = do
@@ -346,7 +365,7 @@ jCollection :: TableSchema -> Int -> Jack Collection
 jCollection tschema n =
   case tschema of
     Schema.Binary ->
-      Value.Binary . ByteString.pack <$> vectorOf n arbitrary
+      Value.Binary <$> jByteString n
     Schema.Array x ->
       Value.Array . Boxed.fromList <$> vectorOf n (jValue x)
     Schema.Map k v ->
@@ -526,3 +545,40 @@ smallConsOf :: Jack a -> Jack (Cons Boxed.Vector a)
 smallConsOf gen =
   sized $ \n ->
     Cons.unsafeFromList <$> listOfN 1 (1 + (n `div` 10)) gen
+
+------------------------------------------------------------------------
+
+normalizeTable :: Table -> Table
+normalizeTable table =
+  let
+    Right x =
+      Table.fromCollection (Table.schema table) . normalizeCollection =<<
+      Table.toCollection table
+  in
+    x
+
+normalizeCollection :: Collection -> Collection
+normalizeCollection = \case
+  Value.Binary bs ->
+    Value.Binary $ ByteString.sort bs
+  Value.Array xs ->
+    Value.Array . Boxed.fromList . List.sort $ Boxed.toList xs
+  Value.Map kvs ->
+    Value.Map $ fmap normalizeValue kvs
+
+normalizeValue :: Value -> Value
+normalizeValue = \case
+  Value.Unit ->
+    Value.Unit
+  Value.Int x ->
+    Value.Int x
+  Value.Double x ->
+    Value.Double x
+  Value.Enum tag x ->
+    Value.Enum tag (normalizeValue x)
+  Value.Struct xs ->
+    Value.Struct $ fmap normalizeValue xs
+  Value.Nested x ->
+    Value.Nested $ normalizeCollection x
+  Value.Reversed x ->
+    Value.Reversed $ normalizeValue x

@@ -309,14 +309,29 @@ maximumKey kvs =
 
 unionStep :: Cons Boxed.Vector (Map Value Value) -> Either ValueUnionError UnionStep
 unionStep kvss =
-  case Cons.maximum (fmap maximumKey kvss) of
-    Nothing ->
+  let
+    maximums =
+      Cons.mapMaybe maximumKey kvss
+  in
+    if Boxed.null maximums then
       pure $ UnionStep Map.empty kvss
-    Just k -> do
+    else do
       let
+        key =
+          Boxed.minimum maximums
+
         -- brexit --
-        (leaves, remains) =
-          Cons.unzip $ fmap (Map.split k) kvss
+        (leaves0, nonvoters, remains) =
+          Cons.unzip3 $ fmap (Map.splitLookup key) kvss
+
+        insert = \case
+          Nothing ->
+            id
+          Just x ->
+            Map.insert key x
+
+        leaves =
+          Cons.zipWith insert nonvoters leaves0
 
       leave <- unionMaps $ Cons.toVector leaves
 

@@ -9,7 +9,9 @@ module Zebra.Serial.Block (
 
   -- * Internal
   , bBlockV3
+  , bTableV3
   , getBlockV3
+  , getTableV3
 
   , bBlockV2
   , getBlockV2
@@ -31,7 +33,7 @@ import           Data.Binary.Get (Get)
 import qualified Data.Binary.Get as Get
 import           Data.ByteString.Builder (Builder)
 import qualified Data.ByteString.Builder as Builder
-import qualified Data.Map as Map
+import qualified Data.Map.Strict as Map
 import qualified Data.Text as Text
 import qualified Data.Vector as Boxed
 
@@ -74,19 +76,26 @@ getBlock = \case
 bBlockV3 :: Boxed.Vector AttributeName -> Block -> Either BlockTableError Builder
 bBlockV3 attributes block = do
   table <- tableOfBlock attributes block
-  pure $
-    Builder.word32LE (fromIntegral $ Table.length table) <>
-    bTable ZebraV3 table
+  pure $ bTableV3 table
+
+bTableV3 :: Table -> Builder
+bTableV3 table =
+  Builder.word32LE (fromIntegral $ Table.length table) <>
+  bTable ZebraV3 table
 
 getBlockV3 :: TableSchema -> Get Block
 getBlockV3 schema = do
-  n <- fromIntegral <$> Get.getWord32le
-  table <- getTable ZebraV3 n schema
+  table <- getTableV3 schema
   case blockOfTable table of
     Left err ->
       fail . Text.unpack $ renderBlockTableError err
     Right x ->
       pure x
+
+getTableV3 :: TableSchema -> Get Table
+getTableV3 schema = do
+  n <- fromIntegral <$> Get.getWord32le
+  getTable ZebraV3 n schema
 
 -- | Encode a zebra v2 block.
 --
