@@ -17,9 +17,6 @@ module Zebra.Table (
   , TableError(..)
   , renderTableError
 
-  , TableSchemaError(..)
-  , renderTableSchemaError
-
   , length
 
   , schema
@@ -75,7 +72,7 @@ import qualified X.Data.Vector.Generic as Generic
 import           Zebra.Data.Vector.Cons (Cons)
 import qualified Zebra.Data.Vector.Cons as Cons
 import qualified Zebra.Data.Vector.Storable as Storable
-import           Zebra.Schema (TableSchema, ColumnSchema, Field, Variant, Tag)
+import           Zebra.Schema (SchemaError(..), TableSchema, ColumnSchema, Field, Variant, Tag)
 import qualified Zebra.Schema as Schema
 import           Zebra.Segment (SegmentError)
 import qualified Zebra.Segment as Segment
@@ -108,18 +105,6 @@ data TableError =
   | TableAppendColumnMismatch !ColumnSchema !ColumnSchema
   | TableAppendVariantMismatch !(Variant ColumnSchema) !(Variant ColumnSchema)
   | TableAppendFieldMismatch !(Field ColumnSchema) !(Field ColumnSchema)
-    deriving (Eq, Ord, Show, Generic, Typeable)
-
-data TableSchemaError =
-    TableExpectedBinary !TableSchema
-  | TableExpectedArray !TableSchema
-  | TableExpectedMap !TableSchema
-  | TableExpectedInt !ColumnSchema
-  | TableExpectedDouble !ColumnSchema
-  | TableExpectedEnum !ColumnSchema
-  | TableExpectedStruct !ColumnSchema
-  | TableExpectedNested !ColumnSchema
-  | TableExpectedReversed !ColumnSchema
     deriving (Eq, Ord, Show, Generic, Typeable)
 
 renderTableError :: TableError -> Text
@@ -159,27 +144,6 @@ renderTableError = \case
     "Cannot append fields with different schemas:" <>
     ppField "first" x <>
     ppField "second" y
-
-renderTableSchemaError :: TableSchemaError -> Text
-renderTableSchemaError = \case
-  TableExpectedBinary x ->
-    "Expected binary, but was: " <> Text.pack (ppShow x)
-  TableExpectedArray x ->
-    "Expected array, but was: " <> Text.pack (ppShow x)
-  TableExpectedMap x ->
-    "Expected map, but was: " <> Text.pack (ppShow x)
-  TableExpectedInt x ->
-    "Expected int, but was: " <> Text.pack (ppShow x)
-  TableExpectedDouble x ->
-    "Expected double, but was: " <> Text.pack (ppShow x)
-  TableExpectedEnum x ->
-    "Expected enum, but was: " <> Text.pack (ppShow x)
-  TableExpectedStruct x ->
-    "Expected struct, but was: " <> Text.pack (ppShow x)
-  TableExpectedNested x ->
-    "Expected nested, but was: " <> Text.pack (ppShow x)
-  TableExpectedReversed x ->
-    "Expected reversed, but was: " <> Text.pack (ppShow x)
 
 ppField :: Show a => Text -> a -> Text
 ppField name x =
@@ -279,76 +243,76 @@ emptyColumn = \case
 
 ------------------------------------------------------------------------
 
-takeBinary :: Table -> Either TableSchemaError ByteString
+takeBinary :: Table -> Either SchemaError ByteString
 takeBinary = \case
   Binary x ->
     Right x
   x ->
-    Left $ TableExpectedBinary (schema x)
+    Left $ SchemaExpectedBinary (schema x)
 {-# INLINE takeBinary #-}
 
-takeArray :: Table -> Either TableSchemaError Column
+takeArray :: Table -> Either SchemaError Column
 takeArray = \case
   Array x ->
     Right x
   x ->
-    Left $ TableExpectedArray (schema x)
+    Left $ SchemaExpectedArray (schema x)
 {-# INLINE takeArray #-}
 
-takeMap :: Table -> Either TableSchemaError (Column, Column)
+takeMap :: Table -> Either SchemaError (Column, Column)
 takeMap = \case
   Map k v ->
     Right (k, v)
   x ->
-    Left $ TableExpectedMap (schema x)
+    Left $ SchemaExpectedMap (schema x)
 {-# INLINE takeMap #-}
 
-takeInt :: Column -> Either TableSchemaError (Storable.Vector Int64)
+takeInt :: Column -> Either SchemaError (Storable.Vector Int64)
 takeInt = \case
   Int x ->
     Right x
   x ->
-    Left $ TableExpectedInt (schemaColumn x)
+    Left $ SchemaExpectedInt (schemaColumn x)
 {-# INLINE takeInt #-}
 
-takeDouble :: Column -> Either TableSchemaError (Storable.Vector Double)
+takeDouble :: Column -> Either SchemaError (Storable.Vector Double)
 takeDouble = \case
   Double x ->
     Right x
   x ->
-    Left $ TableExpectedDouble (schemaColumn x)
+    Left $ SchemaExpectedDouble (schemaColumn x)
 {-# INLINE takeDouble #-}
 
-takeEnum :: Column -> Either TableSchemaError (Storable.Vector Tag, Cons Boxed.Vector (Variant Column))
+takeEnum :: Column -> Either SchemaError (Storable.Vector Tag, Cons Boxed.Vector (Variant Column))
 takeEnum = \case
   Enum tags x ->
     Right (tags, x)
   x ->
-    Left $ TableExpectedEnum (schemaColumn x)
+    Left $ SchemaExpectedEnum (schemaColumn x)
 {-# INLINE takeEnum #-}
 
-takeStruct :: Column -> Either TableSchemaError (Cons Boxed.Vector (Field Column))
+takeStruct :: Column -> Either SchemaError (Cons Boxed.Vector (Field Column))
 takeStruct = \case
   Struct x ->
     Right x
   x ->
-    Left $ TableExpectedStruct (schemaColumn x)
+    Left $ SchemaExpectedStruct (schemaColumn x)
 {-# INLINE takeStruct #-}
 
-takeNested :: Column -> Either TableSchemaError (Storable.Vector Int64, Table)
+takeNested :: Column -> Either SchemaError (Storable.Vector Int64, Table)
 takeNested = \case
   Nested ns x ->
     Right (ns, x)
   x ->
-    Left $ TableExpectedNested (schemaColumn x)
+    Left $ SchemaExpectedNested (schemaColumn x)
 {-# INLINE takeNested #-}
 
-takeReversed :: Column -> Either TableSchemaError Column
+takeReversed :: Column -> Either SchemaError Column
 takeReversed = \case
   Reversed x ->
     Right x
   x ->
-    Left $ TableExpectedReversed (schemaColumn x)
+    Left $ SchemaExpectedReversed (schemaColumn x)
 {-# INLINE takeReversed #-}
 
 ------------------------------------------------------------------------

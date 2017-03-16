@@ -1,7 +1,12 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 module Test.Zebra.Serial.Block where
 
+import qualified Data.List as List
+import qualified Data.Map as Map
+import qualified Data.Text as Text
 import qualified Data.Vector as Boxed
 import qualified Data.Vector.Unboxed as Unboxed
 
@@ -17,22 +22,29 @@ import           System.IO (IO)
 import           Test.Zebra.Jack
 import           Test.Zebra.Util
 
+import           Text.Printf (printf)
 import           Text.Show.Pretty (ppShow)
 
 import           Zebra.Data.Block
 import           Zebra.Data.Core
+import           Zebra.Schema (TableSchema, ColumnSchema)
 import qualified Zebra.Schema as Schema
 import           Zebra.Serial.Block
+import           Zebra.Serial.Header
 import qualified Zebra.Table as Table
 
 
 prop_roundtrip_from_facts :: Property
 prop_roundtrip_from_facts =
+  gamble jZebraVersion $ \version ->
   gamble jColumnSchema $ \schema ->
   gamble (listOf $ jFact schema (AttributeId 0)) $ \facts ->
     let
       schemas =
-        Boxed.singleton $ Schema.Array schema
+        Boxed.singleton schema
+
+      header =
+        headerOfAttributes version $ Map.singleton (AttributeName "attribute_0") schema
 
       block =
         either (Savage.error . show) id .
@@ -40,12 +52,24 @@ prop_roundtrip_from_facts =
         Boxed.fromList facts
     in
       counterexample (ppShow schema) $
-      trippingSerial bBlock (getBlock schemas) block
+      trippingSerialE (bBlock header) (getBlock header) block
 
 prop_roundtrip_block :: Property
 prop_roundtrip_block =
   gamble jYoloBlock $ \block ->
-    trippingSerial bBlock (getBlock . fmap Table.schema $ blockTables block) block
+    let
+      mkAttr (ix :: Int) attr0 =
+        (AttributeName . Text.pack $ printf "attribute_%05d" ix, attr0)
+
+      header =
+        headerOfAttributes ZebraV2 .
+        Map.fromList $
+        List.zipWith mkAttr [0..] .
+        fmap (unsafeTakeArray . Table.schema) .
+        Boxed.toList $
+        blockTables block
+    in
+      trippingSerialE (bBlock header) (getBlock header) block
 
 prop_roundtrip_entities :: Property
 prop_roundtrip_entities =
@@ -64,13 +88,12 @@ prop_roundtrip_indices =
 
 prop_roundtrip_tables :: Property
 prop_roundtrip_tables =
-  gamble (Boxed.fromList <$> listOf jSizedTable) $ \xs ->
-    trippingSerial bTables (getTables $ fmap Table.schema xs) xs
+  gamble (Boxed.fromList <$> listOf (jArrayTable 1)) $ \xs ->
+    trippingSerial bTables (getTables $ fmap (unsafeTakeArray . Table.schema) xs) xs
 
-prop_roundtrip_table :: Property
-prop_roundtrip_table =
-  gamble (jTable 1) $ \table ->
-    trippingSerial bTable (getTable 1 $ Table.schema table) table
+unsafeTakeArray :: TableSchema -> ColumnSchema
+unsafeTakeArray =
+  either (Savage.error . ppShow) id . Schema.takeArray
 
 return []
 tests :: IO Bool

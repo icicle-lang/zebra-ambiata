@@ -26,7 +26,7 @@ import qualified System.IO as IO
 
 import           Text.Show.Pretty (ppShow)
 
-import           X.Control.Monad.Trans.Either (EitherT, joinErrors, hoistEither, bracketEitherT')
+import           X.Control.Monad.Trans.Either (EitherT, joinEitherT, hoistEither, bracketEitherT')
 import           X.Control.Monad.Trans.Either.Exit (orDie)
 import qualified X.Data.Vector as Boxed
 import qualified X.Data.Vector.Storable as Storable
@@ -44,7 +44,7 @@ import qualified Zebra.Foreign.Block as Foreign
 import qualified Zebra.Foreign.Entity as Foreign
 import qualified Zebra.Merge.BlockC as Merge
 import qualified Zebra.Merge.Puller.File as Merge
-import           Zebra.Schema (TableSchema)
+import           Zebra.Schema (ColumnSchema)
 import qualified Zebra.Serial as Serial
 import qualified Zebra.Serial.File as Serial
 
@@ -168,7 +168,7 @@ pOutputBlockFacts =
 
 pOutputFormat :: Parser ZebraVersion
 pOutputFormat =
-  fromMaybe ZebraV2 <$> optional pOutputV2
+  fromMaybe ZebraV2 <$> optional (pOutputV2 <|> pOutputV3)
 
 pOutputV2 :: Parser ZebraVersion
 pOutputV2 =
@@ -176,18 +176,25 @@ pOutputV2 =
     Options.long "output-v2" <>
     Options.help "Force merge to output files in version 2 format. (default)"
 
+pOutputV3 :: Parser ZebraVersion
+pOutputV3 =
+  Options.flag' ZebraV3 $
+    Options.long "output-v3" <>
+    Options.help "Force merge to output files in version 3 format."
+
 run :: Command -> IO ()
 run c = case c of
   FileCat fs opts -> orDie id $ forM_ fs $ \f -> do
-    (header,blocks) <- firstTshow $ Serial.fileOfFilePath f
+    (header,blocks) <- firstT Serial.renderDecodeError $ Serial.fileOfFilePath f
     when (catHeader opts) $ lift $ do
       IO.putStrLn "Header information:"
       IO.putStrLn (ppShow header)
     catBlocks opts blocks
 
   FileFacts f -> orDie id $ do
-    (header,blocks) <- firstTshow $ Serial.fileOfFilePath f
-    catFacts (Map.elems header) blocks
+    (header, blocks) <- firstT Serial.renderDecodeError $ Serial.fileOfFilePath f
+    attributes <- firstT Block.renderBlockTableError . hoistEither $ Serial.attributesOfHeader header
+    catFacts (Map.elems attributes) blocks
 
   MergeFiles [] _ _ -> do
     IO.putStrLn "Merge: No files"
@@ -199,9 +206,12 @@ run c = case c of
           Just out -> withOutputPusher opts in1 out
           Nothing  -> withPrintPusher
 
-    withPusher $ \pusher -> do
-    let runOpts = Merge.MergeOptions (firstTshow . puller) pusher $ truncate (mergeGcGigabytes opts * 1024 * 1024 * 1024)
-    joinErrors (Text.pack . show) id $ Merge.mergeBlocks runOpts pullids
+    withPusher $ \pusher ->
+      let
+        runOpts =
+          Merge.MergeOptions (firstT Serial.renderDecodeError . puller) pusher $ truncate (mergeGcGigabytes opts * 1024 * 1024 * 1024)
+      in
+        joinEitherT id . firstTshow $ Merge.mergeBlocks runOpts pullids
 
 withPrintPusher :: ((Foreign.CEntity -> EitherT Text IO ()) -> EitherT Text IO ()) -> EitherT Text IO ()
 withPrintPusher runWith = do
@@ -218,9 +228,12 @@ withOutputPusher ::
   ((Foreign.CEntity -> EitherT Text IO ()) -> EitherT Text IO ()) ->
   EitherT Text IO ()
 withOutputPusher opts inputfile outputfile runWith = do
-  (fileheader,_) <- firstTshow $ Serial.fileOfFilePath inputfile
+  (header0, _) <- firstT Serial.renderDecodeError $ Serial.fileOfFilePath inputfile
+  attributes <- firstT Block.renderBlockTableError . hoistEither $ Serial.attributesOfHeader header0
+  let header = Serial.headerOfAttributes (mergeOutputFormat opts) attributes
+
   outfd <- lift $ IO.openBinaryFile outputfile IO.WriteMode
-  lift $ Builder.hPutBuilder outfd $ Serial.bHeader (mergeOutputFormat opts) fileheader
+  lift $ Builder.hPutBuilder outfd $ Serial.bHeader header
 
   pool0    <- lift $ Mempool.create
 
@@ -238,7 +251,8 @@ withOutputPusher opts inputfile outputfile runWith = do
   let doPurge block = do
       pool <- lift $ IORef.readIORef poolRef
       outblock <- firstTshow $ Foreign.blockOfForeign block
-      lift $ Builder.hPutBuilder outfd (Serial.bBlock outblock)
+      builder <- firstT Block.renderBlockTableError . hoistEither $ Serial.bBlock header outblock
+      lift $ Builder.hPutBuilder outfd builder
       pool' <- lift $ Mempool.create
       lift $ IORef.writeIORef poolRef pool'
       lift $ Mempool.free pool
@@ -260,7 +274,7 @@ withOutputPusher opts inputfile outputfile runWith = do
   maybe (return ()) doPurge mblock
   lift $ IO.hClose outfd
 
-catFacts :: [TableSchema] -> Stream.Stream (EitherT Serial.DecodeError IO) Block.Block -> EitherT Text IO ()
+catFacts :: [ColumnSchema] -> Stream.Stream (EitherT Serial.DecodeError IO) Block.Block -> EitherT Text IO ()
 catFacts schemas0 blocks =
   let
     schemas =
@@ -301,7 +315,7 @@ catBlocks opts blocks = do
           IO.putStrLn ("Block " <> show num)
 
         when (catEntities opts) $ do
-          entities <- firstTshow $ hoistEither $ Block.entitiesOfBlock block
+          entities <- firstTshow . hoistEither $ Block.entitiesOfBlock block
           mapM_ (catEntity opts) entities
 
         when (catBlockSummary opts) $ lift $ do

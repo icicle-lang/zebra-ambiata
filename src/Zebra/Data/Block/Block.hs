@@ -44,7 +44,7 @@ import           Zebra.Data.Core
 import           Zebra.Data.Entity
 import           Zebra.Data.Fact (Fact(..), FactConversionError)
 import qualified Zebra.Data.Fact as Fact
-import           Zebra.Schema (TableSchema)
+import           Zebra.Schema (ColumnSchema)
 import           Zebra.Table (Table, TableError)
 import qualified Zebra.Table as Table
 import           Zebra.Value (Value, ValueSchemaError)
@@ -72,7 +72,7 @@ data FactError =
   | FactLeftoverValues !(Boxed.Vector (Boxed.Vector Value))
     deriving (Eq, Ord, Show, Generic, Typeable)
 
-blockOfFacts :: Boxed.Vector TableSchema -> Boxed.Vector Fact -> Either FactError Block
+blockOfFacts :: Boxed.Vector ColumnSchema -> Boxed.Vector Fact -> Either FactError Block
 blockOfFacts schemas facts =
   first FactConversionError $
     Block (entitiesOfFacts facts) (indicesOfFacts facts) <$> Fact.toValueTable schemas facts

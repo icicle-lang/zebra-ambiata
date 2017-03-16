@@ -1,9 +1,11 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module Test.Zebra.Util (
     liftE
   , trippingIO
   , trippingByIO
   , trippingSerial
+  , trippingSerialE
   , runGetEither
   , runGetEitherConsumeAll
   ) where
@@ -13,12 +15,12 @@ import           Control.Monad.Trans.Class (lift)
 import           Data.Binary.Get (Get, ByteOffset)
 import qualified Data.Binary.Get as Get
 import           Data.ByteString.Builder (Builder)
-import qualified Data.ByteString.Builder as Build
+import qualified Data.ByteString.Builder as Builder
 import qualified Data.ByteString.Lazy as Lazy
 import           Data.String (String)
 import           Data.Void (Void)
 
-import           Disorder.Jack (Property, tripping, property, counterexample)
+import           Disorder.Jack (Property, property, counterexample)
 import           Disorder.Jack.Property.Diff (renderDiffs)
 
 import           Text.Show.Pretty (ppShow)
@@ -71,35 +73,49 @@ trippingByIO select to from a = do
     runEitherT $ do
       b <- firstT EncodeError $ to a
       firstT DecodeError $ from b
+  pure $ diff (pure $ select a) (fmap select roundtrip)
 
+
+trippingSerial :: forall a. (Eq a, Show a) => (a -> Builder) -> Get a -> a -> Property
+trippingSerial build0 get a =
   let
-    original =
-      pure a
+    build :: a -> Either () Builder
+    build =
+      pure . build0
+  in 
+    trippingSerialE build get a
 
+trippingSerialE :: (Eq a, Show a, Show x) => (a -> Either x Builder) -> Get a -> a -> Property
+trippingSerialE build get a =
+  let
+    roundtrip = do
+      b <- bimap ppShow Builder.toLazyByteString $ build a
+      first ppShow $ runGetEither get b
+  in
+    diff (pure a) roundtrip
+
+diff :: (Eq x, Eq a, Show x, Show a) => Either x a -> Either x a -> Property
+diff original roundtrip =
+  let
     comparison =
       "=== Original ===" <>
-      "\n" <> ppShow (fmap select original) <>
+      "\n" <> ppShow original <>
       "\n" <>
       "\n=== Roundtrip ===" <>
-      "\n" <> ppShow (fmap select roundtrip)
+      "\n" <> ppShow roundtrip
 
-    diff = do
-      o <- Pretty.reify (fmap select original)
-      r <- Pretty.reify (fmap select roundtrip)
+    pdiff = do
+      o <- Pretty.reify original
+      r <- Pretty.reify roundtrip
       pure $
         "=== - Original / + Roundtrip ===" <>
         "\n" <> renderDiffs o r
-
-  pure .
+  in
     counterexample "" .
     counterexample "Roundtrip failed." .
     counterexample "" .
-    counterexample (fromMaybe comparison diff) $
-      property (fmap select roundtrip == fmap select original)
-
-trippingSerial :: (Eq a, Show a) => (a -> Builder) -> Get a -> a -> Property
-trippingSerial build get =
-  tripping (Build.toLazyByteString . build) (runGetEither get)
+    counterexample (fromMaybe comparison pdiff) $
+      property (roundtrip == original)
 
 runGetEither :: Get a -> Lazy.ByteString -> Either (Lazy.ByteString, ByteOffset, String) a
 runGetEither g =

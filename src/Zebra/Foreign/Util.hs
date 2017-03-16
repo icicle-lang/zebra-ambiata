@@ -63,6 +63,8 @@ data ForeignError =
   | ForeignAppendDifferentAttributeCount
   | ForeignSegmentError !SegmentError
   | ForeignFoundEmptyStructOrEnum
+  | ForeignUnpackBufferTooSmall
+  | ForeignUnpackBufferTooLarge
   | ForeignUnknownError !CError
     deriving (Eq, Ord, Show)
 
@@ -86,6 +88,10 @@ fromCError = \case
     Left ForeignAppendDifferentColumnTypes
   C'ZEBRA_APPEND_DIFFERENT_ATTRIBUTE_COUNT ->
     Left ForeignAppendDifferentAttributeCount
+  C'ZEBRA_UNPACK_BUFFER_TOO_SMALL ->
+    Left ForeignUnpackBufferTooSmall
+  C'ZEBRA_UNPACK_BUFFER_TOO_LARGE ->
+    Left ForeignUnpackBufferTooLarge
   err ->
     Left $ ForeignUnknownError err
 {-# INLINE fromCError #-}

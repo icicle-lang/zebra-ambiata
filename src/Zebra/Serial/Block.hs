@@ -7,6 +7,13 @@ module Zebra.Serial.Block (
     bBlock
   , getBlock
 
+  -- * Internal
+  , bBlockV3
+  , getBlockV3
+
+  , bBlockV2
+  , getBlockV2
+
   , bEntities
   , getEntities
 
@@ -17,17 +24,15 @@ module Zebra.Serial.Block (
   , getIndices
 
   , bTables
-  , bTable
-  , bColumn
   , getTables
-  , getTable
   ) where
 
 import           Data.Binary.Get (Get)
 import qualified Data.Binary.Get as Get
 import           Data.ByteString.Builder (Builder)
-import qualified Data.ByteString.Builder as Build
-import           Data.Coerce (coerce)
+import qualified Data.ByteString.Builder as Builder
+import qualified Data.Map as Map
+import qualified Data.Text as Text
 import qualified Data.Vector as Boxed
 
 import           P
@@ -39,24 +44,60 @@ import qualified X.Data.Vector.Stream as Stream
 
 import           Zebra.Data.Block
 import           Zebra.Data.Core
-import qualified Zebra.Data.Vector.Cons as Cons
-import           Zebra.Schema (TableSchema, ColumnSchema, Tag)
+import           Zebra.Schema (TableSchema, ColumnSchema)
 import qualified Zebra.Schema as Schema
 import           Zebra.Serial.Array
-import           Zebra.Table (Table, Column)
+import           Zebra.Serial.Header
+import           Zebra.Serial.Table
+import           Zebra.Table (Table)
 import qualified Zebra.Table as Table
 
 
--- | Encode a zebra block.
+bBlock :: Header -> Block -> Either BlockTableError Builder
+bBlock header block =
+  case header of
+    HeaderV2 _ ->
+      pure $ bBlockV2 block
+    HeaderV3 table -> do
+      attributes <- Boxed.fromList . Map.keys <$> attributesOfTableSchema table
+      bBlockV3 attributes block
+
+getBlock :: Header -> Get Block
+getBlock = \case
+  HeaderV2 x ->
+    getBlockV2 . Boxed.fromList $ Map.elems x
+  HeaderV3 x ->
+    getBlockV3 x
+
+-- | Encode a zebra v3 block.
 --
-bBlock :: Block -> Builder
-bBlock block =
+bBlockV3 :: Boxed.Vector AttributeName -> Block -> Either BlockTableError Builder
+bBlockV3 attributes block = do
+  table <- tableOfBlock attributes block
+  pure $
+    Builder.word32LE (fromIntegral $ Table.length table) <>
+    bTable ZebraV3 table
+
+getBlockV3 :: TableSchema -> Get Block
+getBlockV3 schema = do
+  n <- fromIntegral <$> Get.getWord32le
+  table <- getTable ZebraV3 n schema
+  case blockOfTable table of
+    Left err ->
+      fail . Text.unpack $ renderBlockTableError err
+    Right x ->
+      pure x
+
+-- | Encode a zebra v2 block.
+--
+bBlockV2 :: Block -> Builder
+bBlockV2 block =
   bEntities (blockEntities block) <>
   bIndices (blockIndices block) <>
   bTables (blockTables block)
 
-getBlock :: Boxed.Vector TableSchema -> Get Block
-getBlock schemas = do
+getBlockV2 :: Boxed.Vector ColumnSchema -> Get Block
+getBlockV2 schemas = do
   entities <- getEntities
   indices <- getIndices
   tables <- getTables schemas
@@ -109,7 +150,7 @@ bEntities xs =
       Stream.concatMap (Stream.streamOfVector . entityAttributes) $
       Stream.streamOfVector xs
   in
-    Build.word32LE ecount <>
+    Builder.word32LE ecount <>
     bIntArray hashes <>
     bStrings ids <>
     bIntArray acounts <>
@@ -163,7 +204,7 @@ bAttributes xs =
       Unboxed.convert $
       Unboxed.map (fromIntegral . attributeRows) xs
   in
-    Build.word32LE acount <>
+    Builder.word32LE acount <>
     bIntArray ids <>
     bIntArray counts
 
@@ -218,7 +259,7 @@ bIndices xs =
       Unboxed.convert $
       Unboxed.map (foreignOfTombstone . indexTombstone) xs
   in
-    Build.word32LE icount <>
+    Builder.word32LE icount <>
     bIntArray times <>
     bIntArray factsetIds <>
     bIntArray tombstones
@@ -288,12 +329,12 @@ bTables xs =
       Storable.convert $
       fmap (fromIntegral . Table.length) xs
   in
-    Build.word32LE tcount <>
+    Builder.word32LE tcount <>
     bIntArray ids <>
     bIntArray counts <>
-    foldMap bTable xs
+    foldMap (bTable ZebraV2) xs
 
-getTables :: Boxed.Vector TableSchema -> Get (Boxed.Vector Table)
+getTables :: Boxed.Vector ColumnSchema -> Get (Boxed.Vector Table)
 getTables schemas = do
   tcount <- fromIntegral <$> Get.getWord32le
   ids <- fmap fromIntegral . Boxed.convert <$> getIntArray tcount
@@ -305,106 +346,6 @@ getTables schemas = do
         Nothing ->
           fail $ "Cannot read table, unknown attribute-id: " <> show aid
         Just schema ->
-          getTable n schema
+          getTable ZebraV2 n (Schema.Array schema)
 
   Boxed.zipWithM get ids counts
-
-bTable :: Table -> Builder
-bTable = \case
-  Table.Binary bs ->
-    bByteArray bs
-
-  Table.Array c ->
-    bColumn c
-
-  Table.Map k v ->
-    bColumn k <>
-    bColumn v
-
-bColumn :: Column -> Builder
-bColumn = \case
-  Table.Unit _ ->
-    mempty
-
-  Table.Int xs ->
-    bIntArray xs
-
-  Table.Double xs ->
-    bDoubleArray xs
-
-  Table.Enum tags vs ->
-    bTagArray tags <>
-    foldMap (bColumn . Schema.variant) vs
-
-  Table.Struct fs ->
-    foldMap (bColumn . Schema.field) fs
-
-  Table.Nested ns x ->
-    bIntArray ns <>
-    Build.word32LE (fromIntegral $ Table.length x) <>
-    bTable x
-
-  Table.Reversed x ->
-    bColumn x
-
-getTable :: Int -> TableSchema -> Get Table
-getTable n = \case
-  Schema.Binary ->
-    Table.Binary
-      <$> getByteArray
-
-  Schema.Array e ->
-    Table.Array
-      <$> getColumn n e
-
-  Schema.Map k v ->
-    Table.Map
-      <$> getColumn n k
-      <*> getColumn n v
-
-getColumn :: Int -> ColumnSchema -> Get Column
-getColumn n = \case
-  Schema.Unit ->
-    pure $ Table.Unit n
-
-  Schema.Int ->
-    Table.Int
-      <$> getIntArray n
-
-  Schema.Double ->
-    Table.Double
-      <$> getDoubleArray n
-
-  Schema.Enum vs ->
-    Table.Enum
-      <$> getTagArray n
-      <*> Cons.mapM (traverse $ getColumn n) vs
-
-  Schema.Struct fs ->
-    Table.Struct
-      <$> Cons.mapM (traverse $ getColumn n) fs
-
-  Schema.Nested t ->
-    Table.Nested
-      <$> getIntArray n
-      <*> (flip getTable t . fromIntegral =<< Get.getWord32le)
-
-  Schema.Reversed c ->
-    Table.Reversed
-      <$> getColumn n c
-
-bTagArray :: Storable.Vector Tag -> Builder
-bTagArray =
-  bIntArray . coerce
-
-getTagArray :: Int -> Get (Storable.Vector Tag)
-getTagArray n =
-  coerce <$> getIntArray n
-
-bDoubleArray :: Storable.Vector Double -> Builder
-bDoubleArray =
-  bIntArray . coerce
-
-getDoubleArray :: Int -> Get (Storable.Vector Double)
-getDoubleArray n =
-  coerce <$> getIntArray n

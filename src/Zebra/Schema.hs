@@ -29,6 +29,20 @@ module Zebra.Schema (
   , none
   , some
 
+  , SchemaError(..)
+  , renderSchemaError
+
+  , takeBinary
+  , takeArray
+  , takeMap
+  , takeInt
+  , takeDouble
+  , takeEnum
+  , takeStruct
+  , takeNested
+  , takeReversed
+  , takeOption
+
   , SchemaDecodeError(..)
   , renderSchemaDecodeError
 
@@ -59,6 +73,8 @@ import           GHC.Generics (Generic)
 import           Foreign.Storable (Storable)
 
 import           P hiding (bool, some)
+
+import           Text.Show.Pretty (ppShow)
 
 import qualified X.Data.Vector as Boxed
 import qualified X.Data.Vector.Storable as Storable
@@ -139,9 +155,46 @@ data ColumnSchema =
   | Reversed !ColumnSchema
     deriving (Eq, Ord, Show, Generic, Typeable)
 
+data SchemaError =
+    SchemaExpectedBinary !TableSchema
+  | SchemaExpectedArray !TableSchema
+  | SchemaExpectedMap !TableSchema
+  | SchemaExpectedInt !ColumnSchema
+  | SchemaExpectedDouble !ColumnSchema
+  | SchemaExpectedEnum !ColumnSchema
+  | SchemaExpectedStruct !ColumnSchema
+  | SchemaExpectedNested !ColumnSchema
+  | SchemaExpectedReversed !ColumnSchema
+  -- FIXME Should non-primitive types really be here? /not sure
+  | SchemaExpectedOption !(Cons Boxed.Vector (Variant ColumnSchema))
+    deriving (Eq, Ord, Show, Generic, Typeable)
+
 data SchemaDecodeError =
     SchemaDecodeError !Aeson.JSONPath !Text
     deriving (Eq, Show)
+
+renderSchemaError :: SchemaError -> Text
+renderSchemaError = \case
+  SchemaExpectedBinary x ->
+    "Expected Binary, but was: " <> Text.pack (ppShow x)
+  SchemaExpectedArray x ->
+    "Expected Array, but was: " <> Text.pack (ppShow x)
+  SchemaExpectedMap x ->
+    "Expected Map, but was: " <> Text.pack (ppShow x)
+  SchemaExpectedInt x ->
+    "Expected Int, but was: " <> Text.pack (ppShow x)
+  SchemaExpectedDouble x ->
+    "Expected Double, but was: " <> Text.pack (ppShow x)
+  SchemaExpectedEnum x ->
+    "Expected Enum, but was: " <> Text.pack (ppShow x)
+  SchemaExpectedStruct x ->
+    "Expected Struct, but was: " <> Text.pack (ppShow x)
+  SchemaExpectedNested x ->
+    "Expected Nested, but was: " <> Text.pack (ppShow x)
+  SchemaExpectedReversed x ->
+    "Expected Reversed, but was: " <> Text.pack (ppShow x)
+  SchemaExpectedOption x ->
+    "Expected option variants (i.e. none/some), but was: " <> Text.pack (ppShow x)
 
 renderSchemaDecodeError :: SchemaDecodeError -> Text
 renderSchemaDecodeError = \case
@@ -194,6 +247,92 @@ some =
 option :: ColumnSchema -> ColumnSchema
 option =
   Enum . Cons.from2 none . some
+
+------------------------------------------------------------------------
+
+takeBinary :: TableSchema -> Either SchemaError ()
+takeBinary = \case
+  Binary ->
+    Right ()
+  x ->
+    Left $ SchemaExpectedBinary x
+{-# INLINE takeBinary #-}
+
+takeArray :: TableSchema -> Either SchemaError ColumnSchema
+takeArray = \case
+  Array x ->
+    Right x
+  x ->
+    Left $ SchemaExpectedArray x
+{-# INLINE takeArray #-}
+
+takeMap :: TableSchema -> Either SchemaError (ColumnSchema, ColumnSchema)
+takeMap = \case
+  Map k v ->
+    Right (k, v)
+  x ->
+    Left $ SchemaExpectedMap x
+{-# INLINE takeMap #-}
+
+takeInt :: ColumnSchema -> Either SchemaError ()
+takeInt = \case
+  Int ->
+    Right ()
+  x ->
+    Left $ SchemaExpectedInt x
+{-# INLINE takeInt #-}
+
+takeDouble :: ColumnSchema -> Either SchemaError ()
+takeDouble = \case
+  Double ->
+    Right ()
+  x ->
+    Left $ SchemaExpectedDouble x
+{-# INLINE takeDouble #-}
+
+takeEnum :: ColumnSchema -> Either SchemaError (Cons Boxed.Vector (Variant ColumnSchema))
+takeEnum = \case
+  Enum x ->
+    Right x
+  x ->
+    Left $ SchemaExpectedEnum x
+{-# INLINE takeEnum #-}
+
+takeStruct :: ColumnSchema -> Either SchemaError (Cons Boxed.Vector (Field ColumnSchema))
+takeStruct = \case
+  Struct x ->
+    Right x
+  x ->
+    Left $ SchemaExpectedStruct x
+{-# INLINE takeStruct #-}
+
+takeNested :: ColumnSchema -> Either SchemaError TableSchema
+takeNested = \case
+  Nested x ->
+    Right x
+  x ->
+    Left $ SchemaExpectedNested x
+{-# INLINE takeNested #-}
+
+takeReversed :: ColumnSchema -> Either SchemaError ColumnSchema
+takeReversed = \case
+  Reversed x ->
+    Right x
+  x ->
+    Left $ SchemaExpectedReversed x
+{-# INLINE takeReversed #-}
+
+------------------------------------------------------------------------
+
+takeOption :: ColumnSchema -> Either SchemaError ColumnSchema
+takeOption x0 = do
+  vs <- takeEnum x0
+  case Cons.toList vs of
+    [Variant "none" Unit, Variant "some" x] ->
+      pure x
+    _ ->
+      Left $ SchemaExpectedOption vs
+{-# INLINE takeOption #-}
 
 ------------------------------------------------------------------------
 

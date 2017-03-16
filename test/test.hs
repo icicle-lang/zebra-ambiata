@@ -12,6 +12,7 @@ import qualified Test.Zebra.Serial.Array
 import qualified Test.Zebra.Serial.Block
 import qualified Test.Zebra.Serial.File
 import qualified Test.Zebra.Serial.Header
+import qualified Test.Zebra.Serial.Table
 import qualified Test.Zebra.Table
 
 main :: IO ()
@@ -29,5 +30,6 @@ main =
     , Test.Zebra.Serial.Block.tests
     , Test.Zebra.Serial.File.tests
     , Test.Zebra.Serial.Header.tests
+    , Test.Zebra.Serial.Table.tests
     , Test.Zebra.Table.tests
     ]

@@ -22,8 +22,6 @@ import           Control.Monad.IO.Class (MonadIO(..))
 import           Data.Binary.Get (Get)
 import qualified Data.Binary.Get as Get
 import qualified Data.ByteString as B
-import           Data.Map (Map)
-import qualified Data.Map as Map
 import qualified Data.Text as Text
 import           Data.String (String)
 
@@ -33,12 +31,9 @@ import           System.IO (FilePath)
 import qualified System.IO as IO
 
 import           X.Control.Monad.Trans.Either (EitherT, pattern EitherT, left)
-import qualified X.Data.Vector as Boxed
 import qualified X.Data.Vector.Stream as Stream
 
 import           Zebra.Data.Block
-import           Zebra.Data.Core
-import           Zebra.Schema (TableSchema)
 import           Zebra.Serial.Block
 import           Zebra.Serial.Header
 
@@ -59,19 +54,29 @@ renderDecodeError = \case
   DecodeErrorBadParserExpectsMoreAfterEnd ->
     "Decode error: the parser asked for more input after telling it the stream has ended. This means there is a bug in the parser."
 
-fileOfBytes :: Monad m => Stream.Stream m B.ByteString -> EitherT DecodeError m (Map AttributeName TableSchema, Stream.Stream (EitherT DecodeError m) Block)
-fileOfBytes input = EitherT $ do
-  (header, rest) <- runStreamOne getHeader input
-  case header of
-   Left err -> return $ Left err
-   Right header' ->
-    let schemas = Boxed.fromList $ Map.elems header'
-        blocks = runStreamMany (getBlock schemas) rest
-    in  return $ Right (header', blocks)
+fileOfBytes ::
+  Monad m =>
+  Stream.Stream m B.ByteString ->
+  EitherT DecodeError m (Header, Stream.Stream (EitherT DecodeError m) Block)
+fileOfBytes input =
+  EitherT $ do
+    (mheader, rest) <- runStreamOne getHeader input
+    case mheader of
+     Left err ->
+       pure $ Left err
+     Right header ->
+      let
+        blocks =
+          runStreamMany (getBlock header) rest
+      in
+        pure $ Right (header, blocks)
 
-blocksOfBytes :: Monad m => Boxed.Vector TableSchema -> Stream.Stream m B.ByteString -> Stream.Stream (EitherT DecodeError m) Block
-blocksOfBytes formats inp = runStreamMany (getBlock formats) inp
-
+blocksOfBytes ::
+  Monad m =>
+  Header ->
+  Stream.Stream m B.ByteString -> Stream.Stream (EitherT DecodeError m) Block
+blocksOfBytes header inp =
+  runStreamMany (getBlock header) inp
 
 -- | Run a 'Get' binary decoder over a stream of strict bytestrings.
 -- Return the value we got, as well as the rest of the stream
@@ -146,7 +151,7 @@ runStreamMany g (Stream.Stream s'go s'init) =
          -> return $ Stream.Yield ret (s, str', Nothing)
 
 
-fileOfFilePath :: MonadIO m => FilePath -> EitherT DecodeError m (Map AttributeName TableSchema, Stream.Stream (EitherT DecodeError m) Block)
+fileOfFilePath :: MonadIO m => FilePath -> EitherT DecodeError m (Header, Stream.Stream (EitherT DecodeError m) Block)
 fileOfFilePath path = do
   bytes <- lift $ streamOfFile path
   fileOfBytes bytes

@@ -1,7 +1,10 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 module Test.Zebra.Data.Block where
 
+import qualified Data.List as List
+import qualified Data.Map as Map
 import qualified Data.Text as Text
 import qualified Data.Vector as Boxed
 
@@ -19,7 +22,6 @@ import           Text.Show.Pretty (ppShow)
 
 import           Zebra.Data.Block
 import           Zebra.Data.Core
-import qualified Zebra.Schema as Schema
 import qualified Zebra.Table as Table
 
 
@@ -29,7 +31,7 @@ prop_roundtrip_facts =
   gamble (listOf $ jFact schema (AttributeId 0)) $ \facts ->
     let
       schemas =
-        Boxed.singleton (Schema.Array schema)
+        Boxed.singleton schema
 
       input =
         Boxed.fromList facts
@@ -45,6 +47,19 @@ prop_roundtrip_tables =
         [0..Boxed.length (blockTables block) - 1]
   in
     trippingBoth (tableOfBlock $ Boxed.fromList names) blockOfTable block
+
+prop_roundtrip_attribute_schemas :: Property
+prop_roundtrip_attribute_schemas =
+  gamble (listOf jColumnSchema) $ \attrs0 ->
+  let
+    mkAttr (ix :: Int) attr0 =
+      (AttributeName . Text.pack $ "attribute_" <> show ix, attr0)
+
+    attrs =
+      Map.fromList $
+      List.zipWith mkAttr [0..] attrs0
+  in
+    trippingBoth (pure . tableSchemaOfAttributes) attributesOfTableSchema attrs
 
 prop_collection_from_block :: Property
 prop_collection_from_block =

@@ -10,6 +10,7 @@ module Test.Zebra.Jack (
   , jTombstone
 
   -- * Zebra.Data.Core
+  , jZebraVersion
   , jEntityId
   , jEntityHashId
   , jAttributeId
@@ -39,6 +40,7 @@ module Test.Zebra.Jack (
   -- * Zebra.Table
   , jSizedTable
   , jTable
+  , jArrayTable
   , jColumn
 
   -- * Zebra.Value
@@ -88,7 +90,6 @@ import           Zebra.Table (Table, Column)
 import qualified Zebra.Table as Table
 import           Zebra.Value (Collection, Value)
 import qualified Zebra.Value as Value
-
 
 ------------------------------------------------------------------------
 
@@ -398,6 +399,10 @@ renderTagLookupError tag variants =
   (List.concatMap ("\n    " <>) . List.lines $ ppShow variants) <>
   "\n"
 
+jZebraVersion :: Jack ZebraVersion
+jZebraVersion =
+  elements [ZebraV2, ZebraV3]
+
 jEntityId :: Jack EntityId
 jEntityId =
   let
@@ -457,7 +462,7 @@ jBlock = do
   schemas <- listOfN 0 5 jColumnSchema
   facts <- jFacts schemas
   pure $
-    case blockOfFacts (fmap Schema.Array $ Boxed.fromList schemas) (Boxed.fromList facts) of
+    case blockOfFacts (Boxed.fromList schemas) (Boxed.fromList facts) of
       Left x ->
         Savage.error $ "Test.Zebra.Jack.jBlock: invariant failed: " <> show x
       Right x ->
@@ -470,7 +475,7 @@ jYoloBlock = do
     Block
       <$> (Boxed.fromList <$> listOfN 0 (size `div` 5) jBlockEntity)
       <*> (Unboxed.fromList <$> listOfN 0 (size `div` 5) jBlockIndex)
-      <*> (Boxed.fromList <$> listOfN 0 (size `div` 5) jSizedTable)
+      <*> (Boxed.fromList <$> listOfN 0 (size `div` 5) (jArrayTable =<< chooseInt (0, size `div` 5)))
 
 jBlockEntity :: Jack BlockEntity
 jBlockEntity =
