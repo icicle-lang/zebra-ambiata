@@ -43,7 +43,7 @@ int64_t zebra_midpoint (
 
 error_t zebra_unpack_array (
     uint8_t *buf
-  , int64_t bufsize
+  , int64_t bufsize0
   , int64_t n_elems
   , int64_t offset
   , int64_t *fill_start
@@ -56,10 +56,19 @@ error_t zebra_unpack_array (
     int64_t n_parts   = n_elems / int_part_size;
     int64_t n_remains = n_elems % int_part_size;
 
-    int64_t *fill  = fill_start;
+    int64_t bufsize = bufsize0 - n_parts;
+    if (bufsize < 0) return ZEBRA_UNPACK_BUFFER_TOO_SMALL;
 
+    int64_t *fill  = fill_start;
     uint8_t *nbits = buf;
     uint8_t *parts = buf + n_parts;
+
+    for (int64_t ix = 0; ix != n_parts; ++ix) {
+        bufsize -= nbits[ix] * 8;
+    }
+
+    if (bufsize < 0) return ZEBRA_UNPACK_BUFFER_TOO_SMALL;
+
     for (int64_t ix = 0; ix != n_parts; ++ix) {
         uint8_t nbit = *nbits;
 
@@ -73,7 +82,12 @@ error_t zebra_unpack_array (
         parts += nbit * 8;
     }
 
-    memcpy(fill, parts, n_remains * sizeof (int64_t));
+    int64_t remains_size = n_remains * sizeof (int64_t);
+    bufsize -= remains_size;
+    if (bufsize < 0) return ZEBRA_UNPACK_BUFFER_TOO_SMALL;
+    if (bufsize > 0) return ZEBRA_UNPACK_BUFFER_TOO_LARGE;
+
+    memcpy(fill, parts, remains_size);
 
     for (int64_t ix = 0; ix != n_elems; ++ix) {
         fill_start[ix] = zebra_unzigzag64(fill_start[ix]) + offset;

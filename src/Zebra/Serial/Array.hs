@@ -3,10 +3,12 @@
 module Zebra.Serial.Array (
     bStrings
   , bByteArray
+  , bSizedByteArray
   , bIntArray
 
   , getStrings
   , getByteArray
+  , getSizedByteArray
   , getIntArray
 
   -- ** Exported for tests
@@ -15,8 +17,6 @@ module Zebra.Serial.Array (
   , unZigZag64
   ) where
 
-import qualified Zebra.Foreign.Serial as FoSerial
-
 import           Data.Binary.Get (Get)
 import qualified Data.Binary.Get as Get
 import           Data.Bits ((.&.), xor, shiftR, shiftL)
@@ -24,8 +24,8 @@ import           Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import           Data.ByteString.Builder (Builder)
 import qualified Data.ByteString.Builder as Builder
-import qualified Data.ByteString.Builder.Prim.Internal as BuilderPrim
-import qualified Data.ByteString.Builder.Prim          as BuilderPrim
+import qualified Data.ByteString.Builder.Prim.Internal as Prim
+import qualified Data.ByteString.Builder.Prim as Prim
 import           Data.Word (Word64)
 
 import           P
@@ -35,6 +35,8 @@ import qualified Snapper as Snappy
 import           X.Data.ByteString.Unsafe (unsafeSplits)
 import qualified X.Data.Vector as Boxed
 import qualified X.Data.Vector.Storable as Storable
+
+import qualified Zebra.Foreign.Serial as Foreign
 
 
 -- | Strings are encoded as a word array of lengths, followed by the bytes for
@@ -48,7 +50,7 @@ bStrings bss =
       fmap (fromIntegral . B.length) bss
 
     bytes =
-      bByteArray .
+      bSizedByteArray .
       B.concat $
       toList bss
   in
@@ -58,7 +60,7 @@ bStrings bss =
 getStrings :: Int -> Get (Boxed.Vector ByteString)
 getStrings n = do
   lengths <- getIntArray n
-  bytes <- getByteArray
+  bytes <- getSizedByteArray
   pure .
     unsafeSplits id bytes $
     Storable.map fromIntegral lengths
@@ -69,10 +71,9 @@ getStrings n = do
 --   something like LZ4 or Snappy.
 --
 -- @
---   byte_array {
---     size_uncompressed : u32
---     size_compressed   : u32
---     bytes             : size_compressed * u8
+--   byte_array n {
+--     size_compressed : u32
+--     bytes           : size_compressed * u8
 --   }
 -- @
 bByteArray :: ByteString -> Builder
@@ -81,13 +82,11 @@ bByteArray uncompressed =
     compressed =
       Snappy.compress uncompressed
   in
-    Builder.word32LE (fromIntegral $ B.length uncompressed) <>
     Builder.word32LE (fromIntegral $ B.length compressed) <>
     Builder.byteString compressed
 
-getByteArray :: Get ByteString
-getByteArray = do
-  n_uncompressed <- Get.getWord32le
+getByteArray :: Int -> Get ByteString
+getByteArray n_expected = do
   n_compressed <- Get.getWord32le
   compressed <- Get.getByteString $ fromIntegral n_compressed
   case Snappy.decompress compressed of
@@ -95,9 +94,45 @@ getByteArray = do
       fail $
         "could not decompress snappy encoded payload " <>
         "(compressed size = " <> show n_compressed <> " bytes" <>
-        ", uncompressed size = " <> show n_uncompressed <> " bytes)"
+        ", uncompressed size = " <> show n_expected <> " bytes)"
     Just uncompressed ->
-      pure uncompressed
+      let
+        n_actual =
+          B.length uncompressed
+      in
+        if n_expected == n_actual then
+          pure uncompressed
+        else
+          fail $
+            "decoded snappy was the wrong size: " <>
+            "expected <" <> show n_expected <>
+            ">, but was <" <> show n_actual <> ">"
+
+-- | Encode a vector of bytes.
+--
+--   Byte arrays are expected to contain string data and are compressed using
+--   something like LZ4 or Snappy.
+--
+-- @
+--   sized_byte_array {
+--     sized_uncompressed : u32
+--     size_compressed    : u32
+--     bytes              : size_compressed * u8
+--   }
+-- @
+bSizedByteArray :: ByteString -> Builder
+bSizedByteArray uncompressed =
+  let
+    n =
+      B.length uncompressed
+  in
+    Builder.word32LE (fromIntegral n) <>
+    bByteArray uncompressed
+
+getSizedByteArray :: Get ByteString
+getSizedByteArray = do
+  n_uncompressed <- fromIntegral <$> Get.getWord32le
+  getByteArray n_uncompressed
 
 -- | Encodes a vector of words.
 --
@@ -128,18 +163,17 @@ bIntArray xs =
       -- num-bits (len * 1 byte)
       -- packs worst case (len * 8 byte)
       ensure = 4 + 8 + len + len * 8
-      prim = BuilderPrim.boudedPrim ensure FoSerial.packArray
-  in BuilderPrim.primBounded prim xs
+      prim = Prim.boudedPrim ensure Foreign.packArray
+  in Prim.primBounded prim xs
 
 getIntArray :: Int -> Get (Storable.Vector Int64)
 getIntArray elems = do
   bufsize <- fromIntegral <$> Get.getWord32le
   offset <- fromIntegral <$> Get.getWord64le
-  Get.isolate bufsize $ do
-    bytes <- Get.getByteString bufsize
-    case FoSerial.unpackArray bytes bufsize elems offset of
-     Left err -> fail $ "Could not unpack 64-encoded words: " <> show err
-     Right xs -> pure xs
+  bytes <- Get.getByteString bufsize
+  case Foreign.unpackArray bytes elems offset of
+    Left err -> fail $ "Could not unpack 64-encoded words: " <> show err
+    Right xs -> pure xs
 
 -- | Commutative, overflow proof integer average/midpoint:
 --

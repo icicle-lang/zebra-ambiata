@@ -56,13 +56,13 @@ prop_runStreamOne_getWord64be =
 prop_runStreamOne_getByteArray :: Property
 prop_runStreamOne_getByteArray =
   gamble jSplits $ \bss ->
-    checkRunStreamOne getByteArray (Stream.streamOfVector bss)
+    checkRunStreamOne getSizedByteArray (Stream.streamOfVector bss)
 
 -- Adding a filter makes sure there are "Skips" in the stream
 prop_runStreamOne_getByteArray_filtered :: Property
 prop_runStreamOne_getByteArray_filtered =
   gamble jSplits $ \bss ->
-    checkRunStreamOne getByteArray (Stream.filter (\b -> B.length b `mod` 2 == 0) $ Stream.streamOfVector bss)
+    checkRunStreamOne getSizedByteArray (Stream.filter (\b -> B.length b `mod` 2 == 0) $ Stream.streamOfVector bss)
 
 
 prop_runStreamOne_getIntArray_prefix_size :: Property
@@ -95,13 +95,13 @@ prop_runStreamMany_getWord64be =
 prop_runStreamMany_getByteArray :: Property
 prop_runStreamMany_getByteArray =
   gamble jSplits $ \bss ->
-    checkRunStreamMany getByteArray (Stream.streamOfVector bss)
+    checkRunStreamMany getSizedByteArray (Stream.streamOfVector bss)
 
 -- Adding a filter makes sure there are "Skips" in the stream
 prop_runStreamMany_getByteArray_filtered :: Property
 prop_runStreamMany_getByteArray_filtered =
   gamble jSplits $ \bss ->
-    checkRunStreamMany getByteArray (Stream.filter (\b -> B.length b `mod` 2 == 0) $ Stream.streamOfVector bss)
+    checkRunStreamMany getSizedByteArray (Stream.filter (\b -> B.length b `mod` 2 == 0) $ Stream.streamOfVector bss)
 
 
 prop_runStreamMany_getIntArray_prefix_size :: Property

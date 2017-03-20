@@ -2,6 +2,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 module Test.Zebra.Serial.Array where
 
+import qualified Data.ByteString as ByteString
 import qualified Data.List as List
 import qualified Data.Vector as Boxed
 import qualified Data.Vector.Storable as Storable
@@ -27,8 +28,13 @@ prop_roundtrip_strings =
 
 prop_roundtrip_bytes :: Property
 prop_roundtrip_bytes =
+  gamble arbitrary $ \bs ->
+    trippingSerial bByteArray (getByteArray $ ByteString.length bs) bs
+
+prop_roundtrip_sized_bytes :: Property
+prop_roundtrip_sized_bytes =
   gamble arbitrary $
-    trippingSerial bByteArray getByteArray
+    trippingSerial bSizedByteArray getSizedByteArray
 
 prop_roundtrip_ints :: Property
 prop_roundtrip_ints =

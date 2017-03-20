@@ -4,41 +4,43 @@ module Zebra.Foreign.Serial (
   , packArray
   ) where
 
-import           Zebra.Foreign.Bindings
-import           Zebra.Foreign.Util
-
-import           System.IO.Unsafe (unsafePerformIO)
-
 import           Data.ByteString (ByteString)
-import qualified Data.ByteString.Unsafe as BU
-
-import qualified X.Data.Vector.Storable as Storable
+import qualified Data.ByteString as ByteString
+import qualified Data.ByteString.Unsafe as ByteString
 import qualified Data.Vector.Storable.Mutable as Mutable
+import           Data.Word (Word8)
 
 import           Foreign.Marshal.Alloc (alloca)
 import           Foreign.Storable (Storable(..))
 import           Foreign.Ptr (Ptr)
-import           Data.Word (Word8)
-import           System.IO (IO)
-
-import qualified Prelude as Savage
 
 import           P
 
-unpackArray :: ByteString -> Int -> Int -> Int -> Either ForeignError (Storable.Vector Int64)
-unpackArray bytes bufsize elems offset
- = unsafePerformIO $ do
+import qualified Prelude as Savage
+
+import           System.IO (IO)
+import           System.IO.Unsafe (unsafePerformIO)
+
+import qualified X.Data.Vector.Storable as Storable
+
+import           Zebra.Foreign.Bindings
+import           Zebra.Foreign.Util
+
+
+unpackArray :: ByteString -> Int -> Int -> Either ForeignError (Storable.Vector Int64)
+unpackArray bytes elems offset =
+  unsafePerformIO $ do
     fill <- Mutable.new elems
-    err <- BU.unsafeUseAsCString bytes $ \buf   ->
-           Mutable.unsafeWith fill     $ \fill' ->
-           unsafe'c'zebra_unpack_array buf (i64 bufsize) (i64 elems) (i64 offset) fill'
+    err <- ByteString.unsafeUseAsCString bytes $ \buf ->
+           Mutable.unsafeWith fill $ \fill' ->
+           unsafe'c'zebra_unpack_array buf (i64 $ ByteString.length bytes) (i64 elems) (i64 offset) fill'
 
     case fromCError err of
      Left err' -> return $ Left err'
      Right ()  -> Right <$> Storable.unsafeFreeze fill
- where
-  i64 :: Int -> Int64
-  i64 = fromIntegral
+
+i64 :: Int -> Int64
+i64 = fromIntegral
 
 -- | Pack an array into a buffer. Assumes there is enough space for the whole output.
 -- This type signature is designed to be used with Builder
@@ -52,7 +54,3 @@ packArray elems buf
     case fromCError err of
      Left err' -> Savage.error ("Zebra.Foreign.Serial.packArray: C code returned error " <> show err')
      Right ()  -> peek bufp
- where
-  i64 :: Int -> Int64
-  i64 = fromIntegral
-

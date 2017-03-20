@@ -11,11 +11,20 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# OPTIONS_GHC -funbox-strict-fields #-}
 module Zebra.Data.Block.Table (
-    tableOfBlock
+    BlockTableError(..)
+  , renderBlockTableError
+
+  , tableOfBlock
   , blockOfTable
+
+  , tableSchemaOfAttributes
+  , attributesOfTableSchema
   ) where
 
 import qualified Data.ByteString as ByteString
+import           Data.Map (Map)
+import qualified Data.Map as Map
+import qualified Data.Text as Text
 
 import           P
 
@@ -31,12 +40,44 @@ import           Zebra.Data.Core
 import           Zebra.Data.Vector.Cons (Cons)
 import qualified Zebra.Data.Vector.Cons as Cons
 import qualified Zebra.Data.Vector.Generic as Generic
-import           Zebra.Schema (ColumnSchema, Field(..), FieldName(..), Variant(..), Tag(..))
+import           Zebra.Schema (SchemaError, TableSchema, ColumnSchema, Field(..), FieldName(..), Variant(..), Tag(..))
+import qualified Zebra.Schema as Schema
 import           Zebra.Segment (SegmentError)
 import qualified Zebra.Segment as Segment
-import           Zebra.Table (Table, Column, TableSchemaError)
+import           Zebra.Table (Table, Column)
 import qualified Zebra.Table as Table
 
+------------------------------------------------------------------------
+
+data BlockTableError =
+    BlockAttributeNamesDidNotMatchTableCount !Int !(Boxed.Vector AttributeName)
+  | BlockTableSchemaError !SchemaError
+  | BlockEntityIdLengthMismatch !SegmentError
+  | BlockIndexLengthMismatch !SegmentError
+  | BlockExpectedEntityFields !(Cons Boxed.Vector (Field ColumnSchema))
+  | BlockExpectedIndexFields !(Cons Boxed.Vector (Field ColumnSchema))
+  | BlockExpectedAttributes !ColumnSchema
+  | BlockExpectedOption !ColumnSchema
+    deriving (Eq, Ord, Show)
+
+renderBlockTableError :: BlockTableError -> Text
+renderBlockTableError = \case
+  BlockAttributeNamesDidNotMatchTableCount n attrs ->
+    "Expected " <> Text.pack (show n) <> " attributes, but found: " <> Text.pack (show attrs)
+  BlockTableSchemaError err ->
+    Schema.renderSchemaError err
+  BlockEntityIdLengthMismatch err ->
+    "Error decoding entity-ids: " <> Segment.renderSegmentError err
+  BlockIndexLengthMismatch err ->
+    "Error decoding indices: " <> Segment.renderSegmentError err
+  BlockExpectedEntityFields fields ->
+    "Expected struct with fields <entity_hash, entity_id>, but found: " <> Text.pack (show fields)
+  BlockExpectedIndexFields fields ->
+    "Expected struct with fields <time, factset_id>, but found: " <> Text.pack (show fields)
+  BlockExpectedAttributes schema ->
+    "Expected a struct containing the attributes, but found: " <> Text.pack (show schema)
+  BlockExpectedOption schema ->
+    "Expected an option type, representing tombstones, but found: " <> Text.pack (show schema)
 
 ------------------------------------------------------------------------
 -- Block -> Table
@@ -199,16 +240,6 @@ tableOfBlock names block = do
 ------------------------------------------------------------------------
 -- Table -> Block
 
-data BlockTableError =
-    BlockAttributeNamesDidNotMatchTableCount !Int !(Boxed.Vector AttributeName)
-  | BlockTableSchemaError !TableSchemaError
-  | BlockEntityIdLengthMismatch !SegmentError
-  | BlockIndexLengthMismatch !SegmentError
-  | BlockExpectedEntityFields !(Cons Boxed.Vector (Field ColumnSchema))
-  | BlockExpectedAttributes !ColumnSchema
-  | BlockExpectedOption !ColumnSchema
-    deriving (Eq, Ord, Show)
-
 takeEntityHash :: Column -> Either BlockTableError (Boxed.Vector EntityHash)
 takeEntityHash =
   first BlockTableSchemaError .
@@ -290,7 +321,7 @@ takeIndexKey column = do
         <$> takeTime time
         <*> takeFactsetId fid
     _ ->
-      Left $ BlockExpectedEntityFields (fmap (fmap Table.schemaColumn) fields)
+      Left $ BlockExpectedIndexFields (fmap (fmap Table.schemaColumn) fields)
 
 fromTag :: Tag -> Tombstone
 fromTag = \case
@@ -362,3 +393,76 @@ blockOfTable table = do
   indices <- takeIndices v
   tables <- takeTables v
   pure $ Block entities indices tables
+
+------------------------------------------------------------------------
+-- TableSchema -> Map AttributeName TableSchema
+
+fromAttribute :: AttributeName -> ColumnSchema -> Field ColumnSchema
+fromAttribute (AttributeName name) column =
+  Field (FieldName name) . Schema.Nested $
+    Schema.Map
+      (Schema.Struct $ Cons.from2
+        (Field "time" Schema.Int)
+        (Field "factset_id" $ Schema.Reversed Schema.Int))
+      (Schema.Nested . Schema.Array $ Schema.option column)
+
+fromFields :: Boxed.Vector (Field ColumnSchema) -> ColumnSchema
+fromFields xs0 =
+  case Cons.fromVector xs0 of
+    Nothing ->
+      Schema.Unit
+    Just xs ->
+      Schema.Struct xs
+
+tableSchemaOfAttributes :: Map AttributeName ColumnSchema -> TableSchema
+tableSchemaOfAttributes attrs0 =
+  let
+    attrs =
+      fromFields .
+      Boxed.fromList .
+      fmap (uncurry fromAttribute) $
+      Map.toList attrs0
+  in
+    Schema.Map
+      (Schema.Struct $ Cons.from2
+        (Field "entity_hash" Schema.Int)
+        (Field "entity_id" $ Schema.Nested Schema.Binary))
+      attrs
+
+------------------------------------------------------------------------
+-- Map AttributeName TableSchema -> TableSchema
+
+takeAttribute :: Field ColumnSchema -> Either BlockTableError (AttributeName, ColumnSchema)
+takeAttribute (Field (FieldName name) column) = do
+  kv_table <- first BlockTableSchemaError $ Schema.takeNested column
+  (k, v) <- first BlockTableSchemaError $ Schema.takeMap kv_table
+  k_fields <- first BlockTableSchemaError $ Schema.takeStruct k
+  case Cons.toList k_fields of
+    [Field "time" Schema.Int, Field "factset_id" (Schema.Reversed Schema.Int)] -> do
+      v_table <- first BlockTableSchemaError $ Schema.takeNested v
+      v_array <- first BlockTableSchemaError $ Schema.takeArray v_table
+      v_some <- first BlockTableSchemaError $ Schema.takeOption v_array
+      pure $ (AttributeName name, v_some)
+    _ ->
+      Left $ BlockExpectedIndexFields k_fields
+
+takeFields :: ColumnSchema -> Either BlockTableError (Boxed.Vector (Field ColumnSchema))
+takeFields = \case
+  Schema.Unit ->
+    pure Boxed.empty
+  Schema.Struct fs ->
+    pure $ Cons.toVector fs
+  x ->
+    Left $ BlockExpectedAttributes x
+
+attributesOfTableSchema :: TableSchema -> Either BlockTableError (Map AttributeName ColumnSchema)
+attributesOfTableSchema table = do
+  (k, v) <- first BlockTableSchemaError $ Schema.takeMap table
+  k_fields <- first BlockTableSchemaError $ Schema.takeStruct k
+  case Cons.toList k_fields of
+    [Field "entity_hash" Schema.Int, Field "entity_id" (Schema.Nested Schema.Binary)] -> do
+      v_fields <- takeFields v
+      attrs <- traverse takeAttribute v_fields
+      pure . Map.fromList $ Boxed.toList attrs
+    _ ->
+      Left $ BlockExpectedEntityFields k_fields

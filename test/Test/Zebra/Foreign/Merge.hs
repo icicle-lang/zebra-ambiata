@@ -37,7 +37,6 @@ import           Zebra.Data.Core
 import           Zebra.Data.Entity
 import           Zebra.Data.Fact
 import           Zebra.Schema (ColumnSchema)
-import qualified Zebra.Schema as Schema
 
 import qualified Zebra.Merge.Puller.List as TestMerge
 
@@ -133,7 +132,7 @@ jBlockPair factsetId_mode schemas = do
 -- | Construct a C Block from a bunch of facts
 testForeignOfFacts :: Mempool.Mempool -> [ColumnSchema] -> [Fact] -> IO (Block, Boxed.Vector CEntity)
 testForeignOfFacts pool schemas facts = do
-  let Right block    = blockOfFacts (Boxed.fromList $ fmap Schema.Array schemas) (Boxed.fromList facts)
+  let Right block    = blockOfFacts (Boxed.fromList schemas) (Boxed.fromList facts)
   let Right entities = entitiesOfBlock block
   es' <- mapM (foreignOfEntity pool) entities
   return (block, es')
@@ -143,7 +142,7 @@ testForeignOfFacts pool schemas facts = do
 -- This must be a stable sort.
 testMergeFacts :: [ColumnSchema] -> [Fact] -> Boxed.Vector Entity
 testMergeFacts schemas facts =
-  let Right block    = blockOfFacts (Boxed.fromList $ fmap Schema.Array schemas) (Boxed.fromList $ sortFacts facts)
+  let Right block    = blockOfFacts (Boxed.fromList schemas) (Boxed.fromList $ sortFacts facts)
       Right entities = entitiesOfBlock block
   in  entities
 
@@ -213,8 +212,8 @@ prop_merge_1_block_2_files =
   gamble jGarbageCollectEvery $ \gcEvery ->
   testIO . withSegv (ppShow (schemas, facts1, facts2)) $ do
     let expect = testMergeFacts schemas (facts1 <> facts2)
-    let Right b1 = blockOfFacts (Boxed.fromList $ fmap Schema.Array schemas) (Boxed.fromList facts1)
-    let Right b2 = blockOfFacts (Boxed.fromList $ fmap Schema.Array schemas) (Boxed.fromList facts2)
+    let Right b1 = blockOfFacts (Boxed.fromList schemas) (Boxed.fromList facts1)
+    let Right b2 = blockOfFacts (Boxed.fromList schemas) (Boxed.fromList facts2)
     let err i = firstEitherT ppShow i
     merged <- runEitherT $ err $ TestMerge.mergeLists gcEvery [[b1], [b2]]
 
@@ -242,7 +241,7 @@ prop_merge_2_block_2_files =
   gamble (jBlockPair oddFactsetId  schemas) $ \(facts21, facts22) ->
   gamble jGarbageCollectEvery $ \gcEvery ->
   testIO . withSegv (ppShow (schemas, (facts11,facts12), (facts21, facts22))) $ do
-    let mkBlock = blockOfFacts (Boxed.fromList $ fmap Schema.Array schemas) . Boxed.fromList
+    let mkBlock = blockOfFacts (Boxed.fromList schemas) . Boxed.fromList
     let expect = testMergeFacts schemas (facts11 <> facts12 <> facts21 <> facts22)
 
     let Right b11 = mkBlock facts11

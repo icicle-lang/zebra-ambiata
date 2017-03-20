@@ -28,7 +28,6 @@ import           Zebra.Data.Fact
 import           Zebra.Merge.Base
 import           Zebra.Merge.Entity
 import           Zebra.Schema (ColumnSchema)
-import qualified Zebra.Schema as Schema
 import           Zebra.Table (Table(..))
 
 
@@ -49,7 +48,7 @@ jColumnSchemas = listOfN 0 5 jColumnSchema
 
 blockOfFacts' :: [ColumnSchema] -> [Fact] -> Block
 blockOfFacts' schemas facts =
-  case blockOfFacts (Boxed.fromList $ fmap Schema.Array schemas) (Boxed.fromList facts) of
+  case blockOfFacts (Boxed.fromList schemas) (Boxed.fromList facts) of
    Left e -> Savage.error
               ("jBlockFromFacts: invariant failed\n"
               <> "\tgenerated facts cannot be converted to block\n"

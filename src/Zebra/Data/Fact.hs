@@ -86,11 +86,9 @@ renderFactSchemaError = \case
   FactExpectedArrayTable schema ->
     "Fact tables must be arrays, found: " <> Text.pack (ppShow schema)
 
-toValueTable :: Boxed.Vector TableSchema -> Boxed.Vector Fact -> Either FactConversionError (Boxed.Vector Table)
-toValueTable tschemas facts =
-  flip Boxed.imapM tschemas $ \ix tschema -> do
-    schema <- first FactConversionSchemaError $ takeArray tschema
-
+toValueTable :: Boxed.Vector ColumnSchema -> Boxed.Vector Fact -> Either FactConversionError (Boxed.Vector Table)
+toValueTable schemas facts =
+  flip Boxed.imapM schemas $ \ix schema -> do
     let
       defaultValue =
         Value.defaultValue schema
@@ -102,21 +100,9 @@ toValueTable tschemas facts =
         Boxed.map (fromMaybe' defaultValue . factValue) $
         Boxed.filter matchId facts
 
-    first FactTableError . Table.fromCollection tschema $ Value.Array values
+    first FactTableError . Table.fromCollection (Schema.Array schema) $ Value.Array values
 
-takeArray :: TableSchema -> Either FactSchemaError ColumnSchema
-takeArray = \case
-  Schema.Binary ->
-    Left $ FactExpectedArrayTable Schema.Binary
-  Schema.Array x ->
-    pure x
-  Schema.Map k v ->
-    Left . FactExpectedArrayTable $ Schema.Map k v
-
---fromEntityMap :: Map Value Value -> Either FactConversionError (Boxed.Vector Fact)
---fromEntityMap =
-
-render :: Boxed.Vector TableSchema -> Fact -> Either FactRenderError ByteString
+render :: Boxed.Vector ColumnSchema -> Fact -> Either FactRenderError ByteString
 render schemas fact = do
   let
     aid =
@@ -125,8 +111,7 @@ render schemas fact = do
     ix =
       fromIntegral $ unAttributeId aid
 
-  tschema <- maybeToRight (FactSchemaNotFoundForAttribute aid) (schemas Boxed.!? ix)
-  cschema <- first FactRenderSchemaError $ takeArray tschema
+  cschema <- maybeToRight (FactSchemaNotFoundForAttribute aid) (schemas Boxed.!? ix)
   rvalue <- renderMaybeValue cschema $ factValue fact
 
   pure $ Char8.intercalate "|" [
