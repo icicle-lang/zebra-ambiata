@@ -12,12 +12,14 @@ module Zebra.Data.Vector.Cons (
     Cons
   , head
   , tail
+  , uncons
 
   , length
   , index
   , focus
 
   , map
+  , mapMaybe
   , mapM
   , imap
   , imapM
@@ -29,8 +31,13 @@ module Zebra.Data.Vector.Cons (
   , zipWith
   , zipWithM
   , unzip
+  , unzip3
 
+  , foldl
+  , foldl1
   , fold1M'
+  , all
+  , minimum
   , maximum
 
   , transpose
@@ -39,6 +46,7 @@ module Zebra.Data.Vector.Cons (
 
   , toVector
   , toList
+  , toNonEmpty
 
   , from
   , from1
@@ -46,10 +54,13 @@ module Zebra.Data.Vector.Cons (
   , from3
   , fromVector
   , fromList
+  , fromNonEmpty
   , unsafeFromVector
   , unsafeFromList
   ) where
 
+import           Data.List.NonEmpty (NonEmpty)
+import qualified Data.List.NonEmpty as NonEmpty
 import           Data.Typeable (Typeable)
 
 import           GHC.Generics (Generic)
@@ -58,7 +69,7 @@ import           GHC.Generics (Generic)
 import           GHC.Stack (HasCallStack)
 #endif
 
-import           P hiding (head, drop, length, zipWithM, toList, mapM, concatMap)
+import           P hiding (head, drop, length, zipWithM, toList, mapM, concatMap, foldl, all, mapMaybe)
 
 import qualified Prelude as Savage
 
@@ -85,13 +96,18 @@ index i (Cons xs) =
 
 head :: Generic.Vector v a => Cons v a -> a
 head (Cons xs) =
-  Generic.head xs
+  Generic.unsafeHead xs
 {-# INLINE head #-}
 
 tail :: Generic.Vector v a => Cons v a -> v a
 tail (Cons xs) =
-  Generic.tail xs
+  Generic.unsafeTail xs
 {-# INLINE tail #-}
+
+uncons :: Generic.Vector v a => Cons v a -> (a, v a)
+uncons xs =
+  (head xs, tail xs)
+{-# INLINE uncons #-}
 
 take :: Generic.Vector v a => Int -> Cons v a -> v a
 take n (Cons xs) =
@@ -121,6 +137,11 @@ mapM :: (Monad m, Generic.Vector v a, Generic.Vector v b) => (a -> m b) -> Cons 
 mapM f (Cons xs) =
   Cons <$> Generic.mapM f xs
 {-# INLINE mapM #-}
+
+mapMaybe :: (Generic.Vector v a, Generic.Vector v b) => (a -> Maybe b) -> Cons v a -> v b
+mapMaybe f (Cons xs) =
+  Generic.mapMaybe f xs
+{-# INLINE mapMaybe #-}
 
 imap ::
   Generic.Vector v a =>
@@ -207,10 +228,43 @@ unzip (Cons xys) =
     Generic.unzip xys
 {-# INLINE unzip #-}
 
+unzip3 ::
+  Generic.Vector v (a, b, c) =>
+  Generic.Vector v a =>
+  Generic.Vector v b =>
+  Generic.Vector v c =>
+  Cons v (a, b, c) ->
+  (Cons v a, Cons v b, Cons v c)
+unzip3 (Cons xyzs) =
+  case Generic.unzip3 xyzs of
+    (x, y, z) ->
+      (Cons x, Cons y, Cons z)
+{-# INLINE unzip3 #-}
+
+foldl :: Generic.Vector v a => (a -> a -> a) -> a -> Cons v a -> a
+foldl f x (Cons xs) =
+  Generic.foldl f x xs
+{-# INLINE foldl #-}
+
+foldl1 :: Generic.Vector v a => (a -> a -> a) -> Cons v a -> a
+foldl1 f (Cons xs) =
+  Generic.foldl1 f xs
+{-# INLINE foldl1 #-}
+
 fold1M' :: (Monad m, Generic.Vector v a) => (a -> a -> m a) -> Cons v a -> m a
 fold1M' f (Cons xs) =
   Generic.fold1M' f xs
 {-# INLINE fold1M' #-}
+
+all :: Generic.Vector v a => (a -> Bool) -> Cons v a -> Bool
+all f (Cons xs) =
+ Generic.all f xs
+{-# INLINE all #-}
+
+minimum :: (Ord a, Generic.Vector v a) => Cons v a -> a
+minimum (Cons xs) =
+  Generic.minimum xs
+{-# INLINE minimum #-}
 
 maximum :: (Ord a, Generic.Vector v a) => Cons v a -> a
 maximum (Cons xs) =
@@ -265,6 +319,11 @@ toList (Cons xs) =
   Generic.toList xs
 {-# INLINE toList #-}
 
+toNonEmpty :: Generic.Vector v a => Cons v a -> NonEmpty a
+toNonEmpty (Cons xs) =
+  NonEmpty.fromList $ Generic.toList xs
+{-# INLINE toNonEmpty #-}
+
 from :: Generic.Vector v a => a -> v a -> Cons v a
 from x xs =
   Cons $ Generic.cons x xs
@@ -300,6 +359,11 @@ fromList = \case
   xs ->
     Just (Cons (Generic.fromList xs))
 {-# INLINE fromList #-}
+
+fromNonEmpty :: Generic.Vector v a => NonEmpty a -> Cons v a
+fromNonEmpty =
+  Cons . Generic.fromList . NonEmpty.toList
+{-# INLINE fromNonEmpty #-}
 
 #if MIN_VERSION_base(4,9,0)
 unsafeFromVector :: (HasCallStack, Generic.Vector v a) => v a -> Cons v a

@@ -10,10 +10,12 @@ module Zebra.Serial.File (
   , renderDecodeError
   , blocksOfBytes
   , fileOfBytes
+  , fileOfBytesV3
   , runStreamOne
   , runStreamMany
   , streamOfFile
   , fileOfFilePath
+  , fileOfFilePathV3
   ) where
 
 import           Control.Monad.Trans.Class (lift)
@@ -36,23 +38,30 @@ import qualified X.Data.Vector.Stream as Stream
 import           Zebra.Data.Block
 import           Zebra.Serial.Block
 import           Zebra.Serial.Header
+import           Zebra.Table (Table)
+import           Zebra.Schema (TableSchema)
 
 
-data DecodeError
- = DecodeError String
+data DecodeError =
+   DecodeError String
+ | DecodeErrorV2
  | DecodeErrorBadParserFailImmediately String
  | DecodeErrorBadParserExpectsMoreAfterEnd
- deriving (Show)
+   deriving (Eq, Ord, Show)
 
 renderDecodeError :: DecodeError -> Text
 renderDecodeError = \case
   DecodeError s ->
     Text.pack s
+  DecodeErrorV2 ->
+    "Decode error: this operation is not supported on v2 zebra files."
   DecodeErrorBadParserFailImmediately s ->
-    "Decode error: the parser failed immediately before consuming anything. This means there is a bug in the parser.\n" <>
+    "Decode error: the parser failed immediately before consuming anything. " <>
+    "This means there is a bug in the parser.\n" <>
     "The parser failed with: " <> Text.pack s
   DecodeErrorBadParserExpectsMoreAfterEnd ->
-    "Decode error: the parser asked for more input after telling it the stream has ended. This means there is a bug in the parser."
+    "Decode error: the parser asked for more input after telling it the stream " <>
+    "has ended. This means there is a bug in the parser."
 
 fileOfBytes ::
   Monad m =>
@@ -70,6 +79,25 @@ fileOfBytes input =
           runStreamMany (getBlock header) rest
       in
         pure $ Right (header, blocks)
+
+fileOfBytesV3 ::
+  Monad m =>
+  Stream.Stream m B.ByteString ->
+  EitherT DecodeError m (TableSchema, Stream.Stream (EitherT DecodeError m) Table)
+fileOfBytesV3 input =
+  EitherT $ do
+    (mheader, rest) <- runStreamOne getHeader input
+    case mheader of
+     Left err ->
+       pure $ Left err
+     Right (HeaderV2 _) ->
+       pure . Left $ DecodeErrorV2
+     Right (HeaderV3 schema) ->
+      let
+        tables =
+          runStreamMany (getTableV3 schema) rest
+      in
+        pure $ Right (schema, tables)
 
 blocksOfBytes ::
   Monad m =>
@@ -155,6 +183,11 @@ fileOfFilePath :: MonadIO m => FilePath -> EitherT DecodeError m (Header, Stream
 fileOfFilePath path = do
   bytes <- lift $ streamOfFile path
   fileOfBytes bytes
+
+fileOfFilePathV3 :: MonadIO m => FilePath -> EitherT DecodeError m (TableSchema, Stream.Stream (EitherT DecodeError m) Table)
+fileOfFilePathV3 path = do
+  bytes <- lift $ streamOfFile path
+  fileOfBytesV3 bytes
 
 -- This should catch and wrap in EitherT. Too bad.
 streamOfFile :: MonadIO m => FilePath -> m (Stream.Stream m B.ByteString)

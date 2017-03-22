@@ -13,7 +13,7 @@ import qualified Data.ByteString.Builder as Builder
 import qualified Data.ByteString.Char8 as Char8
 import qualified Data.IORef as IORef
 import qualified Data.List as List
-import qualified Data.Map as Map
+import qualified Data.Map.Strict as Map
 import           Data.String (String)
 import qualified Data.Text as Text
 import qualified Data.Text.IO as Text
@@ -40,10 +40,12 @@ import           Zebra.Data.Core (ZebraVersion(..))
 import qualified Zebra.Data.Core as Core
 import qualified Zebra.Data.Entity as Entity
 import qualified Zebra.Data.Fact as Fact
+import qualified Zebra.Data.Vector.Cons as Cons
 import qualified Zebra.Foreign.Block as Foreign
 import qualified Zebra.Foreign.Entity as Foreign
 import qualified Zebra.Merge.BlockC as Merge
 import qualified Zebra.Merge.Puller.File as Merge
+import qualified Zebra.Merge.Table as Merge
 import           Zebra.Schema (ColumnSchema)
 import qualified Zebra.Serial as Serial
 import qualified Zebra.Serial.File as Serial
@@ -59,6 +61,7 @@ data Command =
     FileCat ![FilePath] !CatOptions
   | FileFacts !FilePath
   | MergeFiles ![FilePath] !(Maybe FilePath) !MergeOptions
+  | UnionFiles ![FilePath] !FilePath
     deriving (Eq, Show)
 
 data CatOptions =
@@ -97,9 +100,13 @@ commands =
       "facts"
       "Dump the Zebra file as facts."
   , cmd
-      (MergeFiles <$> pInputFiles <*> pOutputFile <*> pMergeOptions)
+      (MergeFiles <$> pInputFiles <*> pMaybeOutputFile <*> pMergeOptions)
       "merge"
       "Merge multiple input files together"
+  , cmd
+      (UnionFiles <$> pInputFiles <*> pOutputFile)
+      "union"
+      "Union multiple input files together"
   ]
 
 
@@ -113,17 +120,23 @@ pInputFiles :: Parser [FilePath]
 pInputFiles =
   many $ Options.argument Options.str $ Options.help "Path to a Zebra file"
 
-pOutputFile :: Parser (Maybe FilePath)
+pMaybeOutputFile :: Parser (Maybe FilePath)
+pMaybeOutputFile =
+  let
+    none =
+      Options.flag' Nothing $
+        Options.long "no-output" <>
+        Options.help "Don't output block file, just print entity id"
+  in
+    (Just <$> pOutputFile) <|> none
+
+pOutputFile :: Parser FilePath
 pOutputFile =
-  let out  = Options.option Options.str $
-             Options.short 'o' <>
-             Options.long "output" <>
-             Options.metavar "OUTPUT_PATH" <>
-             Options.help "Path to a Zebra output file"
-      none = Options.flag' Nothing $
-             Options.long "no-output" <>
-             Options.help "Don't output block file, just print entity id"
-  in (Just <$> out) <|> none
+  Options.option Options.str $
+    Options.short 'o' <>
+    Options.long "output" <>
+    Options.metavar "OUTPUT_PATH" <>
+    Options.help "Path to a Zebra output file"
 
 pCatOptions :: Parser CatOptions
 pCatOptions =
@@ -212,6 +225,14 @@ run c = case c of
           Merge.MergeOptions (firstT Serial.renderDecodeError . puller) pusher $ truncate (mergeGcGigabytes opts * 1024 * 1024 * 1024)
       in
         joinEitherT id . firstTshow $ Merge.mergeBlocks runOpts pullids
+
+  UnionFiles [] _ -> do
+    IO.putStrLn "Union: No files"
+    Exit.exitFailure
+
+  UnionFiles inputs output ->
+    orDie (Text.pack . ppShow) $
+      Merge.unionFile (Cons.unsafeFromList inputs) output
 
 withPrintPusher :: ((Foreign.CEntity -> EitherT Text IO ()) -> EitherT Text IO ()) -> EitherT Text IO ()
 withPrintPusher runWith = do

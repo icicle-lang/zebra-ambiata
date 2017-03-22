@@ -32,7 +32,7 @@ import qualified Data.ByteString as ByteString
 import           Data.ByteString.Builder (Builder)
 import qualified Data.ByteString.Builder as Builder
 import           Data.Map (Map)
-import qualified Data.Map as Map
+import qualified Data.Map.Strict as Map
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 import qualified Data.Vector as Boxed
