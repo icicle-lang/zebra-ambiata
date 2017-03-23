@@ -5,8 +5,8 @@
 #include "anemone_base.h"
 #include "anemone_hash.h"
 #else
-#include "../lib/anemone/csrc/anemone_base.h"
-#include "../lib/anemone/csrc/anemone_hash.h"
+#include "../../lib/anemone/csrc/anemone_base.h"
+#include "../../lib/anemone/csrc/anemone_hash.h"
 #endif
 
 #define ZEBRA_HASH_SEED ((uint64_t) 0xf7a646480e5a3c0f)

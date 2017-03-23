@@ -1,4 +1,4 @@
-name:                  ambiata-zebra-test
+name:                  ambiata-zebra-core-test
 version:               0.0.1
 cabal-version:         >= 1.8
 build-type:            Simple
@@ -13,7 +13,7 @@ library
                     , ambiata-p
                     , ambiata-x-eithert
                     , ambiata-x-vector
-                    , ambiata-zebra
+                    , ambiata-zebra-core
                     , binary                          >= 0.7.2      && < 0.9
                     , bytestring                      == 0.10.*
                     , containers                      == 0.5.*
