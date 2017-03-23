@@ -1,8 +1,8 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 
-import           BuildInfo_ambiata_zebra_core
-import           DependencyInfo_ambiata_zebra_core
+import           BuildInfo_ambiata_zebra_cli
+import           DependencyInfo_ambiata_zebra_cli
 
 import qualified Anemone.Foreign.Mempool as Mempool
 
