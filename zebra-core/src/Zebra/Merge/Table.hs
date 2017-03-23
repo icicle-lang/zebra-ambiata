@@ -31,12 +31,12 @@ import qualified X.Data.Vector.Ref as Ref
 import           X.Data.Vector.Stream (Stream(..), SPEC(..))
 import qualified X.Data.Vector.Stream as Stream
 
+import           Zebra.Binary.Block
+import           Zebra.Binary.File
+import           Zebra.Binary.Header
 import           Zebra.Data.Vector.Cons (Cons)
 import qualified Zebra.Data.Vector.Cons as Cons
 import           Zebra.Schema (TableSchema, SchemaError)
-import           Zebra.Serial.Block
-import           Zebra.Serial.File
-import           Zebra.Serial.Header
 import           Zebra.Table (Table, TableError)
 import qualified Zebra.Table as Table
 import           Zebra.Value (Value, ValueSchemaError, ValueUnionError)

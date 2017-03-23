@@ -5,7 +5,7 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
-module Zebra.Serial.File (
+module Zebra.Binary.File (
     DecodeError(..)
   , renderDecodeError
   , blocksOfBytes
@@ -35,11 +35,11 @@ import qualified System.IO as IO
 import           X.Control.Monad.Trans.Either (EitherT, pattern EitherT, left)
 import qualified X.Data.Vector.Stream as Stream
 
+import           Zebra.Binary.Block
+import           Zebra.Binary.Header
 import           Zebra.Data.Block
-import           Zebra.Serial.Block
-import           Zebra.Serial.Header
-import           Zebra.Table (Table)
 import           Zebra.Schema (TableSchema)
+import           Zebra.Table (Table)
 
 
 data DecodeError =

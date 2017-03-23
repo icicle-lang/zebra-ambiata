@@ -1,6 +1,6 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE TemplateHaskell #-}
-module Test.Zebra.Serial.Table where
+module Test.Zebra.Binary.Table where
 
 import           Disorder.Jack (Property)
 import           Disorder.Jack (quickCheckAll, gamble)
@@ -12,7 +12,7 @@ import           System.IO (IO)
 import           Test.Zebra.Jack
 import           Test.Zebra.Util
 
-import           Zebra.Serial.Table
+import           Zebra.Binary.Table
 import qualified Zebra.Table as Table
 
 

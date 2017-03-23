@@ -28,9 +28,9 @@ import           X.Control.Monad.Trans.Either (EitherT, left)
 import qualified X.Data.Vector as Boxed
 import qualified X.Data.Vector.Stream as Stream
 
+import           Zebra.Binary.File
 import           Zebra.Data.Block
 import           Zebra.Foreign.Util
-import           Zebra.Serial.File
 
 
 data PullerError =

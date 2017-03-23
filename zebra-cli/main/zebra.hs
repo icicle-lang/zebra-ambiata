@@ -47,8 +47,8 @@ import qualified Zebra.Merge.BlockC as Merge
 import qualified Zebra.Merge.Puller.File as Merge
 import qualified Zebra.Merge.Table as Merge
 import           Zebra.Schema (ColumnSchema)
-import qualified Zebra.Serial as Serial
-import qualified Zebra.Serial.File as Serial
+import qualified Zebra.Binary as Binary
+import qualified Zebra.Binary.File as Binary
 
 
 main :: IO ()
@@ -198,15 +198,15 @@ pOutputV3 =
 run :: Command -> IO ()
 run c = case c of
   FileCat fs opts -> orDie id $ forM_ fs $ \f -> do
-    (header,blocks) <- firstT Serial.renderDecodeError $ Serial.fileOfFilePath f
+    (header,blocks) <- firstT Binary.renderDecodeError $ Binary.fileOfFilePath f
     when (catHeader opts) $ lift $ do
       IO.putStrLn "Header information:"
       IO.putStrLn (ppShow header)
     catBlocks opts blocks
 
   FileFacts f -> orDie id $ do
-    (header, blocks) <- firstT Serial.renderDecodeError $ Serial.fileOfFilePath f
-    attributes <- firstT Block.renderBlockTableError . hoistEither $ Serial.attributesOfHeader header
+    (header, blocks) <- firstT Binary.renderDecodeError $ Binary.fileOfFilePath f
+    attributes <- firstT Block.renderBlockTableError . hoistEither $ Binary.attributesOfHeader header
     catFacts (Map.elems attributes) blocks
 
   MergeFiles [] _ _ -> do
@@ -222,7 +222,7 @@ run c = case c of
     withPusher $ \pusher ->
       let
         runOpts =
-          Merge.MergeOptions (firstT Serial.renderDecodeError . puller) pusher $ truncate (mergeGcGigabytes opts * 1024 * 1024 * 1024)
+          Merge.MergeOptions (firstT Binary.renderDecodeError . puller) pusher $ truncate (mergeGcGigabytes opts * 1024 * 1024 * 1024)
       in
         joinEitherT id . firstTshow $ Merge.mergeBlocks runOpts pullids
 
@@ -249,12 +249,12 @@ withOutputPusher ::
   ((Foreign.CEntity -> EitherT Text IO ()) -> EitherT Text IO ()) ->
   EitherT Text IO ()
 withOutputPusher opts inputfile outputfile runWith = do
-  (header0, _) <- firstT Serial.renderDecodeError $ Serial.fileOfFilePath inputfile
-  attributes <- firstT Block.renderBlockTableError . hoistEither $ Serial.attributesOfHeader header0
-  let header = Serial.headerOfAttributes (mergeOutputFormat opts) attributes
+  (header0, _) <- firstT Binary.renderDecodeError $ Binary.fileOfFilePath inputfile
+  attributes <- firstT Block.renderBlockTableError . hoistEither $ Binary.attributesOfHeader header0
+  let header = Binary.headerOfAttributes (mergeOutputFormat opts) attributes
 
   outfd <- lift $ IO.openBinaryFile outputfile IO.WriteMode
-  lift $ Builder.hPutBuilder outfd $ Serial.bHeader header
+  lift $ Builder.hPutBuilder outfd $ Binary.bHeader header
 
   pool0    <- lift $ Mempool.create
 
@@ -272,7 +272,7 @@ withOutputPusher opts inputfile outputfile runWith = do
   let doPurge block = do
       pool <- lift $ IORef.readIORef poolRef
       outblock <- firstTshow $ Foreign.blockOfForeign block
-      builder <- firstT Block.renderBlockTableError . hoistEither $ Serial.bBlock header outblock
+      builder <- firstT Block.renderBlockTableError . hoistEither $ Binary.bBlock header outblock
       lift $ Builder.hPutBuilder outfd builder
       pool' <- lift $ Mempool.create
       lift $ IORef.writeIORef poolRef pool'
@@ -295,7 +295,7 @@ withOutputPusher opts inputfile outputfile runWith = do
   maybe (return ()) doPurge mblock
   lift $ IO.hClose outfd
 
-catFacts :: [ColumnSchema] -> Stream.Stream (EitherT Serial.DecodeError IO) Block.Block -> EitherT Text IO ()
+catFacts :: [ColumnSchema] -> Stream.Stream (EitherT Binary.DecodeError IO) Block.Block -> EitherT Text IO ()
 catFacts schemas0 blocks =
   let
     schemas =
@@ -313,11 +313,11 @@ catFacts schemas0 blocks =
       Boxed.mapM_ (liftIO . putFact) facts
 
     blocks' =
-      Stream.trans (firstT Serial.renderDecodeError) blocks
+      Stream.trans (firstT Binary.renderDecodeError) blocks
   in
     Stream.mapM_ go blocks'
 
-catBlocks :: CatOptions -> Stream.Stream (EitherT Serial.DecodeError IO) Block.Block -> EitherT Text IO ()
+catBlocks :: CatOptions -> Stream.Stream (EitherT Binary.DecodeError IO) Block.Block -> EitherT Text IO ()
 catBlocks opts blocks = do
   let int0 = 0 :: Int
   totalBlocks <- lift $ IORef.newIORef int0
@@ -343,7 +343,7 @@ catBlocks opts blocks = do
           IO.putStrLn ("  Entities: " <> show numEnts)
           IO.putStrLn ("  Facts:    " <> show numIxs)
 
-  let blocks' = Stream.trans (firstT Serial.renderDecodeError) blocks
+  let blocks' = Stream.trans (firstT Binary.renderDecodeError) blocks
   Stream.mapM_ go blocks'
 
   numBlocks <- lift $ IORef.readIORef totalBlocks

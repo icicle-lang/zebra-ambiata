@@ -2,7 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
-module Test.Zebra.Serial.Block where
+module Test.Zebra.Binary.Block where
 
 import qualified Data.List as List
 import qualified Data.Map as Map
@@ -25,12 +25,12 @@ import           Test.Zebra.Util
 import           Text.Printf (printf)
 import           Text.Show.Pretty (ppShow)
 
+import           Zebra.Binary.Block
+import           Zebra.Binary.Header
 import           Zebra.Data.Block
 import           Zebra.Data.Core
 import           Zebra.Schema (TableSchema, ColumnSchema)
 import qualified Zebra.Schema as Schema
-import           Zebra.Serial.Block
-import           Zebra.Serial.Header
 import qualified Zebra.Table as Table
 
 
