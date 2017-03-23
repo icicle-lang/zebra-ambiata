@@ -1,4 +1,4 @@
-name:                  ambiata-zebra
+name:                  ambiata-zebra-core
 version:               0.0.1
 license:               AllRightsReserved
 author:                Ambiata <info@ambiata.com>
@@ -144,11 +144,11 @@ executable zebra
   build-depends:
                       base
                     , ambiata-anemone
-                    , ambiata-zebra
                     , ambiata-p
+                    , ambiata-x-eithert
                     , ambiata-x-optparse
                     , ambiata-x-vector
-                    , ambiata-x-eithert
+                    , ambiata-zebra-core
                     , optparse-applicative            == 0.12.*
                     , text
                     , pretty-show
@@ -180,7 +180,7 @@ test-suite test
                     , ambiata-p
                     , ambiata-x-eithert
                     , ambiata-x-vector
-                    , ambiata-zebra
+                    , ambiata-zebra-core
                     , binary                          >= 0.7.2      && < 0.9
                     , bytestring                      == 0.10.*
                     , containers                      == 0.5.*
@@ -208,11 +208,11 @@ test-suite test-io
 
   build-depends:
                       base                            >= 3          && < 5
-                    , ambiata-zebra
                     , ambiata-disorder-core
                     , ambiata-disorder-corpus
                     , ambiata-disorder-jack
                     , ambiata-p
+                    , ambiata-zebra-core
                     , text
                     , QuickCheck                      >= 2.8.2      && < 2.9
                     , quickcheck-instances            == 0.3.*
@@ -233,4 +233,4 @@ test-suite test-cli
   build-depends:
                       base                            >= 3          && < 5
                     , ambiata-disorder-core
-                    , ambiata-zebra
+                    , ambiata-zebra-core

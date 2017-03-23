@@ -3,7 +3,7 @@
 #if CABAL
 #include "anemone_pack.h"
 #else
-#include "../lib/anemone/csrc/anemone_pack.h"
+#include "../../lib/anemone/csrc/anemone_pack.h"
 #endif
 
 ANEMONE_STATIC
