@@ -54,6 +54,13 @@ library
                     Zebra.Table
                     Zebra.Value
 
+                    Zebra.Binary
+                    Zebra.Binary.Array
+                    Zebra.Binary.Block
+                    Zebra.Binary.File
+                    Zebra.Binary.Header
+                    Zebra.Binary.Table
+
                     Zebra.Data.Block
                     Zebra.Data.Block.Block
                     Zebra.Data.Block.Entity
@@ -74,6 +81,9 @@ library
                     Zebra.Foreign.Table
                     Zebra.Foreign.Util
 
+                    Zebra.JSON
+                    Zebra.JSON.Schema
+
                     Zebra.Merge.Base
                     Zebra.Merge.Block
                     Zebra.Merge.BlockC
@@ -81,13 +91,6 @@ library
                     Zebra.Merge.Puller.File
                     Zebra.Merge.Puller.List
                     Zebra.Merge.Table
-
-                    Zebra.Binary
-                    Zebra.Binary.Array
-                    Zebra.Binary.Block
-                    Zebra.Binary.File
-                    Zebra.Binary.Header
-                    Zebra.Binary.Table
 
   include-dirs:
                        csrc
