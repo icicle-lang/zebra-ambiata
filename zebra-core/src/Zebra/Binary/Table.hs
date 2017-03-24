@@ -1,6 +1,6 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
-module Zebra.Serial.Table (
+module Zebra.Binary.Table (
     bTable
   , bColumn
   , getTable
@@ -17,11 +17,11 @@ import           P
 
 import qualified X.Data.Vector.Storable as Storable
 
+import           Zebra.Binary.Array
 import           Zebra.Data.Core
 import qualified Zebra.Data.Vector.Cons as Cons
 import           Zebra.Schema (TableSchema, ColumnSchema, Tag)
 import qualified Zebra.Schema as Schema
-import           Zebra.Serial.Array
 import           Zebra.Table (Table, Column)
 import qualified Zebra.Table as Table
 

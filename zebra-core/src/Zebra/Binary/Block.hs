@@ -3,7 +3,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
-module Zebra.Serial.Block (
+module Zebra.Binary.Block (
     bBlock
   , getBlock
 
@@ -44,13 +44,13 @@ import qualified X.Data.Vector.Unboxed as Unboxed
 import qualified X.Data.Vector.Generic as Generic
 import qualified X.Data.Vector.Stream as Stream
 
+import           Zebra.Binary.Array
+import           Zebra.Binary.Header
+import           Zebra.Binary.Table
 import           Zebra.Data.Block
 import           Zebra.Data.Core
 import           Zebra.Schema (TableSchema, ColumnSchema)
 import qualified Zebra.Schema as Schema
-import           Zebra.Serial.Array
-import           Zebra.Serial.Header
-import           Zebra.Serial.Table
 import           Zebra.Table (Table)
 import qualified Zebra.Table as Table
 

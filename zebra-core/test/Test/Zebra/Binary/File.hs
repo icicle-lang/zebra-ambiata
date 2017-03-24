@@ -1,6 +1,6 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE TemplateHaskell #-}
-module Test.Zebra.Serial.File where
+module Test.Zebra.Binary.File where
 
 import qualified Data.Binary.Get as Get
 import qualified Data.ByteString as B
@@ -19,8 +19,8 @@ import           System.IO (IO)
 import           Test.QuickCheck.Instances ()
 import           Test.Zebra.Util
 
-import           Zebra.Serial.Array
-import           Zebra.Serial.File
+import           Zebra.Binary.Array
+import           Zebra.Binary.File
 
 import           X.Control.Monad.Trans.Either
 

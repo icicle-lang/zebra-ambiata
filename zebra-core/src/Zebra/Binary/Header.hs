@@ -5,7 +5,7 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
-module Zebra.Serial.Header (
+module Zebra.Binary.Header (
     Header(..)
 
   , headerOfAttributes
@@ -39,11 +39,11 @@ import qualified Data.Vector as Boxed
 
 import           P
 
+import           Zebra.Binary.Array
 import           Zebra.Data.Block
 import           Zebra.Data.Core
 import           Zebra.Schema (TableSchema, ColumnSchema)
 import qualified Zebra.Schema as Schema
-import           Zebra.Serial.Array
 
 
 data Header =

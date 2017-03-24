@@ -1,6 +1,6 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE NoImplicitPrelude #-}
-module Zebra.Serial.Array (
+module Zebra.Binary.Array (
     bStrings
   , bByteArray
   , bSizedByteArray

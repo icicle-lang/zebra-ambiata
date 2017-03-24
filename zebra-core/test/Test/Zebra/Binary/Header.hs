@@ -1,6 +1,6 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE TemplateHaskell #-}
-module Test.Zebra.Serial.Header where
+module Test.Zebra.Binary.Header where
 
 import           Data.Map (Map)
 import qualified Data.Map as Map
@@ -15,7 +15,7 @@ import           System.IO (IO)
 import           Test.Zebra.Jack
 import           Test.Zebra.Util
 
-import           Zebra.Serial.Header
+import           Zebra.Binary.Header
 
 
 prop_roundtrip_header_v2 :: Property

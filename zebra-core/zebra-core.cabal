@@ -82,12 +82,12 @@ library
                     Zebra.Merge.Puller.List
                     Zebra.Merge.Table
 
-                    Zebra.Serial
-                    Zebra.Serial.Array
-                    Zebra.Serial.Block
-                    Zebra.Serial.File
-                    Zebra.Serial.Header
-                    Zebra.Serial.Table
+                    Zebra.Binary
+                    Zebra.Binary.Array
+                    Zebra.Binary.Block
+                    Zebra.Binary.File
+                    Zebra.Binary.Header
+                    Zebra.Binary.Table
 
   include-dirs:
                        csrc

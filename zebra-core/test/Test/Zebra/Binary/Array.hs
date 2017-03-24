@@ -1,6 +1,6 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE TemplateHaskell #-}
-module Test.Zebra.Serial.Array where
+module Test.Zebra.Binary.Array where
 
 import qualified Data.ByteString as ByteString
 import qualified Data.List as List
@@ -18,7 +18,7 @@ import           System.IO (IO)
 import           Test.QuickCheck.Instances ()
 import           Test.Zebra.Util
 
-import           Zebra.Serial.Array
+import           Zebra.Binary.Array
 
 
 prop_roundtrip_strings :: Property
