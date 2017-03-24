@@ -11,8 +11,8 @@ import qualified Test.Zebra.Foreign.Block
 import qualified Test.Zebra.Foreign.Entity
 import qualified Test.Zebra.Foreign.Merge
 import qualified Test.Zebra.Foreign.Table
+import qualified Test.Zebra.JSON.Schema
 import qualified Test.Zebra.Merge.Entity
-import qualified Test.Zebra.Schema
 import qualified Test.Zebra.Table
 
 main :: IO ()
@@ -29,7 +29,7 @@ main =
     , Test.Zebra.Foreign.Entity.tests
     , Test.Zebra.Foreign.Merge.tests
     , Test.Zebra.Foreign.Table.tests
+    , Test.Zebra.JSON.Schema.tests
     , Test.Zebra.Merge.Entity.tests
-    , Test.Zebra.Schema.tests
     , Test.Zebra.Table.tests
     ]
