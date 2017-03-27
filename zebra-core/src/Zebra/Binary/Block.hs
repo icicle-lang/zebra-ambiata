@@ -7,14 +7,21 @@ module Zebra.Binary.Block (
     bBlock
   , getBlock
 
+  , bRootTable
+  , getRootTable
+
   -- * Internal
   , bBlockV3
-  , bTableV3
   , getBlockV3
-  , getTableV3
+
+  , bRootTableV3
+  , getRootTableV3
 
   , bBlockV2
   , getBlockV2
+
+  , bRootTableV2
+  , getRootTableV2
 
   , bEntities
   , getEntities
@@ -33,6 +40,7 @@ import           Data.Binary.Get (Get)
 import qualified Data.Binary.Get as Get
 import           Data.ByteString.Builder (Builder)
 import qualified Data.ByteString.Builder as Builder
+import           Data.Map (Map)
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as Text
 import qualified Data.Vector as Boxed
@@ -67,33 +75,48 @@ bBlock header block =
 getBlock :: Header -> Get Block
 getBlock = \case
   HeaderV2 x ->
-    getBlockV2 . Boxed.fromList $ Map.elems x
+    getBlockV2 x
   HeaderV3 x ->
     getBlockV3 x
+
+bRootTable :: Header -> Table -> Either BlockTableError Builder
+bRootTable header table =
+  case header of
+    HeaderV2 _ ->
+      bRootTableV2 table
+    HeaderV3 _ -> do
+      pure $ bRootTableV3 table
+
+getRootTable :: Header -> Get Table
+getRootTable = \case
+  HeaderV2 x ->
+    getRootTableV2 x
+  HeaderV3 x ->
+    getRootTableV3 x
 
 -- | Encode a zebra v3 block.
 --
 bBlockV3 :: Boxed.Vector AttributeName -> Block -> Either BlockTableError Builder
 bBlockV3 attributes block = do
   table <- tableOfBlock attributes block
-  pure $ bTableV3 table
-
-bTableV3 :: Table -> Builder
-bTableV3 table =
-  Builder.word32LE (fromIntegral $ Table.length table) <>
-  bTable ZebraV3 table
+  pure $ bRootTableV3 table
 
 getBlockV3 :: TableSchema -> Get Block
 getBlockV3 schema = do
-  table <- getTableV3 schema
+  table <- getRootTableV3 schema
   case blockOfTable table of
     Left err ->
       fail . Text.unpack $ renderBlockTableError err
     Right x ->
       pure x
 
-getTableV3 :: TableSchema -> Get Table
-getTableV3 schema = do
+bRootTableV3 :: Table -> Builder
+bRootTableV3 table =
+  Builder.word32LE (fromIntegral $ Table.length table) <>
+  bTable ZebraV3 table
+
+getRootTableV3 :: TableSchema -> Get Table
+getRootTableV3 schema = do
   n <- fromIntegral <$> Get.getWord32le
   getTable ZebraV3 n schema
 
@@ -105,13 +128,26 @@ bBlockV2 block =
   bIndices (blockIndices block) <>
   bTables (blockTables block)
 
-getBlockV2 :: Boxed.Vector ColumnSchema -> Get Block
+getBlockV2 :: Map AttributeName ColumnSchema -> Get Block
 getBlockV2 schemas = do
   entities <- getEntities
   indices <- getIndices
-  tables <- getTables schemas
+  tables <- getTables . Boxed.fromList $ Map.elems schemas
   pure $
     Block entities indices tables
+
+bRootTableV2 :: Table -> Either BlockTableError Builder
+bRootTableV2 =
+  fmap bBlockV2 . blockOfTable
+
+getRootTableV2 :: Map AttributeName ColumnSchema -> Get Table
+getRootTableV2 schemas = do
+  block <- getBlockV2 schemas
+  case tableOfBlock (Boxed.fromList $ Map.keys schemas) block of
+    Left err ->
+      fail . Text.unpack $ renderBlockTableError err
+    Right x ->
+      pure x
 
 -- | Encode the entities for a zebra block.
 --

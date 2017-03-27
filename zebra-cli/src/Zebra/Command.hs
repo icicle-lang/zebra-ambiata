@@ -19,6 +19,8 @@ import qualified Data.ByteString.Builder as Builder
 import qualified Data.ByteString.Char8 as Char8
 import qualified Data.IORef as IORef
 import qualified Data.List as List
+import           Data.List.NonEmpty (NonEmpty)
+import qualified Data.List.NonEmpty as NonEmpty
 import qualified Data.Map.Strict as Map
 import           Data.String (String)
 import qualified Data.Text as Text
@@ -31,7 +33,7 @@ import qualified System.IO as IO
 
 import           Text.Show.Pretty (ppShow)
 
-import           X.Control.Monad.Trans.Either (EitherT, left, joinEitherT, hoistEither, bracketEitherT')
+import           X.Control.Monad.Trans.Either (EitherT, joinEitherT, hoistEither, bracketEitherT')
 import qualified X.Data.Vector as Boxed
 import qualified X.Data.Vector.Storable as Storable
 import qualified X.Data.Vector.Stream as Stream
@@ -70,10 +72,10 @@ data MergeOptions =
     , mergeOutputFormat :: !ZebraVersion
     } deriving (Eq, Show)
 
-zebraCat :: [FilePath] -> CatOptions -> EitherT Text IO ()
+zebraCat :: NonEmpty FilePath -> CatOptions -> EitherT Text IO ()
 zebraCat fs opts =
   forM_ fs $ \f -> do
-    (header, blocks) <- firstT Binary.renderDecodeError $ Binary.fileOfFilePath f
+    (header, blocks) <- firstT Binary.renderFileError $ Binary.readBlocks f
     when (catHeader opts) $ lift $ do
       IO.putStrLn "Header information:"
       IO.putStrLn (ppShow header)
@@ -81,38 +83,28 @@ zebraCat fs opts =
 
 zebraFacts :: FilePath -> EitherT Text IO ()
 zebraFacts f = do
-  (header, blocks) <- firstT Binary.renderDecodeError $ Binary.fileOfFilePath f
+  (header, blocks) <- firstT Binary.renderFileError $ Binary.readBlocks f
   attributes <- firstT Block.renderBlockTableError . hoistEither $ Binary.attributesOfHeader header
   catFacts (Map.elems attributes) blocks
 
-zebraMerge :: [FilePath] -> Maybe FilePath -> MergeOptions -> EitherT Text IO ()
-zebraMerge ins outputPath opts =
-  case ins of
-    [] -> do
-      left "Merge: No files"
+zebraMerge :: NonEmpty FilePath -> Maybe FilePath -> MergeOptions -> EitherT Text IO ()
+zebraMerge ins outputPath opts = do
+  (puller, pullids) <- firstTshow $ Merge.blockChainPuller (Boxed.fromList $ NonEmpty.toList ins)
+  let withPusher = case outputPath of
+        Just out -> withOutputPusher opts (NonEmpty.head ins) out
+        Nothing  -> withPrintPusher
 
-    in1 : _ -> do
-      (puller, pullids) <- firstTshow $ Merge.blockChainPuller (Boxed.fromList ins)
-      let withPusher = case outputPath of
-            Just out -> withOutputPusher opts in1 out
-            Nothing  -> withPrintPusher
+  withPusher $ \pusher ->
+    let
+      runOpts =
+        Merge.MergeOptions (firstT Binary.renderFileError . puller) pusher $ truncate (mergeGcGigabytes opts * 1024 * 1024 * 1024)
+    in
+      joinEitherT id . firstTshow $ Merge.mergeBlocks runOpts pullids
 
-      withPusher $ \pusher ->
-        let
-          runOpts =
-            Merge.MergeOptions (firstT Binary.renderDecodeError . puller) pusher $ truncate (mergeGcGigabytes opts * 1024 * 1024 * 1024)
-        in
-          joinEitherT id . firstTshow $ Merge.mergeBlocks runOpts pullids
-
-zebraUnion :: [FilePath] -> FilePath -> EitherT Text IO ()
+zebraUnion :: NonEmpty FilePath -> FilePath -> EitherT Text IO ()
 zebraUnion inputs output =
-  case inputs of
-    [] -> do
-      left "Union: No files"
-
-    _ ->
-      firstT (Text.pack . ppShow) $
-        Merge.unionFile (Cons.unsafeFromList inputs) output
+  firstT (Text.pack . ppShow) $
+    Merge.unionFile (Cons.fromNonEmpty inputs) output
 
 withPrintPusher :: ((Foreign.CEntity -> EitherT Text IO ()) -> EitherT Text IO ()) -> EitherT Text IO ()
 withPrintPusher runWith = do
@@ -129,7 +121,7 @@ withOutputPusher ::
   ((Foreign.CEntity -> EitherT Text IO ()) -> EitherT Text IO ()) ->
   EitherT Text IO ()
 withOutputPusher opts inputfile outputfile runWith = do
-  (header0, _) <- firstT Binary.renderDecodeError $ Binary.fileOfFilePath inputfile
+  (header0, _) <- firstT Binary.renderFileError $ Binary.readBlocks inputfile
   attributes <- firstT Block.renderBlockTableError . hoistEither $ Binary.attributesOfHeader header0
   let header = Binary.headerOfAttributes (mergeOutputFormat opts) attributes
 
@@ -175,7 +167,7 @@ withOutputPusher opts inputfile outputfile runWith = do
   maybe (return ()) doPurge mblock
   lift $ IO.hClose outfd
 
-catFacts :: [ColumnSchema] -> Stream.Stream (EitherT Binary.DecodeError IO) Block.Block -> EitherT Text IO ()
+catFacts :: [ColumnSchema] -> Stream.Stream (EitherT Binary.FileError IO) Block.Block -> EitherT Text IO ()
 catFacts schemas0 blocks =
   let
     schemas =
@@ -193,11 +185,11 @@ catFacts schemas0 blocks =
       Boxed.mapM_ (liftIO . putFact) facts
 
     blocks' =
-      Stream.trans (firstT Binary.renderDecodeError) blocks
+      Stream.trans (firstT Binary.renderFileError) blocks
   in
     Stream.mapM_ go blocks'
 
-catBlocks :: CatOptions -> Stream.Stream (EitherT Binary.DecodeError IO) Block.Block -> EitherT Text IO ()
+catBlocks :: CatOptions -> Stream.Stream (EitherT Binary.FileError IO) Block.Block -> EitherT Text IO ()
 catBlocks opts blocks = do
   let int0 = 0 :: Int
   totalBlocks <- lift $ IORef.newIORef int0
@@ -223,7 +215,7 @@ catBlocks opts blocks = do
           IO.putStrLn ("  Entities: " <> show numEnts)
           IO.putStrLn ("  Facts:    " <> show numIxs)
 
-  let blocks' = Stream.trans (firstT Binary.renderDecodeError) blocks
+  let blocks' = Stream.trans (firstT Binary.renderFileError) blocks
   Stream.mapM_ go blocks'
 
   numBlocks <- lift $ IORef.readIORef totalBlocks

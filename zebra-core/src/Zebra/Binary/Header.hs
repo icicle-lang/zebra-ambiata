@@ -10,6 +10,7 @@ module Zebra.Binary.Header (
 
   , headerOfAttributes
   , attributesOfHeader
+  , schemaOfHeader
 
   , bHeader
   , bVersion
@@ -67,6 +68,13 @@ attributesOfHeader = \case
     pure attributes
   HeaderV3 table ->
     attributesOfTableSchema table
+
+schemaOfHeader :: Header -> TableSchema
+schemaOfHeader = \case
+  HeaderV2 attributes ->
+    tableSchemaOfAttributes attributes
+  HeaderV3 table ->
+    table
 
 -- | Encode a zebra header.
 --

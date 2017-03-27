@@ -78,18 +78,18 @@ renderSnippet n xs =
     else
       Text.take n snippet
 
-encodeJson :: Aeson.Value -> ByteString
-encodeJson =
-  Lazy.toStrict . Aeson.encodePretty' standardConfig
+encodeJson :: [Text] -> Aeson.Value -> ByteString
+encodeJson keyOrder =
+  Lazy.toStrict . Aeson.encodePretty' (standardConfig keyOrder)
 
 encodeJsonIndented :: [Text] -> Aeson.Value -> ByteString
 encodeJsonIndented keyOrder =
   Lazy.toStrict . Aeson.encodePretty' (indentConfig keyOrder)
 
-encodeJsonRows :: Aeson.Value -> Either JsonEncodeError ByteString
-encodeJsonRows = \case
+encodeJsonRows :: [Text] -> Aeson.Value -> Either JsonEncodeError ByteString
+encodeJsonRows keyOrder = \case
   Aeson.Array xs ->
-    pure . Char8.unlines . Boxed.toList $ fmap encodeJson xs
+    pure . Char8.unlines . Boxed.toList $ fmap (encodeJson keyOrder) xs
   value ->
     Left $ JsonCannotConvertNonArrayToRows value
 
@@ -98,13 +98,13 @@ decodeJson p =
   first (uncurry JsonDecodeError . second Text.pack) .
     Aeson.eitherDecodeStrictWith Aeson.value' (Aeson.iparse p)
 
-standardConfig :: Aeson.Config
-standardConfig =
+standardConfig :: [Text] -> Aeson.Config
+standardConfig keyOrder =
   Aeson.Config {
       Aeson.confIndent =
         Aeson.Spaces 0
     , Aeson.confCompare =
-        Aeson.keyOrder []
+        Aeson.keyOrder keyOrder
     , Aeson.confNumFormat =
         Aeson.Generic
     }

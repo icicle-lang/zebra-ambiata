@@ -43,13 +43,13 @@ import           Zebra.Value (Value, ValueSchemaError, ValueUnionError)
 import qualified Zebra.Value as Value
 
 data UnionTableError =
-    UnionDecodeError !DecodeError
+    UnionFileError !FileError
   | UnionTableError !TableError
   | UnionValueSchemaError !ValueSchemaError
   | UnionValueUnionError !ValueUnionError
   | UnionSchemaMismatch !TableSchema !TableSchema
   | UnionSchemaError !SchemaError
-    deriving (Eq, Ord, Show)
+    deriving (Eq, Show)
 
 data Status =
     Active
@@ -239,10 +239,10 @@ mkStreamReader (Stream step sinit) = do
 
 mkFileInput :: MonadIO m => FilePath -> EitherT UnionTableError m (Input m)
 mkFileInput path = do
-  (schema, stream) <- firstT UnionDecodeError $ fileOfFilePathV3 path
-  reader <- firstT UnionDecodeError $ mkStreamReader stream
+  (schema, stream) <- firstT UnionFileError $ readTables path
+  reader <- firstT UnionFileError $ mkStreamReader stream
   pure . Input schema Active Map.empty $
-    firstT UnionDecodeError reader
+    firstT UnionFileError reader
 
 mkFileOutput :: MonadIO m => TableSchema -> FilePath -> EitherT UnionTableError m (Output m ())
 mkFileOutput schema path = do
@@ -250,7 +250,7 @@ mkFileOutput schema path = do
   liftIO . Builder.hPutBuilder hout . bHeader $ HeaderV3 schema
 
   pure $ Output
-      (liftIO . Builder.hPutBuilder hout . bTableV3)
+      (liftIO . Builder.hPutBuilder hout . bRootTableV3)
       (liftIO $ IO.hClose hout)
 
 unionFile :: MonadIO m => Cons Boxed.Vector FilePath -> FilePath -> EitherT UnionTableError m ()

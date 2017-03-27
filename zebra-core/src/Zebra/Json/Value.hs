@@ -54,11 +54,11 @@ renderJsonValueEncodeError = \case
 
 encodeCollection :: TableSchema -> Collection -> Either JsonValueEncodeError ByteString
 encodeCollection schema collection =
-  first JsonValueEncodeError . encodeJsonRows =<< ppCollection schema collection
+  first JsonValueEncodeError . encodeJsonRows ["key"] =<< ppCollection schema collection
 
 encodeValue :: ColumnSchema -> Value -> Either JsonValueEncodeError ByteString
 encodeValue schema value =
-  encodeJson <$> ppValue schema value
+  encodeJson ["key"] <$> ppValue schema value
 
 ppCollection :: TableSchema -> Collection -> Either JsonValueEncodeError Aeson.Value
 ppCollection schema collection0 =
