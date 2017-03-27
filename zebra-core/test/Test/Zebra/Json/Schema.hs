@@ -1,6 +1,6 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE TemplateHaskell #-}
-module Test.Zebra.JSON.Schema where
+module Test.Zebra.Json.Schema where
 
 import           Disorder.Jack (Property, quickCheckAll)
 import           Disorder.Jack (gamble, tripping)
@@ -11,7 +11,7 @@ import           System.IO (IO)
 
 import           Test.Zebra.Jack
 
-import           Zebra.JSON.Schema
+import           Zebra.Json.Schema
 
 
 prop_roundtrip_schema :: Property

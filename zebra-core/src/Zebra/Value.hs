@@ -7,10 +7,6 @@
 module Zebra.Value (
     Collection(..)
   , Value(..)
-  , render
-
-  , ValueRenderError(..)
-  , renderValueRenderError
 
   , ValueUnionError(..)
   , renderValueUnionError
@@ -44,18 +40,16 @@ module Zebra.Value (
   , true
   , none
   , some
+
+  -- * Internal
+  , renderField
   ) where
 
-import           Data.Aeson ((.=))
-import qualified Data.Aeson as Aeson
-import qualified Data.Aeson.Encode.Pretty as Aeson
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString as ByteString
-import qualified Data.ByteString.Lazy as Lazy
 import           Data.Map (Map)
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as Text
-import qualified Data.Text.Encoding as Text
 import           Data.Typeable (Typeable)
 import qualified Data.Vector as Boxed
 
@@ -87,11 +81,6 @@ data Value =
   | Reversed !Value
     deriving (Eq, Ord, Show, Generic, Typeable)
 
-data ValueRenderError =
-    ValueCollectionSchemaMismatch !TableSchema !Collection
-  | ValueSchemaMismatch !ColumnSchema !Value
-    deriving (Eq, Ord, Show, Generic, Typeable)
-
 data ValueUnionError =
     ValueCannotUnionMismatchedCollections !Collection !Collection
   | ValueCannotUnionMismatchedValues !Value !Value
@@ -112,44 +101,32 @@ data ValueSchemaError =
   | ValueExpectedReversed !Value
     deriving (Eq, Ord, Show, Generic, Typeable)
 
-renderValueRenderError :: ValueRenderError -> Text
-renderValueRenderError = \case
-  ValueCollectionSchemaMismatch schema collection ->
-    "Error processing collection, schema did not match:" <>
-    ppField "collection" collection <>
-    ppField "schema" schema
-
-  ValueSchemaMismatch schema value ->
-    "Error processing value, schema did not match:" <>
-    ppField "value" value <>
-    ppField "schema" schema
-
 renderValueUnionError :: ValueUnionError -> Text
 renderValueUnionError = \case
   ValueCannotUnionMismatchedCollections x y ->
     "Cannot take union of mismatched collections:" <>
-    ppField "first" x <>
-    ppField "second" y
+    renderField "first" x <>
+    renderField "second" y
 
   ValueCannotUnionMismatchedValues x y ->
     "Cannot take union of mismatched values:" <>
-    ppField "first" x <>
-    ppField "second" y
+    renderField "first" x <>
+    renderField "second" y
 
   ValueCannotUnionInt x y ->
     "Cannot take the union of two integers: " <>
-    ppField "first" x <>
-    ppField "second" y
+    renderField "first" x <>
+    renderField "second" y
 
   ValueCannotUnionDouble x y ->
     "Cannot take the union of two doubles: " <>
-    ppField "first" x <>
-    ppField "second" y
+    renderField "first" x <>
+    renderField "second" y
 
   ValueCannotUnionEnum x y ->
     "Cannot take the union of two enums: " <>
-    ppField "first" x <>
-    ppField "second" y
+    renderField "first" x <>
+    renderField "second" y
 
 renderValueSchemaError :: ValueSchemaError -> Text
 renderValueSchemaError = \case
@@ -172,8 +149,8 @@ renderValueSchemaError = \case
   ValueExpectedReversed x ->
     "Expected reversed, but was: " <> ppColumnSchema x
 
-ppField :: Show a => Text -> a -> Text
-ppField name x =
+renderField :: Show a => Text -> a -> Text
+renderField name x =
   "\n" <>
   "\n  " <> name <> " =" <>
   ppPrefix "\n    " x
@@ -456,98 +433,3 @@ none =
 some :: Value -> Value
 some =
   Enum 1
-
-------------------------------------------------------------------------
-
-render :: ColumnSchema -> Value -> Either ValueRenderError ByteString
-render schema =
-  fmap (Lazy.toStrict . Aeson.encodePretty' aesonConfig) . aesonValue schema
-
--- We use aeson-pretty so that the struct field names are sorted alphabetically
--- rather than by hash order.
-aesonConfig :: Aeson.Config
-aesonConfig =
-  Aeson.defConfig {
-      Aeson.confIndent =
-        Aeson.Spaces 0
-    , Aeson.confCompare =
-        compare
-    }
-
-aesonCollection :: TableSchema -> Collection -> Either ValueRenderError Aeson.Value
-aesonCollection schema collection0 =
-  case schema of
-    Schema.Binary
-      | Binary bs <- collection0
-      ->
-        -- FIXME we need some metadata in the schema to say this is ok
-        pure . Aeson.String $ Text.decodeUtf8 bs
-
-    Schema.Array element
-      | Array values <- collection0
-      ->
-        fmap Aeson.Array $
-          traverse (aesonValue element) values
-
-    _ ->
-      Left $ ValueCollectionSchemaMismatch schema collection0
-
-aesonValue :: ColumnSchema -> Value -> Either ValueRenderError Aeson.Value
-aesonValue schema value0 =
-  case schema of
-    Schema.Unit
-      | Unit <- value0
-      ->
-        pure $ Aeson.object []
-
-    Schema.Int
-      | Int x <- value0
-      ->
-        pure . Aeson.Number $ fromIntegral x
-
-    Schema.Double
-      | Double x <- value0
-      ->
-        --
-        -- This maps NaN/Inf -> 'null', and uses 'fromFloatDigits' to convert
-        -- Double -> Scientific.
-        --
-        -- Don't use 'realToFrac' here, it converts the Double to a Scientific
-        -- with far more decimal places than a 64-bit floating point number can
-        -- possibly represent.
-        --
-        pure $ Aeson.toJSON x
-
-    Schema.Enum variants
-      | Enum tag x <- value0
-      , Just variant <- Schema.lookupVariant tag variants
-      -> do
-        payload <- aesonValue (Schema.variant variant) x
-        pure $ Aeson.object [
-            Schema.unVariantName (Schema.variantName variant) .= payload
-          ]
-
-    Schema.Struct fields
-      | Struct values <- value0
-      , Cons.length fields == Cons.length values
-      -> do
-        let
-          fnames =
-            fmap (Schema.unFieldName . Schema.fieldName) fields
-
-        fvalues <- Cons.zipWithM aesonValue (fmap Schema.field fields) values
-
-        pure . Aeson.object . Cons.toList $ Cons.zipWith (.=) fnames fvalues
-
-    Schema.Nested snested
-      | Nested vnested <- value0
-      ->
-        aesonCollection snested vnested
-
-    Schema.Reversed sreversed
-      | Reversed vreversed <- value0
-      ->
-        aesonValue sreversed vreversed
-
-    _ ->
-      Left $ ValueSchemaMismatch schema value0

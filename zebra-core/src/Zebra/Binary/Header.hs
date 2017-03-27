@@ -42,7 +42,8 @@ import           P
 import           Zebra.Binary.Array
 import           Zebra.Data.Block
 import           Zebra.Data.Core
-import           Zebra.JSON.Schema
+import           Zebra.Json.Codec
+import           Zebra.Json.Schema
 import           Zebra.Schema (TableSchema, ColumnSchema)
 import qualified Zebra.Schema as Schema
 
@@ -158,7 +159,7 @@ getHeaderV2 = do
 
 parseSchema :: ByteString -> Get TableSchema
 parseSchema =
-  either (fail . Text.unpack . renderSchemaDecodeError) pure . decodeSchema
+  either (fail . Text.unpack . renderJsonDecodeError) pure . decodeSchema
 
 -- | The zebra 8-byte magic number, including version.
 --
