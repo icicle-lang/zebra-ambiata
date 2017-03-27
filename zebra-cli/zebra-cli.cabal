@@ -13,7 +13,17 @@ description:           zebra
 library
   build-depends:
                       base                            >= 3          && < 5
+                    , ambiata-anemone
                     , ambiata-p
+                    , ambiata-x-eithert
+                    , ambiata-x-vector
+                    , ambiata-zebra-core
+                    , binary                          >= 0.7.2      && < 0.9
+                    , bytestring                      == 0.10.*
+                    , containers                      == 0.5.*
+                    , pretty-show                     == 1.6.*
+                    , text                            == 1.2.*
+                    , transformers                    == 0.5.*
 
   ghc-options:
                     -Wall
@@ -22,7 +32,7 @@ library
                     src
 
   exposed-modules:
-
+                    Zebra.Command
 
 executable zebra
   if impl(ghc >= 8.0)
@@ -45,6 +55,7 @@ executable zebra
                     , ambiata-x-eithert
                     , ambiata-x-optparse
                     , ambiata-x-vector
+                    , ambiata-zebra-cli
                     , ambiata-zebra-core
                     , binary                          >= 0.7.2      && < 0.9
                     , bytestring                      == 0.10.*
