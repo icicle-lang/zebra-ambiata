@@ -81,8 +81,11 @@ library
                     Zebra.Foreign.Table
                     Zebra.Foreign.Util
 
-                    Zebra.JSON
-                    Zebra.JSON.Schema
+                    Zebra.Json
+                    Zebra.Json.Codec
+                    Zebra.Json.Schema
+                    Zebra.Json.Table
+                    Zebra.Json.Value
 
                     Zebra.Merge.Base
                     Zebra.Merge.Block

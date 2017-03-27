@@ -32,11 +32,12 @@ import           Text.Printf (printf)
 import           Text.Show.Pretty (ppShow)
 
 import           Zebra.Data.Core
+import           Zebra.Json
 import           Zebra.Schema (TableSchema, ColumnSchema)
 import qualified Zebra.Schema as Schema
 import           Zebra.Table (Table, TableError)
 import qualified Zebra.Table as Table
-import           Zebra.Value (Value, ValueRenderError)
+import           Zebra.Value (Value)
 import qualified Zebra.Value as Value
 
 
@@ -56,10 +57,10 @@ data FactConversionError =
     deriving (Eq, Ord, Show, Generic, Typeable)
 
 data FactRenderError =
-    FactValueRenderError !ValueRenderError
+    FactJsonEncodeError !JsonValueEncodeError
   | FactSchemaNotFoundForAttribute !AttributeId
   | FactRenderSchemaError !FactSchemaError
-    deriving (Eq, Ord, Show, Generic, Typeable)
+    deriving (Eq, Show, Generic, Typeable)
 
 data FactSchemaError =
     FactExpectedArrayTable !TableSchema
@@ -74,8 +75,8 @@ renderFactConversionError = \case
 
 renderFactRenderError :: FactRenderError -> Text
 renderFactRenderError = \case
-  FactValueRenderError err ->
-    Value.renderValueRenderError err
+  FactJsonEncodeError err ->
+    renderJsonValueEncodeError err
   FactSchemaNotFoundForAttribute (AttributeId aid) ->
     "Could not render fact, no schema found for attribute-id: " <> Text.pack (show aid)
   FactRenderSchemaError err ->
@@ -141,4 +142,4 @@ renderFactsetId (FactsetId factsetId) =
 
 renderMaybeValue :: ColumnSchema -> Maybe' Value -> Either FactRenderError ByteString
 renderMaybeValue schema =
-  maybe' (pure "NA") (first FactValueRenderError . Value.render schema)
+  maybe' (pure "NA") (first FactJsonEncodeError . encodeValue schema)
