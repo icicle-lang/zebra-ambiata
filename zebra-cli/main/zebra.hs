@@ -5,7 +5,7 @@
 import           BuildInfo_ambiata_zebra_cli
 import           DependencyInfo_ambiata_zebra_cli
 
-import           Data.List.NonEmpty (NonEmpty, some1)
+import           Data.List.NonEmpty (NonEmpty(..), some1)
 import           Data.String (String)
 
 import           P
@@ -17,9 +17,9 @@ import           X.Control.Monad.Trans.Either.Exit (orDie)
 import           X.Options.Applicative (Parser, Mod, CommandFields)
 import qualified X.Options.Applicative as Options
 
+import           Zebra.Binary (BinaryVersion(..))
 import           Zebra.Command
 import           Zebra.Command.Export
-import           Zebra.Data.Core (ZebraVersion(..))
 
 
 main :: IO ()
@@ -63,16 +63,16 @@ commands =
       "union"
       "Union multiple input files together."
   , cmd
-      (ZebraExport <$> (Export <$> pInputZebra <*> pOutputJson))
+      (ZebraExport <$> pExport)
       "export"
-      "Export a zebra file to JSON."
+      "Export a zebra binary file to a zebra json file."
   ]
 
 pInputZebra :: Parser FilePath
 pInputZebra =
   Options.argument Options.str $
     Options.metavar "INPUT_ZEBRA" <>
-    Options.help "Path to an input file (in zebra format)"
+    Options.help "Path to an input file (in zebra binary format)"
 
 pMaybeOutputZebra :: Parser (Maybe FilePath)
 pMaybeOutputZebra =
@@ -90,16 +90,55 @@ pOutputZebra =
     Options.short 'o' <>
     Options.long "output" <>
     Options.metavar "OUTPUT_ZEBRA" <>
-    Options.help "Path to a file where the output should be written (in zebra format)"
+    Options.help "Write the output to a file (in zebra binary format)"
 
-pOutputJson :: Parser (Maybe FilePath)
-pOutputJson =
-  optional .
+pExport :: Parser Export
+pExport =
+ Export
+   <$> pInputZebra
+   <*> fmap (defaultOnEmpty ExportJsonStdout) (many pExportOutput)
+
+defaultOnEmpty :: a -> [a] -> NonEmpty a
+defaultOnEmpty def = \case
+  [] ->
+    def :| []
+  x : xs ->
+    x :| xs
+
+pExportOutput :: Parser ExportOutput
+pExportOutput =
+      pExportJson
+  <|> pExportJsonStdout
+  <|> pExportSchema
+  <|> pExportSchemaStdout
+
+pExportJsonStdout :: Parser ExportOutput
+pExportJsonStdout =
+  Options.flag' ExportJsonStdout $
+    Options.long "json-stdout" <>
+    Options.help "Write data to stdout (in zebra json format, default)"
+
+pExportJson :: Parser ExportOutput
+pExportJson =
+  fmap ExportJson .
   Options.option Options.str $
-    Options.short 'o' <>
-    Options.long "output" <>
+    Options.long "json" <>
     Options.metavar "OUTPUT_JSON" <>
-    Options.help "Path to a file where the output should be written (in JSON format, defaults to stdout)"
+    Options.help "Write data to a file (in zebra json format)"
+
+pExportSchemaStdout :: Parser ExportOutput
+pExportSchemaStdout =
+  Options.flag' ExportSchemaStdout $
+    Options.long "schema-stdout" <>
+    Options.help "Write schema to stdout"
+
+pExportSchema :: Parser ExportOutput
+pExportSchema =
+  fmap ExportSchema .
+  Options.option Options.str $
+    Options.long "schema" <>
+    Options.metavar "OUTPUT_SCHEMA" <>
+    Options.help "Write schema to a file"
 
 pCatOptions :: Parser CatOptions
 pCatOptions =
@@ -142,19 +181,19 @@ pOutputBlockFacts =
     Options.long "output-block-facts" <>
     Options.help "Minimum number of facts per output block (last block of leftovers will contain fewer)"
 
-pOutputFormat :: Parser ZebraVersion
+pOutputFormat :: Parser BinaryVersion
 pOutputFormat =
-  fromMaybe ZebraV2 <$> optional (pOutputV2 <|> pOutputV3)
+  fromMaybe BinaryV2 <$> optional (pOutputV2 <|> pOutputV3)
 
-pOutputV2 :: Parser ZebraVersion
+pOutputV2 :: Parser BinaryVersion
 pOutputV2 =
-  Options.flag' ZebraV2 $
+  Options.flag' BinaryV2 $
     Options.long "output-v2" <>
     Options.help "Force merge to output files in version 2 format. (default)"
 
-pOutputV3 :: Parser ZebraVersion
+pOutputV3 :: Parser BinaryVersion
 pOutputV3 =
-  Options.flag' ZebraV3 $
+  Options.flag' BinaryV3 $
     Options.long "output-v3" <>
     Options.help "Force merge to output files in version 3 format."
 

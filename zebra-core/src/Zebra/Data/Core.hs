@@ -7,9 +7,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 module Zebra.Data.Core (
-    ZebraVersion(..)
-
-  , EntityId(..)
+    EntityId(..)
   , EntityHash(..)
   , AttributeId(..)
   , AttributeName(..)
@@ -57,13 +55,6 @@ import           P
 
 import           X.Text.Show (gshowsPrec)
 
-
-data ZebraVersion =
---  ZebraV0 -- x Initial version.
---  ZebraV1 -- x Store factset-id instead of priority, this flips sort order.
-    ZebraV2 -- ^ Schema is stored in header, instead of encoding.
-  | ZebraV3 -- ^ Data is stored as tables instead of entity blocks.
-    deriving (Eq, Ord, Show, Generic, Typeable)
 
 newtype EntityId =
   EntityId {

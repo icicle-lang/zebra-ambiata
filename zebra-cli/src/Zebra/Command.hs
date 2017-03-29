@@ -39,8 +39,10 @@ import qualified X.Data.Vector.Storable as Storable
 import qualified X.Data.Vector.Stream as Stream
 import qualified X.Data.Vector.Unboxed as Unboxed
 
+import           Zebra.Binary (BinaryVersion(..))
+import qualified Zebra.Binary as Binary
+import qualified Zebra.Binary.File as Binary
 import qualified Zebra.Data.Block as Block
-import           Zebra.Data.Core (ZebraVersion(..))
 import qualified Zebra.Data.Core as Core
 import qualified Zebra.Data.Entity as Entity
 import qualified Zebra.Data.Fact as Fact
@@ -51,8 +53,6 @@ import qualified Zebra.Merge.BlockC as Merge
 import qualified Zebra.Merge.Puller.File as Merge
 import qualified Zebra.Merge.Table as Merge
 import           Zebra.Schema (ColumnSchema)
-import qualified Zebra.Binary as Binary
-import qualified Zebra.Binary.File as Binary
 
 
 data CatOptions =
@@ -69,7 +69,7 @@ data MergeOptions =
   MergeOptions {
       mergeGcGigabytes :: !Double
     , mergeOutputBlockFacts :: !Int
-    , mergeOutputFormat :: !ZebraVersion
+    , mergeOutputFormat :: !BinaryVersion
     } deriving (Eq, Show)
 
 zebraCat :: NonEmpty FilePath -> CatOptions -> EitherT Text IO ()

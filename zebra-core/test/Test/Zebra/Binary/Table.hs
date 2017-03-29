@@ -18,13 +18,13 @@ import qualified Zebra.Table as Table
 
 prop_roundtrip_table :: Property
 prop_roundtrip_table =
-  gamble jZebraVersion $ \version ->
+  gamble jBinaryVersion $ \version ->
   gamble (jTable 1) $ \table ->
     trippingSerial (bTable version) (getTable version 1 $ Table.schema table) table
 
 prop_roundtrip_column :: Property
 prop_roundtrip_column =
-  gamble jZebraVersion $ \version ->
+  gamble jBinaryVersion $ \version ->
   gamble (jColumn 1) $ \column ->
     trippingSerial (bColumn version) (getColumn version 1 $ Table.schemaColumn column) column
 

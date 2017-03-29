@@ -113,12 +113,12 @@ getBlockV3 schema = do
 bRootTableV3 :: Table -> Builder
 bRootTableV3 table =
   Builder.word32LE (fromIntegral $ Table.length table) <>
-  bTable ZebraV3 table
+  bTable BinaryV3 table
 
 getRootTableV3 :: TableSchema -> Get Table
 getRootTableV3 schema = do
   n <- fromIntegral <$> Get.getWord32le
-  getTable ZebraV3 n schema
+  getTable BinaryV3 n schema
 
 -- | Encode a zebra v2 block.
 --
@@ -377,7 +377,7 @@ bTables xs =
     Builder.word32LE tcount <>
     bIntArray ids <>
     bIntArray counts <>
-    foldMap (bTable ZebraV2) xs
+    foldMap (bTable BinaryV2) xs
 
 getTables :: Boxed.Vector ColumnSchema -> Get (Boxed.Vector Table)
 getTables schemas = do
@@ -391,6 +391,6 @@ getTables schemas = do
         Nothing ->
           fail $ "Cannot read table, unknown attribute-id: " <> show aid
         Just schema ->
-          getTable ZebraV2 n (Schema.Array schema)
+          getTable BinaryV2 n (Schema.Array schema)
 
   Boxed.zipWithM get ids counts

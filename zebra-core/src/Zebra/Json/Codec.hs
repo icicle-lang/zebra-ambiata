@@ -2,7 +2,9 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 module Zebra.Json.Codec (
-    encodeJson
+    JsonVersion(..)
+
+  , encodeJson
   , encodeJsonIndented
   , encodeJsonRows
   , decodeJson
@@ -19,6 +21,7 @@ module Zebra.Json.Codec (
   , pEnum
 
   -- * Pretty Printing
+  , ppVersion
   , ppInt
   , ppDouble
   , ppEnum
@@ -47,6 +50,10 @@ import           P
 import           Zebra.Schema (Field(..), FieldName(..))
 import           Zebra.Schema (Variant(..), VariantName(..))
 
+
+data JsonVersion =
+    JsonV0
+    deriving (Eq, Show)
 
 data JsonEncodeError =
     JsonCannotConvertNonArrayToRows !Aeson.Value
@@ -149,6 +156,11 @@ pEnum mkParser =
           "expected an object containing an enum (i.e. a single member)," <>
           "\nbut found an object with more than one member:" <>
           "\n  " <> List.intercalate ", " (fmap (Text.unpack . fst) kvs)
+
+ppVersion :: JsonVersion -> Aeson.Value
+ppVersion = \case
+  JsonV0 ->
+    Aeson.String "v0"
 
 ppInt :: Int64 -> Aeson.Value
 ppInt =
