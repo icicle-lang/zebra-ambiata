@@ -36,7 +36,7 @@ import           Zebra.Foreign.Util
 data PullerError =
    PullerForeign ForeignError
  | PullerDifferentHeaders FilePath FilePath
- | PullerDecode DecodeError
+ | PullerDecode FileError
  deriving Show
 
 newtype PullId =
@@ -46,11 +46,11 @@ newtype PullId =
 
 blockChainPuller :: MonadIO m
   => Boxed.Vector FilePath
-  -> EitherT PullerError m (PullId -> EitherT DecodeError m (Maybe Block), Boxed.Vector PullId)
+  -> EitherT PullerError m (PullId -> EitherT FileError m (Maybe Block), Boxed.Vector PullId)
 blockChainPuller files
  | Just (file0, _) <- Boxed.uncons files
  = do
-    (header0,_) <- firstT PullerDecode $ fileOfFilePath file0
+    (header0,_) <- firstT PullerDecode $ readBlocks file0
     pullers <- mapM (makePuller file0 header0) files
     let puller pid = pullers Boxed.! unPullId pid
     let pullids = Boxed.map (PullId . fst) $ Boxed.indexed files
@@ -66,7 +66,7 @@ blockChainPuller files
     lift $ pullerOfStream blocks
 
   readBlocksCheckHeader file0 header0 fileN = do
-    (h,bs) <- firstT PullerDecode $ fileOfFilePath fileN
+    (h,bs) <- firstT PullerDecode $ readBlocks fileN
     -- It is tempting to put the header in entirety
     -- but I think it will be too big to print with Show so worry about it later
     when (h /= header0) $

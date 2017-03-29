@@ -2,7 +2,9 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 module Zebra.Json.Codec (
-    encodeJson
+    JsonVersion(..)
+
+  , encodeJson
   , encodeJsonIndented
   , encodeJsonRows
   , decodeJson
@@ -19,6 +21,7 @@ module Zebra.Json.Codec (
   , pEnum
 
   -- * Pretty Printing
+  , ppVersion
   , ppInt
   , ppDouble
   , ppEnum
@@ -47,6 +50,10 @@ import           P
 import           Zebra.Schema (Field(..), FieldName(..))
 import           Zebra.Schema (Variant(..), VariantName(..))
 
+
+data JsonVersion =
+    JsonV0
+    deriving (Eq, Show)
 
 data JsonEncodeError =
     JsonCannotConvertNonArrayToRows !Aeson.Value
@@ -78,18 +85,18 @@ renderSnippet n xs =
     else
       Text.take n snippet
 
-encodeJson :: Aeson.Value -> ByteString
-encodeJson =
-  Lazy.toStrict . Aeson.encodePretty' standardConfig
+encodeJson :: [Text] -> Aeson.Value -> ByteString
+encodeJson keyOrder =
+  Lazy.toStrict . Aeson.encodePretty' (standardConfig keyOrder)
 
 encodeJsonIndented :: [Text] -> Aeson.Value -> ByteString
 encodeJsonIndented keyOrder =
   Lazy.toStrict . Aeson.encodePretty' (indentConfig keyOrder)
 
-encodeJsonRows :: Aeson.Value -> Either JsonEncodeError ByteString
-encodeJsonRows = \case
+encodeJsonRows :: [Text] -> Aeson.Value -> Either JsonEncodeError ByteString
+encodeJsonRows keyOrder = \case
   Aeson.Array xs ->
-    pure . Char8.unlines . Boxed.toList $ fmap encodeJson xs
+    pure . Char8.unlines . Boxed.toList $ fmap (encodeJson keyOrder) xs
   value ->
     Left $ JsonCannotConvertNonArrayToRows value
 
@@ -98,13 +105,13 @@ decodeJson p =
   first (uncurry JsonDecodeError . second Text.pack) .
     Aeson.eitherDecodeStrictWith Aeson.value' (Aeson.iparse p)
 
-standardConfig :: Aeson.Config
-standardConfig =
+standardConfig :: [Text] -> Aeson.Config
+standardConfig keyOrder =
   Aeson.Config {
       Aeson.confIndent =
         Aeson.Spaces 0
     , Aeson.confCompare =
-        Aeson.keyOrder []
+        Aeson.keyOrder keyOrder
     , Aeson.confNumFormat =
         Aeson.Generic
     }
@@ -149,6 +156,11 @@ pEnum mkParser =
           "expected an object containing an enum (i.e. a single member)," <>
           "\nbut found an object with more than one member:" <>
           "\n  " <> List.intercalate ", " (fmap (Text.unpack . fst) kvs)
+
+ppVersion :: JsonVersion -> Aeson.Value
+ppVersion = \case
+  JsonV0 ->
+    Aeson.String "v0"
 
 ppInt :: Int64 -> Aeson.Value
 ppInt =

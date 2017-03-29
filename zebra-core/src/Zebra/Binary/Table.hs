@@ -18,7 +18,7 @@ import           P
 import qualified X.Data.Vector.Storable as Storable
 
 import           Zebra.Binary.Array
-import           Zebra.Data.Core
+import           Zebra.Binary.Header
 import qualified Zebra.Data.Vector.Cons as Cons
 import           Zebra.Schema (TableSchema, ColumnSchema, Tag)
 import qualified Zebra.Schema as Schema
@@ -28,13 +28,13 @@ import qualified Zebra.Table as Table
 
 -- | Encode a zebra table as bytes.
 --
-bTable :: ZebraVersion -> Table -> Builder
+bTable :: BinaryVersion -> Table -> Builder
 bTable version = \case
   Table.Binary bs ->
     case version of
-      ZebraV2 ->
+      BinaryV2 ->
         bSizedByteArray bs
-      ZebraV3 ->
+      BinaryV3 ->
         bByteArray bs
 
   Table.Array c ->
@@ -46,7 +46,7 @@ bTable version = \case
 
 -- | Encode a zebra column as bytes.
 --
-bColumn :: ZebraVersion -> Column -> Builder
+bColumn :: BinaryVersion -> Column -> Builder
 bColumn version = \case
   Table.Unit _ ->
     mempty
@@ -74,13 +74,13 @@ bColumn version = \case
 
 -- | Decode a zebra table using a row count and a schema.
 --
-getTable :: ZebraVersion -> Int -> TableSchema -> Get Table
+getTable :: BinaryVersion -> Int -> TableSchema -> Get Table
 getTable version n = \case
   Schema.Binary ->
     case version of
-      ZebraV2 ->
+      BinaryV2 ->
         Table.Binary <$> getSizedByteArray
-      ZebraV3 ->
+      BinaryV3 ->
         Table.Binary <$> getByteArray n
 
   Schema.Array e ->
@@ -94,7 +94,7 @@ getTable version n = \case
 
 -- | Decode a zebra column using a row count and a schema.
 --
-getColumn :: ZebraVersion -> Int -> ColumnSchema -> Get Column
+getColumn :: BinaryVersion -> Int -> ColumnSchema -> Get Column
 getColumn version n = \case
   Schema.Unit ->
     pure $ Table.Unit n

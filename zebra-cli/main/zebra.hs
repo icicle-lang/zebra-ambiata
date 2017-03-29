@@ -5,6 +5,7 @@
 import           BuildInfo_ambiata_zebra_cli
 import           DependencyInfo_ambiata_zebra_cli
 
+import           Data.List.NonEmpty (NonEmpty(..), some1)
 import           Data.String (String)
 
 import           P
@@ -16,8 +17,9 @@ import           X.Control.Monad.Trans.Either.Exit (orDie)
 import           X.Options.Applicative (Parser, Mod, CommandFields)
 import qualified X.Options.Applicative as Options
 
+import           Zebra.Binary (BinaryVersion(..))
 import           Zebra.Command
-import           Zebra.Data.Core (ZebraVersion(..))
+import           Zebra.Command.Export
 
 
 main :: IO ()
@@ -27,10 +29,11 @@ main = do
   Options.cli "zebra" buildInfoVersion dependencyInfo parser run
 
 data Command =
-    FileCat ![FilePath] !CatOptions
-  | FileFacts !FilePath
-  | MergeFiles ![FilePath] !(Maybe FilePath) !MergeOptions
-  | UnionFiles ![FilePath] !FilePath
+    ZebraCat !(NonEmpty FilePath) !CatOptions
+  | ZebraFacts !FilePath
+  | ZebraMerge !(NonEmpty FilePath) !(Maybe FilePath) !MergeOptions
+  | ZebraUnion !(NonEmpty FilePath) !FilePath
+  | ZebraExport !Export
     deriving (Eq, Show)
 
 parser :: Parser Command
@@ -44,51 +47,98 @@ cmd p name desc =
 commands :: [Mod CommandFields Command]
 commands =
   [ cmd
-      (FileCat <$> pInputFiles <*> pCatOptions)
+      (ZebraCat <$> some1 pInputZebra <*> pCatOptions)
       "cat"
-      "Dump all information in a Zebra file."
+      "Dump all information in a zebra file."
   , cmd
-      (FileFacts <$> pZebraFile)
+      (ZebraFacts <$> pInputZebra)
       "facts"
-      "Dump the Zebra file as facts."
+      "Dump a zebra file as facts."
   , cmd
-      (MergeFiles <$> pInputFiles <*> pMaybeOutputFile <*> pMergeOptions)
+      (ZebraMerge <$> some1 pInputZebra <*> pMaybeOutputZebra <*> pMergeOptions)
       "merge"
-      "Merge multiple input files together"
+      "Merge multiple input files together."
   , cmd
-      (UnionFiles <$> pInputFiles <*> pOutputFile)
+      (ZebraUnion <$> some1 pInputZebra <*> pOutputZebra)
       "union"
-      "Union multiple input files together"
+      "Union multiple input files together."
+  , cmd
+      (ZebraExport <$> pExport)
+      "export"
+      "Export a zebra binary file to a zebra json file."
   ]
 
-
-pZebraFile :: Parser FilePath
-pZebraFile =
+pInputZebra :: Parser FilePath
+pInputZebra =
   Options.argument Options.str $
-    Options.metavar "ZEBRA_PATH" <>
-    Options.help "Path to a Zebra file"
+    Options.metavar "INPUT_ZEBRA" <>
+    Options.help "Path to an input file (in zebra binary format)"
 
-pInputFiles :: Parser [FilePath]
-pInputFiles =
-  many $ Options.argument Options.str $ Options.help "Path to a Zebra file"
-
-pMaybeOutputFile :: Parser (Maybe FilePath)
-pMaybeOutputFile =
+pMaybeOutputZebra :: Parser (Maybe FilePath)
+pMaybeOutputZebra =
   let
     none =
       Options.flag' Nothing $
         Options.long "no-output" <>
-        Options.help "Don't output block file, just print entity id"
+        Options.help "Don't output block file, just print entity-id"
   in
-    (Just <$> pOutputFile) <|> none
+    (Just <$> pOutputZebra) <|> none
 
-pOutputFile :: Parser FilePath
-pOutputFile =
+pOutputZebra :: Parser FilePath
+pOutputZebra =
   Options.option Options.str $
     Options.short 'o' <>
     Options.long "output" <>
-    Options.metavar "OUTPUT_PATH" <>
-    Options.help "Path to a Zebra output file"
+    Options.metavar "OUTPUT_ZEBRA" <>
+    Options.help "Write the output to a file (in zebra binary format)"
+
+pExport :: Parser Export
+pExport =
+ Export
+   <$> pInputZebra
+   <*> fmap (defaultOnEmpty ExportJsonStdout) (many pExportOutput)
+
+defaultOnEmpty :: a -> [a] -> NonEmpty a
+defaultOnEmpty def = \case
+  [] ->
+    def :| []
+  x : xs ->
+    x :| xs
+
+pExportOutput :: Parser ExportOutput
+pExportOutput =
+      pExportJson
+  <|> pExportJsonStdout
+  <|> pExportSchema
+  <|> pExportSchemaStdout
+
+pExportJsonStdout :: Parser ExportOutput
+pExportJsonStdout =
+  Options.flag' ExportJsonStdout $
+    Options.long "json-stdout" <>
+    Options.help "Write data to stdout (in zebra json format, default)"
+
+pExportJson :: Parser ExportOutput
+pExportJson =
+  fmap ExportJson .
+  Options.option Options.str $
+    Options.long "json" <>
+    Options.metavar "OUTPUT_JSON" <>
+    Options.help "Write data to a file (in zebra json format)"
+
+pExportSchemaStdout :: Parser ExportOutput
+pExportSchemaStdout =
+  Options.flag' ExportSchemaStdout $
+    Options.long "schema-stdout" <>
+    Options.help "Write schema to stdout"
+
+pExportSchema :: Parser ExportOutput
+pExportSchema =
+  fmap ExportSchema .
+  Options.option Options.str $
+    Options.long "schema" <>
+    Options.metavar "OUTPUT_SCHEMA" <>
+    Options.help "Write schema to a file"
 
 pCatOptions :: Parser CatOptions
 pCatOptions =
@@ -131,36 +181,40 @@ pOutputBlockFacts =
     Options.long "output-block-facts" <>
     Options.help "Minimum number of facts per output block (last block of leftovers will contain fewer)"
 
-pOutputFormat :: Parser ZebraVersion
+pOutputFormat :: Parser BinaryVersion
 pOutputFormat =
-  fromMaybe ZebraV2 <$> optional (pOutputV2 <|> pOutputV3)
+  fromMaybe BinaryV2 <$> optional (pOutputV2 <|> pOutputV3)
 
-pOutputV2 :: Parser ZebraVersion
+pOutputV2 :: Parser BinaryVersion
 pOutputV2 =
-  Options.flag' ZebraV2 $
+  Options.flag' BinaryV2 $
     Options.long "output-v2" <>
     Options.help "Force merge to output files in version 2 format. (default)"
 
-pOutputV3 :: Parser ZebraVersion
+pOutputV3 :: Parser BinaryVersion
 pOutputV3 =
-  Options.flag' ZebraV3 $
+  Options.flag' BinaryV3 $
     Options.long "output-v3" <>
     Options.help "Force merge to output files in version 3 format."
 
 run :: Command -> IO ()
 run = \case
-  FileCat inputs options ->
+  ZebraCat inputs options ->
     orDie id $
       zebraCat inputs options
 
-  FileFacts input ->
+  ZebraFacts input ->
     orDie id $
       zebraFacts input
 
-  MergeFiles inputs output options ->
+  ZebraMerge inputs output options ->
     orDie id $
       zebraMerge inputs output options
 
-  UnionFiles inputs output ->
+  ZebraUnion inputs output ->
     orDie id $
       zebraUnion inputs output
+
+  ZebraExport input ->
+    orDie renderExportError $
+      zebraExport input

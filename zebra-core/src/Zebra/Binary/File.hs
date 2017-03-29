@@ -1,38 +1,46 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DoAndIfThenElse #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
 module Zebra.Binary.File (
-    DecodeError(..)
-  , renderDecodeError
-  , blocksOfBytes
-  , fileOfBytes
-  , fileOfBytesV3
-  , runStreamOne
-  , runStreamMany
-  , streamOfFile
-  , fileOfFilePath
-  , fileOfFilePathV3
+    FileError(..)
+  , renderFileError
+
+  , readBlocks
+  , readTables
+  , readBytes
+
+  , hPutStream
+
+  , decodeBlocks
+  , decodeTables
+
+  , decodeGetOne
+  , decodeGetAll
   ) where
 
-import           Control.Monad.Trans.Class (lift)
+import           Control.Monad.Catch (catchIOError)
 import           Control.Monad.IO.Class (MonadIO(..))
 
 import           Data.Binary.Get (Get)
 import qualified Data.Binary.Get as Get
-import qualified Data.ByteString as B
-import qualified Data.Text as Text
+import           Data.ByteString (ByteString)
+import qualified Data.ByteString as ByteString
 import           Data.String (String)
+import qualified Data.Text as Text
 
 import           P
 
-import           System.IO (FilePath)
+import           System.IO (IO, FilePath, Handle)
 import qualified System.IO as IO
+import           System.IO.Error (IOError)
 
 import           X.Control.Monad.Trans.Either (EitherT, pattern EitherT, left)
+import           X.Data.Vector.Stream (Stream(..), Step, SPEC(..))
 import qualified X.Data.Vector.Stream as Stream
 
 import           Zebra.Binary.Block
@@ -42,166 +50,216 @@ import           Zebra.Schema (TableSchema)
 import           Zebra.Table (Table)
 
 
-data DecodeError =
-   DecodeError String
- | DecodeErrorV2
- | DecodeErrorBadParserFailImmediately String
- | DecodeErrorBadParserExpectsMoreAfterEnd
-   deriving (Eq, Ord, Show)
+data FileError =
+   FileOpenError !FilePath !IOError
+ | FileReadError !FilePath !IOError
+ | FileCloseError !FilePath !IOError
+ | FileGetOneError !String
+ | FileGetAllError !String
+ | FileDecodeFailedImmediately !String
+ | FileDecodeEndOfFile
+   deriving (Eq, Show)
 
-renderDecodeError :: DecodeError -> Text
-renderDecodeError = \case
-  DecodeError s ->
-    Text.pack s
-  DecodeErrorV2 ->
-    "Decode error: this operation is not supported on v2 zebra files."
-  DecodeErrorBadParserFailImmediately s ->
+renderFileError :: FileError -> Text
+renderFileError = \case
+  FileOpenError path err ->
+    "Error opening " <> Text.pack path <> ": " <> Text.pack (show err)
+  FileReadError path err ->
+    "Error reading " <> Text.pack path <> ": " <> Text.pack (show err)
+  FileCloseError path err ->
+    "Error closing " <> Text.pack path <> ": " <> Text.pack (show err)
+  FileGetOneError s ->
+    "Decode error reading header: " <> Text.pack s
+  FileGetAllError s ->
+    "Decode error reading blocks: " <> Text.pack s
+  FileDecodeFailedImmediately s ->
     "Decode error: the parser failed immediately before consuming anything. " <>
     "This means there is a bug in the parser.\n" <>
     "The parser failed with: " <> Text.pack s
-  DecodeErrorBadParserExpectsMoreAfterEnd ->
+  FileDecodeEndOfFile ->
     "Decode error: the parser asked for more input after telling it the stream " <>
     "has ended. This means there is a bug in the parser."
 
-fileOfBytes ::
+readBlocks :: MonadIO m => FilePath -> EitherT FileError m (Header, Stream (EitherT FileError m) Block)
+readBlocks path = do
+  bytes <- readBytes path
+  decodeBlocks bytes
+
+readTables :: MonadIO m => FilePath -> EitherT FileError m (TableSchema, Stream (EitherT FileError m) Table)
+readTables path = do
+  bytes <- readBytes path
+  decodeTables bytes
+
+readBytes :: MonadIO m => FilePath -> EitherT FileError m (Stream (EitherT FileError m) ByteString)
+readBytes path = do
+  handle <- tryIO (FileOpenError path) $ IO.openBinaryFile path IO.ReadMode
+  pure $ Stream (stepReadChunk path) (Just handle)
+
+hPutStream :: MonadIO m => Handle -> Stream m ByteString -> m ()
+hPutStream handle (Stream step sinit) =
+  let
+    loop !_ s0 = do
+      step s0 >>= \case
+        Stream.Yield bs s -> do
+          liftIO $ ByteString.hPut handle bs
+          loop SPEC s
+
+        Stream.Skip s ->
+          loop SPEC s
+
+        Stream.Done ->
+          pure ()
+  in
+    loop SPEC sinit
+
+tryIO :: MonadIO m => (IOError -> x) -> IO a -> EitherT x m a
+tryIO onErr io =
+  EitherT . liftIO $ catchIOError (fmap Right io) (pure . Left . onErr)
+
+stepReadChunk :: MonadIO m => FilePath -> Maybe Handle -> EitherT FileError m (Step (Maybe Handle) ByteString)
+stepReadChunk path = \case
+  Nothing ->
+    pure Stream.Done
+
+  Just handle -> do
+    bytes <- tryIO (FileReadError path) $ ByteString.hGet handle (1024 * 1024)
+
+    if ByteString.null bytes then do
+      tryIO (FileCloseError path) $ IO.hClose handle
+      pure $ Stream.Skip Nothing
+    else
+      pure $ Stream.Yield bytes (Just handle)
+
+decodeBlocks ::
   Monad m =>
-  Stream.Stream m B.ByteString ->
-  EitherT DecodeError m (Header, Stream.Stream (EitherT DecodeError m) Block)
-fileOfBytes input =
-  EitherT $ do
-    (mheader, rest) <- runStreamOne getHeader input
-    case mheader of
-     Left err ->
-       pure $ Left err
-     Right header ->
-      let
-        blocks =
-          runStreamMany (getBlock header) rest
-      in
-        pure $ Right (header, blocks)
+  Stream (EitherT FileError m) ByteString ->
+  EitherT FileError m (Header, Stream (EitherT FileError m) Block)
+decodeBlocks input = do
+  (header, rest) <- decodeGetOne getHeader input
+  pure (
+      header
+    , decodeGetAll (getBlock header) rest
+    )
 
-fileOfBytesV3 ::
+decodeTables ::
   Monad m =>
-  Stream.Stream m B.ByteString ->
-  EitherT DecodeError m (TableSchema, Stream.Stream (EitherT DecodeError m) Table)
-fileOfBytesV3 input =
-  EitherT $ do
-    (mheader, rest) <- runStreamOne getHeader input
-    case mheader of
-     Left err ->
-       pure $ Left err
-     Right (HeaderV2 _) ->
-       pure . Left $ DecodeErrorV2
-     Right (HeaderV3 schema) ->
-      let
-        tables =
-          runStreamMany (getTableV3 schema) rest
-      in
-        pure $ Right (schema, tables)
+  Stream (EitherT FileError m) ByteString ->
+  EitherT FileError m (TableSchema, Stream (EitherT FileError m) Table)
+decodeTables input = do
+  (header, rest) <- decodeGetOne getHeader input
+  pure (
+      schemaOfHeader header
+    , decodeGetAll (getRootTable header) rest
+    )
 
-blocksOfBytes ::
+------------------------------------------------------------------------
+
+-- | Run a 'Get' binary decoder over a stream of strict 'ByteString'.
+--
+--   Return the value we got, as well as the rest of the stream.
+--
+decodeGetOne ::
   Monad m =>
-  Header ->
-  Stream.Stream m B.ByteString -> Stream.Stream (EitherT DecodeError m) Block
-blocksOfBytes header inp =
-  runStreamMany (getBlock header) inp
+  Get a ->
+  Stream (EitherT FileError m) ByteString ->
+  EitherT FileError m (a, Stream (EitherT FileError m) ByteString)
+decodeGetOne get (Stream step sinit) =
+  let
+    runOne !_ s0 = \case
+      Get.Fail _bs _off err ->
+        left $ FileGetOneError err
 
--- | Run a 'Get' binary decoder over a stream of strict bytestrings.
--- Return the value we got, as well as the rest of the stream
-runStreamOne :: Monad m => Get a -> Stream.Stream m B.ByteString -> m (Either DecodeError a, Stream.Stream m B.ByteString)
-runStreamOne get (Stream.Stream s'go s'init) = do
-  (v,s') <- runOne Stream.SPEC s'init $ Get.runGetIncremental get
-  return (v, Stream.Stream runRest s')
-  where
-    runOne !_ s (Get.Fail leftovers _ err)
-     = return (Left $ DecodeError err, (leftovers, s))
-    runOne !_ s (Get.Done leftovers _ a)
-     = return (Right a, (leftovers, s))
-    runOne !_ s (Get.Partial p)
-     = s'go s >>= \case
-        Stream.Yield str' s'
-         -> runOne Stream.SPEC s' (p $ Just str')
-        Stream.Skip s'
-         -> runOne Stream.SPEC s' (Get.Partial p)
-        Stream.Done
-         -> runOne Stream.SPEC s (p Nothing)
+      Get.Done bs _off x ->
+        pure (x, (bs, s0))
 
-    runRest (leftovers, s)
-     | B.null leftovers
-     = s'go s >>= \case
-        Stream.Yield str' s'
-         -> return $ Stream.Yield str' (leftovers, s')
-        Stream.Skip  s'
-         -> return $ Stream.Skip (leftovers, s')
-        Stream.Done
-         -> return $ Stream.Done
-     | otherwise
-     = return $ Stream.Yield leftovers ("", s)
+      Get.Partial k ->
+       step s0 >>= \case
+         Stream.Yield bs s ->
+           runOne SPEC s $ k (Just bs)
 
+         Stream.Skip s ->
+           runOne SPEC s $ Get.Partial k
 
--- | Keep running a 'Get' binary decoder over a stream of strict bytestrings.
-runStreamMany :: Monad m => Get a -> Stream.Stream m B.ByteString -> Stream.Stream (EitherT DecodeError m) a
-runStreamMany g (Stream.Stream s'go s'init) =
-  Stream.Stream go (s'init, "", Nothing)
-  where
-    g'init = Get.runGetIncremental g
+         Stream.Done ->
+           runOne SPEC s0 $ k Nothing
 
-    go (s, str, decoder)
-     | B.null str
-     = lift (s'go s) >>= \case
-        Stream.Yield str' s'
-         -> return $ Stream.Skip (s', str', decoder)
-        Stream.Skip  s'
-         -> return $ Stream.Skip (s', "", decoder)
-        Stream.Done
-         -> case decoder of
-             Nothing ->
-              return $ Stream.Done
-             Just partial ->
-              case partial Nothing of
-                Get.Fail _ _ err -> left $ DecodeError err
-                Get.Partial _ -> left $ DecodeErrorBadParserExpectsMoreAfterEnd
-                Get.Done _ _ a -> return $ Stream.Yield a (s, "", Nothing)
-    go (s, str, Nothing)
-     = case g'init of
-        Get.Partial p -> return $ Stream.Skip (s, str, Just p)
-        -- If the parser fails immediately, we want to throw away the input since otherwise we would have an infinite stream of errors
-        Get.Fail _ _ err -> left $ DecodeErrorBadParserFailImmediately err
-        -- If the parser returns immediately, we will have an infinite stream of values. Strange. I expect this shouldn't happen.
-        Get.Done _ _ a -> return $ Stream.Yield a (s, str, Nothing)
-    go (s, str, Just decoder)
-     = case decoder (Just str) of
-        Get.Fail _ _ err
-         -> left $ DecodeError err
-        Get.Partial decoder'
-         -> return $ Stream.Skip (s, "", Just decoder')
-        Get.Done str' _ ret
-         -> return $ Stream.Yield ret (s, str', Nothing)
+    runRest = \case
+      Left (bs, s) ->
+        pure . Stream.Yield bs $ Right s
 
+      Right s0 ->
+        step s0 >>= \case
+          Stream.Yield bs s ->
+            pure . Stream.Yield bs $ Right s
 
-fileOfFilePath :: MonadIO m => FilePath -> EitherT DecodeError m (Header, Stream.Stream (EitherT DecodeError m) Block)
-fileOfFilePath path = do
-  bytes <- lift $ streamOfFile path
-  fileOfBytes bytes
+          Stream.Skip s ->
+            pure . Stream.Skip $ Right s
 
-fileOfFilePathV3 :: MonadIO m => FilePath -> EitherT DecodeError m (TableSchema, Stream.Stream (EitherT DecodeError m) Table)
-fileOfFilePathV3 path = do
-  bytes <- lift $ streamOfFile path
-  fileOfBytesV3 bytes
+          Stream.Done ->
+            pure Stream.Done
+  in
+    second (Stream runRest . Left) <$> runOne SPEC sinit (Get.runGetIncremental get)
 
--- This should catch and wrap in EitherT. Too bad.
-streamOfFile :: MonadIO m => FilePath -> m (Stream.Stream m B.ByteString)
-streamOfFile fp = do
-  handle <- liftIO $ IO.openBinaryFile fp IO.ReadMode
-  return $ Stream.Stream getBytes (Just handle)
-  where
-    getBytes Nothing = return $ Stream.Done
-    getBytes (Just handle) = do
-      bytes <- liftIO $ B.hGet handle (1024*1024)
-      case B.null bytes of
-       True -> do
-        liftIO $ IO.hClose handle
-        return $ Stream.Skip Nothing
-       False -> do
-        return $ Stream.Yield bytes (Just handle)
+data Action s a =
+    Pull !(Maybe s) !(Maybe (Maybe ByteString -> Get.Decoder a))
+  | Decode !(Maybe s) !(Get.Decoder a)
 
+decode :: Get a -> Maybe s -> Maybe (Maybe ByteString -> Get.Decoder a) -> ByteString -> Action s a
+decode get ms mk bs =
+  if ByteString.null bs then
+    Pull ms mk
+  else
+    case mk of
+      Nothing ->
+        Decode ms $ Get.runGetIncremental get `Get.pushChunk` bs
+      Just k ->
+        Decode ms $ k (Just bs)
+
+finish :: Maybe (Maybe ByteString -> Get.Decoder a) -> Action s a
+finish = \case
+  Nothing ->
+    Pull Nothing Nothing
+  Just k ->
+    Decode Nothing (k Nothing)
+
+-- | Keep running a 'Get' binary decoder over a stream of strict 'ByteString'.
+--
+decodeGetAll :: Monad m => Get a -> Stream (EitherT FileError m) ByteString -> Stream (EitherT FileError m) a
+decodeGetAll get (Stream pull sinit) =
+  let
+    skip =
+      pure . Stream.Skip
+
+    yield x =
+      pure . Stream.Yield x
+
+    loop = \case
+      Pull Nothing Nothing ->
+        pure Stream.Done
+
+      Pull Nothing (Just _) ->
+        left FileDecodeEndOfFile
+
+      Pull (Just s0) mk ->
+        pull s0 >>= \case
+          Stream.Skip s ->
+            skip $ Pull (Just s) mk
+
+          Stream.Yield bs s ->
+            skip $ decode get (Just s) mk bs
+
+          Stream.Done ->
+            skip $ finish mk
+
+      Decode ms decoder ->
+        case decoder of
+          Get.Fail _bs _off err ->
+            left $ FileGetAllError err
+
+          Get.Partial k ->
+            skip $ Pull ms (Just k)
+
+          Get.Done bs _off x ->
+            yield x $ decode get ms Nothing bs
+  in
+    Stream loop $ Pull (Just sinit) Nothing

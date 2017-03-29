@@ -11,13 +11,14 @@ import           System.IO (IO)
 
 import           Test.Zebra.Jack
 
+import           Zebra.Json.Codec
 import           Zebra.Json.Schema
 
 
 prop_roundtrip_schema :: Property
 prop_roundtrip_schema =
   gamble jTableSchema $
-    tripping encodeSchema decodeSchema
+    tripping (encodeSchema JsonV0) decodeSchema
 
 return []
 tests :: IO Bool

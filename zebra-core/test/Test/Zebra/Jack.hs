@@ -10,7 +10,7 @@ module Test.Zebra.Jack (
   , jTombstone
 
   -- * Zebra.Data.Core
-  , jZebraVersion
+  , jBinaryVersion
   , jEntityId
   , jEntityHashId
   , jAttributeId
@@ -89,6 +89,7 @@ import           Zebra.Data.Core
 import           Zebra.Data.Entity
 import           Zebra.Data.Fact
 
+import           Zebra.Binary.Header
 import           Zebra.Data.Vector.Cons (Cons)
 import qualified Zebra.Data.Vector.Cons as Cons
 import           Zebra.Schema (TableSchema, ColumnSchema)
@@ -418,9 +419,9 @@ renderTagLookupError tag variants =
   (List.concatMap ("\n    " <>) . List.lines $ ppShow variants) <>
   "\n"
 
-jZebraVersion :: Jack ZebraVersion
-jZebraVersion =
-  elements [ZebraV2, ZebraV3]
+jBinaryVersion :: Jack BinaryVersion
+jBinaryVersion =
+  elements [BinaryV2, BinaryV3]
 
 jEntityId :: Jack EntityId
 jEntityId =

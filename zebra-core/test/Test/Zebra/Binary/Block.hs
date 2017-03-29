@@ -36,7 +36,7 @@ import qualified Zebra.Table as Table
 
 prop_roundtrip_from_facts :: Property
 prop_roundtrip_from_facts =
-  gamble jZebraVersion $ \version ->
+  gamble jBinaryVersion $ \version ->
   gamble jColumnSchema $ \schema ->
   gamble (listOf $ jFact schema (AttributeId 0)) $ \facts ->
     let
@@ -62,7 +62,7 @@ prop_roundtrip_block =
         (AttributeName . Text.pack $ printf "attribute_%05d" ix, attr0)
 
       header =
-        headerOfAttributes ZebraV2 .
+        headerOfAttributes BinaryV2 .
         Map.fromList $
         List.zipWith mkAttr [0..] .
         fmap (unsafeTakeArray . Table.schema) .

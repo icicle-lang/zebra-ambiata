@@ -7,9 +7,11 @@
 {-# LANGUAGE PatternSynonyms #-}
 module Zebra.Binary.Header (
     Header(..)
+  , BinaryVersion(..)
 
   , headerOfAttributes
   , attributesOfHeader
+  , schemaOfHeader
 
   , bHeader
   , bVersion
@@ -53,12 +55,19 @@ data Header =
   | HeaderV3 !TableSchema
     deriving (Eq, Ord, Show)
 
-headerOfAttributes :: ZebraVersion -> Map AttributeName ColumnSchema -> Header
+data BinaryVersion =
+--  BinaryV0 -- x Initial version.
+--  BinaryV1 -- x Store factset-id instead of priority, this flips sort order.
+    BinaryV2 -- ^ Schema is stored in header, instead of encoding.
+  | BinaryV3 -- ^ Data is stored as tables instead of entity blocks.
+    deriving (Eq, Ord, Show)
+
+headerOfAttributes :: BinaryVersion -> Map AttributeName ColumnSchema -> Header
 headerOfAttributes version attributes =
   case version of
-    ZebraV2 ->
+    BinaryV2 ->
       HeaderV2 attributes
-    ZebraV3 ->
+    BinaryV3 ->
       HeaderV3 (tableSchemaOfAttributes attributes)
 
 attributesOfHeader :: Header -> Either BlockTableError (Map AttributeName ColumnSchema)
@@ -67,6 +76,13 @@ attributesOfHeader = \case
     pure attributes
   HeaderV3 table ->
     attributesOfTableSchema table
+
+schemaOfHeader :: Header -> TableSchema
+schemaOfHeader = \case
+  HeaderV2 attributes ->
+    tableSchemaOfAttributes attributes
+  HeaderV3 table ->
+    table
 
 -- | Encode a zebra header.
 --
@@ -78,19 +94,19 @@ attributesOfHeader = \case
 bHeader :: Header -> Builder
 bHeader = \case
   HeaderV2 x ->
-    bVersion ZebraV2 <>
+    bVersion BinaryV2 <>
     bHeaderV2 x
   HeaderV3 x ->
-    bVersion ZebraV3 <>
+    bVersion BinaryV3 <>
     bHeaderV3 x
 
 getHeader :: Get Header
 getHeader = do
   version <- getVersion
   case version of
-    ZebraV2 ->
+    BinaryV2 ->
       HeaderV2 <$> getHeaderV2
-    ZebraV3 ->
+    BinaryV3 ->
       HeaderV3 <$> getHeaderV3
 
 -- | Encode a zebra v3 header from a dictionary.
@@ -102,7 +118,7 @@ getHeader = do
 -- @
 bHeaderV3 :: TableSchema -> Builder
 bHeaderV3 schema =
-  bSizedByteArray (encodeSchema schema)
+  bSizedByteArray (encodeSchema JsonV0 schema)
 
 getHeaderV3 :: Get TableSchema
 getHeaderV3 =
@@ -134,7 +150,7 @@ bHeaderV2 features =
 
     schema =
       bStrings .
-      fmap (encodeSchema . Schema.Array) .
+      fmap (encodeSchema JsonV0 . Schema.Array) .
       Boxed.fromList $
       Map.elems features
   in
@@ -166,14 +182,14 @@ parseSchema =
 -- @
 -- ||ZEBRA||vvvvv||
 -- @
-bVersion :: ZebraVersion -> Builder
+bVersion :: BinaryVersion -> Builder
 bVersion = \case
-  ZebraV2 ->
+  BinaryV2 ->
     Builder.byteString MagicV2
-  ZebraV3 ->
+  BinaryV3 ->
     Builder.byteString MagicV3
 
-getVersion :: Get ZebraVersion
+getVersion :: Get BinaryVersion
 getVersion = do
   bs <- Get.getByteString $ ByteString.length MagicV2
   case bs of
@@ -182,9 +198,9 @@ getVersion = do
     MagicV1 ->
       fail $ "This version of zebra cannot read v1 zebra files."
     MagicV2 ->
-      pure ZebraV2
+      pure BinaryV2
     MagicV3 ->
-      pure ZebraV3
+      pure BinaryV3
     _ ->
       fail $ "Invalid/unknown file signature: " <> show bs
 

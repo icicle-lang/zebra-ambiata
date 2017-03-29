@@ -28,6 +28,7 @@ library
                     , bindings-DSL                    >= 1.0.0      && <= 1.0.23
                     , bytestring                      == 0.10.*
                     , containers                      == 0.5.*
+                    , exceptions                      >= 0.6        && < 0.9
                     , lens                            >= 4.7        && < 4.15
                     , mtl                             == 2.2.*
                     , old-locale                      == 1.0.*
