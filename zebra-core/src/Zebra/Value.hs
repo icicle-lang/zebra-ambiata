@@ -1,5 +1,6 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MagicHash #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternGuards #-}
@@ -54,6 +55,7 @@ import           Data.Typeable (Typeable)
 import qualified Data.Vector as Boxed
 
 import           GHC.Generics (Generic)
+import           GHC.Prim ((>#), tagToEnum#, dataToTag#)
 
 import           P hiding (some, length)
 
@@ -69,7 +71,7 @@ data Collection =
     Binary !ByteString
   | Array !(Boxed.Vector Value)
   | Map !(Map Value Value)
-    deriving (Eq, Ord, Show, Generic, Typeable)
+    deriving (Eq, Ord, Show, Generic)
 
 data Value =
     Unit
@@ -79,7 +81,7 @@ data Value =
   | Struct !(Cons Boxed.Vector Value)
   | Nested !Collection
   | Reversed !Value
-    deriving (Eq, Ord, Show, Generic, Typeable)
+    deriving (Eq, Show, Generic) -- Ord defined at bottom of file.
 
 data ValueUnionError =
     ValueCannotUnionMismatchedCollections !Collection !Collection
@@ -433,3 +435,58 @@ none =
 some :: Value -> Value
 some =
   Enum 1
+
+
+------------------------------------------------------------------------
+-- Ord Value
+
+instance Ord Value where
+  compare = \case
+    Unit -> \case
+      Unit ->
+        EQ
+      y ->
+        compareTag Unit y
+
+    Int x -> \case
+      Int y ->
+        compare x y
+      y ->
+        compareTag (Int x) y
+
+    Double x -> \case
+      Double y ->
+        compare x y
+      y ->
+        compareTag (Double x) y
+
+    Enum xtag xvar -> \case
+      Enum ytag yvar ->
+        compare (xtag, xvar) (ytag, yvar)
+      y ->
+        compareTag (Enum xtag xvar) y
+
+    Struct xs -> \case
+      Struct ys ->
+        compare xs ys
+      y ->
+        compareTag (Struct xs) y
+
+    Nested x -> \case
+      Nested y ->
+        compare x y
+      y ->
+        compareTag (Nested x) y
+
+    Reversed x -> \case
+      Reversed y ->
+        compare y x -- Deliberately flipped x/y, that's what 'Reversed' does.
+      y ->
+        compareTag (Reversed x) y
+
+compareTag :: a -> a -> Ordering
+compareTag x y =
+  if tagToEnum# (dataToTag# x ># dataToTag# y) then
+    GT
+  else
+    LT
