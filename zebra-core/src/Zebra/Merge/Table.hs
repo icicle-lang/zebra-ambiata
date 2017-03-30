@@ -12,6 +12,7 @@ module Zebra.Merge.Table (
 import           Control.Monad.IO.Class (MonadIO(..))
 import           Control.Monad.Primitive (PrimMonad)
 import           Control.Monad.ST (runST)
+import           Control.Monad.Trans.Resource (MonadResource)
 
 import qualified Data.ByteString.Builder as Builder
 import           Data.List.NonEmpty (NonEmpty(..))
@@ -237,13 +238,14 @@ mkStreamReader (Stream step sinit) = do
 
   pure $ loop SPEC
 
-mkFileInput :: MonadIO m => FilePath -> EitherT UnionTableError m (Input m)
+mkFileInput :: MonadResource m => FilePath -> EitherT UnionTableError m (Input m)
 mkFileInput path = do
   (schema, stream) <- firstT UnionFileError $ readTables path
   reader <- firstT UnionFileError $ mkStreamReader stream
   pure . Input schema Active Map.empty $
     firstT UnionFileError reader
 
+-- FIXME MonadResource
 mkFileOutput :: MonadIO m => TableSchema -> FilePath -> EitherT UnionTableError m (Output m ())
 mkFileOutput schema path = do
   hout <- liftIO $ IO.openBinaryFile path WriteMode
@@ -253,7 +255,7 @@ mkFileOutput schema path = do
       (liftIO . Builder.hPutBuilder hout . bRootTableV3)
       (liftIO $ IO.hClose hout)
 
-unionFile :: MonadIO m => Cons Boxed.Vector FilePath -> FilePath -> EitherT UnionTableError m ()
+unionFile :: MonadResource m => Cons Boxed.Vector FilePath -> FilePath -> EitherT UnionTableError m ()
 unionFile inputPaths outputPath = do
   inputs <- traverse mkFileInput inputPaths
   schema <- hoistEither $ takeSchema inputs

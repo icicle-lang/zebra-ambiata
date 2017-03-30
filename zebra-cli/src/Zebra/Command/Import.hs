@@ -11,19 +11,18 @@ module Zebra.Command.Import (
   ) where
 
 import           Control.Monad.IO.Class (liftIO)
+import           Control.Monad.Trans.Resource (MonadResource)
 
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString as ByteString
 import qualified Data.ByteString.Builder as Builder
 import qualified Data.ByteString.Lazy as Lazy
-import qualified Data.Text as Text
 
 import           P
 
-import           System.IO (IO, FilePath, IOMode(..), Handle)
-import           System.IO (withBinaryFile)
+import           System.IO (FilePath, IOMode(..))
 
-import           X.Control.Monad.Trans.Either (EitherT, pattern EitherT, runEitherT, hoistEither)
+import           X.Control.Monad.Trans.Either (EitherT, hoistEither, joinEitherT)
 import           X.Data.Vector.Stream (Stream(..))
 import qualified X.Data.Vector.Stream as Stream
 
@@ -44,7 +43,7 @@ data Import =
 data ImportError =
     ImportFileError !FileError
   | ImportJsonDecodeError !JsonDecodeError
-  | ImportJsonTableError !JsonTableDecodeError
+  | ImportJsonTableDecodeError !JsonTableDecodeError
   | ImportBlockTableError !BlockTableError
     deriving (Eq, Show)
 
@@ -54,8 +53,10 @@ renderImportError = \case
     renderFileError err
   ImportJsonDecodeError err ->
     renderJsonDecodeError err
-  err ->
-    Text.pack (show err)
+  ImportJsonTableDecodeError err ->
+    renderJsonTableDecodeError err
+  ImportBlockTableError err ->
+    renderBlockTableError err
 
 lineBoundary :: Monad m => Stream m ByteString -> Stream m ByteString
 lineBoundary (Stream step sinit) =
@@ -84,24 +85,23 @@ lineBoundary (Stream step sinit) =
   in
     Stream loop $ Just (sinit, ByteString.empty)
 
-zebraImport :: Import -> EitherT ImportError IO ()
+zebraImport :: MonadResource m => Import -> EitherT ImportError m ()
 zebraImport x = do
   schema0 <- liftIO . ByteString.readFile $ importSchema x
   schema <- firstT ImportJsonDecodeError . hoistEither $ decodeVersionedSchema schema0
 
-  -- FIXME MonadResource
   bytes <- firstT ImportFileError . readBytes $ importInput x
+  (close, handle) <- firstT ImportFileError $ openFile (importOutput x) WriteMode
 
-  withFile (importOutput x) $ \handle -> do
-    let header = HeaderV3 schema
-    liftIO . Builder.hPutBuilder handle $ bHeader header
-    hPutStream handle .
-      fmap (Lazy.toStrict . Builder.toLazyByteString) .
-      Stream.mapM (hoistEither . first ImportBlockTableError . bRootTable header) .
-      Stream.mapM (hoistEither . first ImportJsonTableError . decodeTable schema) .
-      lineBoundary $
-      Stream.trans (firstT ImportFileError) bytes
+  let header = HeaderV3 schema
+  liftIO . Builder.hPutBuilder handle $ bHeader header
 
-withFile :: FilePath -> (Handle -> EitherT x IO ()) -> EitherT x IO ()
-withFile path io =
-  EitherT $ withBinaryFile path WriteMode (runEitherT . io)
+  joinEitherT id . firstT ImportFileError .
+    hPutStream (importOutput x) handle .
+    fmap (Lazy.toStrict . Builder.toLazyByteString) .
+    Stream.mapM (hoistEither . first ImportBlockTableError . bRootTable header) .
+    Stream.mapM (hoistEither . first ImportJsonTableDecodeError . decodeTable schema) .
+    lineBoundary $
+    Stream.trans (firstT ImportFileError) bytes
+
+  firstT ImportFileError close

@@ -5,6 +5,9 @@
 import           BuildInfo_ambiata_zebra_cli
 import           DependencyInfo_ambiata_zebra_cli
 
+import           Control.Monad.Morph (hoist)
+import           Control.Monad.Trans.Resource (runResourceT)
+
 import           Data.List.NonEmpty (NonEmpty(..), some1)
 import           Data.String (String)
 
@@ -227,25 +230,25 @@ pOutputV3 =
 run :: Command -> IO ()
 run = \case
   ZebraCat inputs options ->
-    orDie id $
+    orDie id . hoist runResourceT $
       zebraCat inputs options
 
   ZebraFacts input ->
-    orDie id $
+    orDie id . hoist runResourceT $
       zebraFacts input
 
   ZebraMerge inputs output options ->
-    orDie id $
+    orDie id . hoist runResourceT $
       zebraMerge inputs output options
 
   ZebraUnion inputs output ->
-    orDie id $
+    orDie id . hoist runResourceT $
       zebraUnion inputs output
 
   ZebraImport import_ ->
-    orDie renderImportError $
+    orDie renderImportError . hoist runResourceT $
       zebraImport import_
 
   ZebraExport export ->
-    orDie renderExportError $
+    orDie renderExportError . hoist runResourceT $
       zebraExport export

@@ -6,6 +6,7 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE TupleSections #-}
 module Zebra.Binary.File (
     FileError(..)
   , renderFileError
@@ -21,10 +22,17 @@ module Zebra.Binary.File (
 
   , decodeGetOne
   , decodeGetAll
+
+  , openFile
+  , tryIO
+  , allocateT
   ) where
 
 import           Control.Monad.Catch (catchIOError)
 import           Control.Monad.IO.Class (MonadIO(..))
+import           Control.Monad.Trans.Class (lift)
+import           Control.Monad.Trans.Resource (MonadResource(..), ReleaseKey)
+import qualified Control.Monad.Trans.Resource as Resource
 
 import           Data.Binary.Get (Get)
 import qualified Data.Binary.Get as Get
@@ -35,11 +43,11 @@ import qualified Data.Text as Text
 
 import           P
 
-import           System.IO (IO, FilePath, Handle)
+import           System.IO (IO, IOMode(..), FilePath, Handle)
 import qualified System.IO as IO
 import           System.IO.Error (IOError)
 
-import           X.Control.Monad.Trans.Either (EitherT, pattern EitherT, left)
+import           X.Control.Monad.Trans.Either (EitherT, pattern EitherT, runEitherT, left)
 import           X.Data.Vector.Stream (Stream(..), Step, SPEC(..))
 import qualified X.Data.Vector.Stream as Stream
 
@@ -53,6 +61,7 @@ import           Zebra.Table (Table)
 data FileError =
    FileOpenError !FilePath !IOError
  | FileReadError !FilePath !IOError
+ | FileWriteError !FilePath !IOError
  | FileCloseError !FilePath !IOError
  | FileGetOneError !String
  | FileGetAllError !String
@@ -66,6 +75,8 @@ renderFileError = \case
     "Error opening " <> Text.pack path <> ": " <> Text.pack (show err)
   FileReadError path err ->
     "Error reading " <> Text.pack path <> ": " <> Text.pack (show err)
+  FileWriteError path err ->
+    "Error writing " <> Text.pack path <> ": " <> Text.pack (show err)
   FileCloseError path err ->
     "Error closing " <> Text.pack path <> ": " <> Text.pack (show err)
   FileGetOneError s ->
@@ -80,29 +91,47 @@ renderFileError = \case
     "Decode error: the parser asked for more input after telling it the stream " <>
     "has ended. This means there is a bug in the parser."
 
-readBlocks :: MonadIO m => FilePath -> EitherT FileError m (Header, Stream (EitherT FileError m) Block)
+readBlocks :: MonadResource m => FilePath -> EitherT FileError m (Header, Stream (EitherT FileError m) Block)
 readBlocks path = do
   bytes <- readBytes path
   decodeBlocks bytes
 
-readTables :: MonadIO m => FilePath -> EitherT FileError m (TableSchema, Stream (EitherT FileError m) Table)
+readTables :: MonadResource m => FilePath -> EitherT FileError m (TableSchema, Stream (EitherT FileError m) Table)
 readTables path = do
   bytes <- readBytes path
   decodeTables bytes
 
--- FIXME MonadResource
-readBytes :: MonadIO m => FilePath -> EitherT FileError m (Stream (EitherT FileError m) ByteString)
+readBytes :: MonadResource m => FilePath -> EitherT FileError m (Stream (EitherT FileError m) ByteString)
 readBytes path = do
-  handle <- tryIO (FileOpenError path) $ IO.openBinaryFile path IO.ReadMode
-  pure $ Stream (stepReadChunk path) (Just handle)
+  (close, handle) <- openFile path ReadMode
+  pure . Stream (stepReadChunk path close) $ Just handle
 
-hPutStream :: MonadIO m => Handle -> Stream m ByteString -> m ()
-hPutStream handle (Stream step sinit) =
+stepReadChunk ::
+  MonadIO m =>
+  FilePath ->
+  EitherT FileError m () ->
+  Maybe Handle ->
+  EitherT FileError m (Step (Maybe Handle) ByteString)
+stepReadChunk path close = \case
+  Nothing ->
+    pure Stream.Done
+
+  Just handle -> do
+    bytes <- tryIO (FileReadError path) $ ByteString.hGet handle (1024 * 1024)
+
+    if ByteString.null bytes then do
+      close
+      pure $ Stream.Skip Nothing
+    else
+      pure . Stream.Yield bytes $ Just handle
+
+hPutStream :: MonadIO m => FilePath -> Handle -> Stream m ByteString -> EitherT FileError m ()
+hPutStream path handle (Stream step sinit) =
   let
     loop !_ s0 = do
-      step s0 >>= \case
+      lift (step s0) >>= \case
         Stream.Yield bs s -> do
-          liftIO $ ByteString.hPut handle bs
+          tryIO (FileWriteError path) $ ByteString.hPut handle bs
           loop SPEC s
 
         Stream.Skip s ->
@@ -112,24 +141,6 @@ hPutStream handle (Stream step sinit) =
           pure ()
   in
     loop SPEC sinit
-
-tryIO :: MonadIO m => (IOError -> x) -> IO a -> EitherT x m a
-tryIO onErr io =
-  EitherT . liftIO $ catchIOError (fmap Right io) (pure . Left . onErr)
-
-stepReadChunk :: MonadIO m => FilePath -> Maybe Handle -> EitherT FileError m (Step (Maybe Handle) ByteString)
-stepReadChunk path = \case
-  Nothing ->
-    pure Stream.Done
-
-  Just handle -> do
-    bytes <- tryIO (FileReadError path) $ ByteString.hGet handle (1024 * 1024)
-
-    if ByteString.null bytes then do
-      tryIO (FileCloseError path) $ IO.hClose handle
-      pure $ Stream.Skip Nothing
-    else
-      pure $ Stream.Yield bytes (Just handle)
 
 decodeBlocks ::
   Monad m =>
@@ -264,3 +275,32 @@ decodeGetAll get (Stream pull sinit) =
             yield x $ decode get ms Nothing bs
   in
     Stream loop $ Pull (Just sinit) Nothing
+
+------------------------------------------------------------------------
+
+openFile ::
+  MonadResource m =>
+  FilePath ->
+  IOMode ->
+  EitherT FileError m (EitherT FileError m (), Handle)
+openFile path mode = do
+  (key, handle) <-
+    allocateT (tryIO (FileOpenError path) $ IO.openBinaryFile path mode) IO.hClose
+
+  pure (tryIO (FileCloseError path) $ Resource.release key, handle)
+
+tryIO :: MonadIO m => (IOError -> x) -> IO a -> EitherT x m a
+tryIO onErr io =
+  EitherT . liftIO $ catchIOError (fmap Right io) (pure . Left . onErr)
+
+allocateT :: MonadResource m => EitherT x IO a -> (a -> IO ()) -> EitherT x m (ReleaseKey, a)
+allocateT acquire release =
+  EitherT $ do
+    (key, ex) <-
+      Resource.allocate (runEitherT acquire) $ \case
+        Left _ ->
+          pure () -- error allocating, no need to release
+        Right x ->
+          release x
+    pure $
+      fmap (key,) ex
