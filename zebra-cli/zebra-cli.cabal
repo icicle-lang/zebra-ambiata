@@ -34,6 +34,7 @@ library
 
   exposed-modules:
                     Zebra.Command
+                    Zebra.Command.Import
                     Zebra.Command.Export
 
 executable zebra

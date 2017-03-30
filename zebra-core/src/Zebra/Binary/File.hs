@@ -90,6 +90,7 @@ readTables path = do
   bytes <- readBytes path
   decodeTables bytes
 
+-- FIXME MonadResource
 readBytes :: MonadIO m => FilePath -> EitherT FileError m (Stream (EitherT FileError m) ByteString)
 readBytes path = do
   handle <- tryIO (FileOpenError path) $ IO.openBinaryFile path IO.ReadMode

@@ -20,6 +20,7 @@ import qualified X.Options.Applicative as Options
 import           Zebra.Binary (BinaryVersion(..))
 import           Zebra.Command
 import           Zebra.Command.Export
+import           Zebra.Command.Import
 
 
 main :: IO ()
@@ -33,6 +34,7 @@ data Command =
   | ZebraFacts !FilePath
   | ZebraMerge !(NonEmpty FilePath) !(Maybe FilePath) !MergeOptions
   | ZebraUnion !(NonEmpty FilePath) !FilePath
+  | ZebraImport !Import
   | ZebraExport !Export
     deriving (Eq, Show)
 
@@ -63,6 +65,10 @@ commands =
       "union"
       "Union multiple input files together."
   , cmd
+      (ZebraImport <$> pImport)
+      "import"
+      "Import a zebra json file into a zebra binary file."
+  , cmd
       (ZebraExport <$> pExport)
       "export"
       "Export a zebra binary file to a zebra json file."
@@ -91,6 +97,27 @@ pOutputZebra =
     Options.long "output" <>
     Options.metavar "OUTPUT_ZEBRA" <>
     Options.help "Write the output to a file (in zebra binary format)"
+
+pImport :: Parser Import
+pImport =
+ Import
+   <$> pInputJson
+   <*> pInputSchema
+   <*> pOutputZebra
+
+pInputJson :: Parser FilePath
+pInputJson =
+  Options.option Options.str $
+    Options.long "json" <>
+    Options.metavar "INPUT_JSON" <>
+    Options.help "Path to an input file (in zebra json format)"
+
+pInputSchema :: Parser FilePath
+pInputSchema =
+  Options.option Options.str $
+    Options.long "schema" <>
+    Options.metavar "INPUT_SCHEMA" <>
+    Options.help "Path to a schema file which describes the input file"
 
 pExport :: Parser Export
 pExport =
@@ -215,6 +242,10 @@ run = \case
     orDie id $
       zebraUnion inputs output
 
-  ZebraExport input ->
+  ZebraImport import_ ->
+    orDie renderImportError $
+      zebraImport import_
+
+  ZebraExport export ->
     orDie renderExportError $
-      zebraExport input
+      zebraExport export

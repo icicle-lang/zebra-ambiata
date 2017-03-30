@@ -175,7 +175,7 @@ getHeaderV2 = do
 
 parseSchema :: ByteString -> Get TableSchema
 parseSchema =
-  either (fail . Text.unpack . renderJsonDecodeError) pure . decodeSchema
+  either (fail . Text.unpack . renderJsonDecodeError) pure . decodeSchema JsonV0
 
 -- | The zebra 8-byte magic number, including version.
 --
