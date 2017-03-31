@@ -15,6 +15,7 @@ import           System.IO (IO)
 import           Test.Zebra.Jack
 import           Test.Zebra.Util
 
+import           Zebra.Binary.Data
 import           Zebra.Binary.Header
 
 

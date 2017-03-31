@@ -18,7 +18,7 @@ import           P
 import qualified X.Data.Vector.Storable as Storable
 
 import           Zebra.Binary.Array
-import           Zebra.Binary.Header
+import           Zebra.Binary.Data
 import qualified Zebra.Data.Vector.Cons as Cons
 import           Zebra.Schema (TableSchema, ColumnSchema, Tag)
 import qualified Zebra.Schema as Schema

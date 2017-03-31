@@ -52,6 +52,7 @@ import           X.Data.Vector.Stream (Stream(..), Step, SPEC(..))
 import qualified X.Data.Vector.Stream as Stream
 
 import           Zebra.Binary.Block
+import           Zebra.Binary.Data
 import           Zebra.Binary.Header
 import           Zebra.Data.Block
 import           Zebra.Schema (TableSchema)

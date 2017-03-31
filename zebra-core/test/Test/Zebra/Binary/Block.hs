@@ -26,7 +26,7 @@ import           Text.Printf (printf)
 import           Text.Show.Pretty (ppShow)
 
 import           Zebra.Binary.Block
-import           Zebra.Binary.Header
+import           Zebra.Binary.Data
 import           Zebra.Data.Block
 import           Zebra.Data.Core
 import           Zebra.Schema (TableSchema, ColumnSchema)

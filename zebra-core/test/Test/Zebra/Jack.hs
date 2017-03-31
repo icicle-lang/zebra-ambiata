@@ -89,7 +89,7 @@ import           Zebra.Data.Core
 import           Zebra.Data.Entity
 import           Zebra.Data.Fact
 
-import           Zebra.Binary.Header
+import           Zebra.Binary.Data
 import           Zebra.Data.Vector.Cons (Cons)
 import qualified Zebra.Data.Vector.Cons as Cons
 import           Zebra.Schema (TableSchema, ColumnSchema)

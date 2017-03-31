@@ -27,6 +27,7 @@ import           X.Data.Vector.Stream (Stream(..))
 import qualified X.Data.Vector.Stream as Stream
 
 import           Zebra.Binary.Block
+import           Zebra.Binary.Data
 import           Zebra.Binary.File
 import           Zebra.Binary.Header
 import           Zebra.Data.Block

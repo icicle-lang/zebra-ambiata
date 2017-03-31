@@ -18,7 +18,7 @@ import           Zebra.Json.Schema
 prop_roundtrip_schema :: Property
 prop_roundtrip_schema =
   gamble jTableSchema $
-    tripping (encodeSchema JsonV0) decodeSchema
+    tripping (encodeSchema JsonV0) (decodeSchema JsonV0)
 
 return []
 tests :: IO Bool

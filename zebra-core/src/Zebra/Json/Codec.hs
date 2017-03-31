@@ -42,6 +42,7 @@ import qualified Data.Aeson.Internal as Aeson
 import qualified Data.Aeson.Parser as Aeson
 import qualified Data.Aeson.Types as Aeson
 import           Data.ByteString (ByteString)
+import qualified Data.ByteString.Base64 as Base64
 import qualified Data.ByteString.Lazy as Lazy
 import qualified Data.HashMap.Strict as HashMap
 import qualified Data.List as List
@@ -57,7 +58,7 @@ import           Zebra.Schema (Variant(..), VariantName(..))
 
 data JsonVersion =
     JsonV0
-    deriving (Eq, Show)
+    deriving (Eq, Show, Enum, Bounded)
 
 data JsonDecodeError =
     JsonDecodeError !Aeson.JSONPath !Text
@@ -125,13 +126,30 @@ ppText =
   Aeson.toJSON
 
 pBinary :: Aeson.Value -> Aeson.Parser ByteString
-pBinary =
-  fmap Text.encodeUtf8 . pText
+pBinary = \case
+  Aeson.String x ->
+    pure $ Text.encodeUtf8 x
+
+  Aeson.Object o ->
+    withStructField "base64" o . Aeson.withText "base64 encoded binary data" $ \txt ->
+      case Base64.decode $ Text.encodeUtf8 txt of
+        Left err ->
+          fail $ "could not decode base64 encoded binary data: " <> err
+        Right bs ->
+          pure bs
+
+  v ->
+    Aeson.typeMismatch "utf8 text or base64 encoded binary" v
 
 ppBinary :: ByteString -> Aeson.Value
-ppBinary =
-  -- FIXME we need some metadata in the schema to say this is ok
-  ppText . Text.decodeUtf8
+ppBinary bs =
+  case Text.decodeUtf8' bs of
+    Left _ ->
+      Aeson.object [
+          "base64" .= Text.decodeUtf8 (Base64.encode bs)
+        ]
+    Right x ->
+     ppText x
 
 pUnit :: Aeson.Value -> Aeson.Parser ()
 pUnit =

@@ -5,4 +5,5 @@ module Zebra.Binary (
 
 import           Zebra.Binary.Array as X
 import           Zebra.Binary.Block as X
+import           Zebra.Binary.Data as X
 import           Zebra.Binary.Header as X

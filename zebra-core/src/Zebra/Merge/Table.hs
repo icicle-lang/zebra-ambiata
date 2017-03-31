@@ -33,6 +33,7 @@ import           X.Data.Vector.Stream (Stream(..), SPEC(..))
 import qualified X.Data.Vector.Stream as Stream
 
 import           Zebra.Binary.Block
+import           Zebra.Binary.Data
 import           Zebra.Binary.File
 import           Zebra.Binary.Header
 import           Zebra.Data.Vector.Cons (Cons)

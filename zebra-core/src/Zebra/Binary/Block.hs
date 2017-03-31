@@ -53,7 +53,7 @@ import qualified X.Data.Vector.Generic as Generic
 import qualified X.Data.Vector.Stream as Stream
 
 import           Zebra.Binary.Array
-import           Zebra.Binary.Header
+import           Zebra.Binary.Data
 import           Zebra.Binary.Table
 import           Zebra.Data.Block
 import           Zebra.Data.Core
