@@ -31,7 +31,6 @@ import qualified Data.ByteString.Char8 as Char8
 import qualified Data.List as List
 import           Data.Map (Map)
 import qualified Data.Map.Strict as Map
-import qualified Data.Text as Text
 import qualified Data.Vector as Boxed
 
 import           P
@@ -47,22 +46,16 @@ import qualified Zebra.Value as Value
 
 
 data JsonValueEncodeError =
-    JsonCannotEncodeBinaryToRows !ByteString
-  | JsonCollectionSchemaMismatch !TableSchema !Collection
+    JsonCollectionSchemaMismatch !TableSchema !Collection
   | JsonValueSchemaMismatch !ColumnSchema !Value
     deriving (Eq, Show)
 
 data JsonValueDecodeError =
-    JsonCannotDecodeRowsToBinary
-  | JsonValueDecodeError !JsonDecodeError
+    JsonValueDecodeError !JsonDecodeError
     deriving (Eq, Show)
 
 renderJsonValueEncodeError :: JsonValueEncodeError -> Text
 renderJsonValueEncodeError = \case
-  JsonCannotEncodeBinaryToRows bs ->
-    "Cannot encode binary value as rows: " <>
-    renderSnippet 30 (show bs)
-
   JsonCollectionSchemaMismatch schema collection ->
     "Error processing collection, schema did not match:" <>
     Value.renderField "collection" collection <>
@@ -75,30 +68,16 @@ renderJsonValueEncodeError = \case
 
 renderJsonValueDecodeError :: JsonValueDecodeError -> Text
 renderJsonValueDecodeError = \case
-  JsonCannotDecodeRowsToBinary ->
-    "Cannot decode binary value, it cannot be stored as json rows."
-
   JsonValueDecodeError err ->
     renderJsonDecodeError err
-
-renderSnippet :: Int -> [Char] -> Text
-renderSnippet n xs =
-  let
-    snippet =
-      Text.pack (List.take (n + 1) xs)
-  in
-    if Text.length snippet == n + 1 then
-      Text.take n snippet <> "..."
-    else
-      Text.take n snippet
 
 encodeValue :: ColumnSchema -> Value -> Either JsonValueEncodeError ByteString
 encodeValue schema value =
   encodeJson ["key"] <$> ppValue schema value
 
-decodeValue :: ColumnSchema -> ByteString -> Either JsonDecodeError Value
+decodeValue :: ColumnSchema -> ByteString -> Either JsonValueDecodeError Value
 decodeValue schema =
-  decodeJson (pValue schema)
+  first JsonValueDecodeError . decodeJson (pValue schema)
 
 encodeJsonRows :: [Text] -> Boxed.Vector Aeson.Value -> ByteString
 encodeJsonRows keyOrder =
@@ -110,7 +89,7 @@ encodeCollection schema collection0 =
     Schema.Binary
       | Binary bs <- collection0
       ->
-        Left $ JsonCannotEncodeBinaryToRows bs
+        pure bs
 
     Schema.Array element
       | Array xs <- collection0
@@ -136,7 +115,7 @@ decodeCollection :: TableSchema -> ByteString -> Either JsonValueDecodeError Col
 decodeCollection schema bs =
   case schema of
     Schema.Binary ->
-      Left JsonCannotDecodeRowsToBinary
+      pure $ Binary bs
 
     Schema.Array element ->
       first JsonValueDecodeError $

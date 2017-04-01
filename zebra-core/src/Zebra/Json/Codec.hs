@@ -141,6 +141,9 @@ pBinary = \case
   v ->
     Aeson.typeMismatch "utf8 text or base64 encoded binary" v
 
+-- | Attempt to store a 'ByteString' directly as a JSON string if it happens to
+--   be valid UTF-8, otherwise Base64 encode it.
+--
 ppBinary :: ByteString -> Aeson.Value
 ppBinary bs =
   case Text.decodeUtf8' bs of

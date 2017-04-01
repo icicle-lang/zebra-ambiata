@@ -15,10 +15,7 @@ import           P
 
 import           System.IO (IO)
 
-import           Test.Zebra.Jack
-
 import           Zebra.Json.Codec
-import           Zebra.Json.Schema
 
 
 jJsonVersion :: Jack JsonVersion
@@ -65,6 +62,9 @@ prop_roundtrip_binary =
   gamble jBinary $
     tripping (encodeJson [] . ppBinary) (decodeJson pBinary)
 
+-- This can be considered documentation that for all valid UTF-8 byte
+-- sequences, translating them to UTF-16 (i.e. Data.Text / Aeson) and back
+-- again results in the original sequence of bytes.
 prop_roundtrip_utf8 :: Property
 prop_roundtrip_utf8 =
   gamble (suchThat jBinary $ isRight . Text.decodeUtf8') $
@@ -73,4 +73,4 @@ prop_roundtrip_utf8 =
 return []
 tests :: IO Bool
 tests =
-  $forAllProperties $ quickCheckWithResult (stdArgs {maxSuccess = 10000})
+  $forAllProperties $ quickCheckWithResult (stdArgs {maxSuccess = 1000})

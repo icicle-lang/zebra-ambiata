@@ -55,6 +55,9 @@ module Test.Zebra.Jack (
   , normalizeTable
   , normalizeCollection
   , normalizeValue
+
+  -- * x-disorder-jack
+  , trippingBoth
   ) where
 
 import           Data.ByteString (ByteString)
@@ -63,16 +66,17 @@ import qualified Data.ByteString.Char8 as Char8
 import qualified Data.Char as Char
 import qualified Data.List as List
 import qualified Data.Map as Map
+import qualified Data.Set as Set
 import           Data.Thyme.Calendar (Year, Day, YearMonthDay(..), gregorianValid)
 import qualified Data.Vector as Boxed
 import qualified Data.Vector.Storable as Storable
 import qualified Data.Vector.Unboxed as Unboxed
 
 import           Disorder.Corpus (muppets, southpark, boats, weather)
-import           Disorder.Jack (Jack, mkJack, reshrink, shrinkTowards, sized, scale)
+import           Disorder.Jack (Jack, Property, mkJack, reshrink, shrinkTowards, sized, scale)
 import           Disorder.Jack (elements, arbitrary, choose, chooseInt, sizedBounded)
 import           Disorder.Jack (oneOf, oneOfRec, listOf, listOfN, vectorOf, justOf, maybeOf)
-import           Disorder.Jack (boundedEnum)
+import           Disorder.Jack ((===), boundedEnum, property, counterexample)
 
 import           P
 
@@ -196,8 +200,8 @@ jColumnSchema =
       pure Schema.Int
     , pure Schema.Double
     ] [
-      Schema.Enum <$> smallConsOf (jVariant jColumnSchema)
-    , Schema.Struct <$> smallConsOf (jField jColumnSchema)
+      Schema.Enum <$> smallConsUniqueBy variantName (jVariant jColumnSchema)
+    , Schema.Struct <$> smallConsUniqueBy fieldName (jField jColumnSchema)
     , Schema.Nested <$> jTableSchema
     , Schema.Reversed <$> jColumnSchema
     ]
@@ -290,6 +294,7 @@ jArrayTable n = do
   Table.Array
     <$> jColumn n
 
+-- FIXME this constructs a corrupt table
 jMapTable :: Int -> Jack Table
 jMapTable n = do
   Table.Map
@@ -547,6 +552,30 @@ smallConsOf gen =
   sized $ \n ->
     Cons.unsafeFromList <$> listOfN 1 (1 + (n `div` 10)) gen
 
+smallConsUniqueBy :: Ord b => (a -> b) -> Jack a -> Jack (Cons Boxed.Vector a)
+smallConsUniqueBy f gen =
+  sized $ \n ->
+    Cons.unsafeFromList . ordNubBy f <$> listOfN 1 (1 + (n `div` 10)) gen
+
+-- should be in P
+ordNubBy :: Ord b => (a -> b) -> [a] -> [a]
+ordNubBy f =
+  let
+    loop seen = \case
+      [] ->
+        []
+      x : xs ->
+        let
+          y =
+            f x
+        in
+          if Set.member y seen then
+            loop seen xs
+          else
+            x : loop (Set.insert y seen) xs
+   in
+     loop Set.empty
+
 ------------------------------------------------------------------------
 
 normalizeTable :: Table -> Table
@@ -583,3 +612,25 @@ normalizeValue = \case
     Value.Nested $ normalizeCollection x
   Value.Reversed x ->
     Value.Reversed $ normalizeValue x
+
+------------------------------------------------------------------------
+
+trippingBoth :: (Monad m, Show (m a), Show (m b), Eq (m a)) => (a -> m b) -> (b -> m a) -> a -> Property
+trippingBoth to from x =
+  let
+    original =
+      pure x
+
+    intermediate =
+      to x
+
+    roundtrip =
+      from =<< intermediate
+  in
+    counterexample "" .
+    counterexample "Roundtrip failed." .
+    counterexample "" .
+    counterexample "=== Intermediate ===" .
+    counterexample (ppShow intermediate) .
+    counterexample "" $
+      property (original === roundtrip)
