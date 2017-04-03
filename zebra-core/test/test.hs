@@ -14,6 +14,7 @@ import qualified Test.Zebra.Foreign.Table
 import qualified Test.Zebra.Json.Schema
 import qualified Test.Zebra.Merge.Entity
 import qualified Test.Zebra.Table
+import qualified Test.Zebra.Value
 
 main :: IO ()
 main =
@@ -32,4 +33,5 @@ main =
     , Test.Zebra.Json.Schema.tests
     , Test.Zebra.Merge.Entity.tests
     , Test.Zebra.Table.tests
+    , Test.Zebra.Value.tests
     ]
