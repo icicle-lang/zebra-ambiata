@@ -1,3 +1,4 @@
+=== Schema ===
 {
   "version": "v0",
   "schema": {
@@ -42,6 +43,8 @@
     }
   }
 }
+
+=== Data ===
 {"entity_id":"abc","schleem":{"none":{}}}
 {"entity_id":"def","schleem":{"some":456}}
 {"entity_id":"schleem","schleem":{"some":789}}
