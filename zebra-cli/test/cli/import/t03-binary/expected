@@ -7,7 +7,8 @@
 }
 
 === Data ===
-E+001|halibut|27|2017-01-01
-E+001|halibut|28|2017-01-02
-E+001|halibut|29|2017-01-03
-E+001|halibut|20|2017-01-04
+zebra is a typed data format for storing arbitrary combinations of sums,
+products and arrays in compressed form. It achieves high compression by
+decomposing this data in to a "struct of arrays" representation on disk. zebra
+stores data in blocks so that files can be streamed without loading the entire
+file in memory.
