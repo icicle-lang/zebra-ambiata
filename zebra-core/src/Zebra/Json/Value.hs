@@ -6,42 +6,55 @@ module Zebra.Json.Value (
     encodeCollection
   , encodeValue
 
+  , decodeCollection
+  , decodeValue
+
+  , pCollection
+  , pPair
+  , pValue
+
   , ppCollection
   , ppPair
   , ppValue
 
   , JsonValueEncodeError(..)
   , renderJsonValueEncodeError
+
+  , JsonValueDecodeError(..)
+  , renderJsonValueDecodeError
   ) where
 
 import qualified Data.Aeson as Aeson
+import qualified Data.Aeson.Types as Aeson
 import           Data.ByteString (ByteString)
 import qualified Data.List as List
+import           Data.Map (Map)
 import qualified Data.Map.Strict as Map
-import qualified Data.Text.Encoding as Text
 import qualified Data.Vector as Boxed
 
 import           P
 
+import           Zebra.Data.Vector.Cons (Cons)
 import qualified Zebra.Data.Vector.Cons as Cons
 import           Zebra.Json.Codec
-import           Zebra.Schema (TableSchema, ColumnSchema, Field(..))
+import           Zebra.Schema (Field(..), Variant(..), VariantName(..))
+import           Zebra.Schema (TableSchema, ColumnSchema)
 import qualified Zebra.Schema as Schema
 import           Zebra.Value (Collection(..), Value(..))
 import qualified Zebra.Value as Value
 
 
 data JsonValueEncodeError =
-    JsonValueEncodeError !JsonEncodeError
-  | JsonCollectionSchemaMismatch !TableSchema !Collection
+    JsonCollectionSchemaMismatch !TableSchema !Collection
   | JsonValueSchemaMismatch !ColumnSchema !Value
+    deriving (Eq, Show)
+
+data JsonValueDecodeError =
+    JsonValueDecodeError !JsonDecodeError
     deriving (Eq, Show)
 
 renderJsonValueEncodeError :: JsonValueEncodeError -> Text
 renderJsonValueEncodeError = \case
-  JsonValueEncodeError err ->
-    renderJsonEncodeError err
-
   JsonCollectionSchemaMismatch schema collection ->
     "Error processing collection, schema did not match:" <>
     Value.renderField "collection" collection <>
@@ -52,13 +65,40 @@ renderJsonValueEncodeError = \case
     Value.renderField "value" value <>
     Value.renderField "schema" schema
 
+renderJsonValueDecodeError :: JsonValueDecodeError -> Text
+renderJsonValueDecodeError = \case
+  JsonValueDecodeError err ->
+    renderJsonDecodeError err
+
 encodeCollection :: TableSchema -> Collection -> Either JsonValueEncodeError ByteString
-encodeCollection schema collection =
-  first JsonValueEncodeError . encodeJsonRows ["key"] =<< ppCollection schema collection
+encodeCollection schema value =
+  encodeJson ["key"] <$> ppCollection schema value
 
 encodeValue :: ColumnSchema -> Value -> Either JsonValueEncodeError ByteString
 encodeValue schema value =
   encodeJson ["key"] <$> ppValue schema value
+
+decodeCollection :: TableSchema -> ByteString -> Either JsonValueDecodeError Collection
+decodeCollection schema =
+  first JsonValueDecodeError . decodeJson (pCollection schema)
+
+decodeValue :: ColumnSchema -> ByteString -> Either JsonValueDecodeError Value
+decodeValue schema =
+  first JsonValueDecodeError . decodeJson (pValue schema)
+
+pCollection :: TableSchema -> Aeson.Value -> Aeson.Parser Collection
+pCollection schema =
+  case schema of
+    Schema.Binary ->
+      fmap Binary . pBinary
+
+    Schema.Array element ->
+      fmap Array .
+      Aeson.withArray "array containing values" (kmapM $ pValue element)
+
+    Schema.Map kschema vschema ->
+      fmap (Map . Map.fromList . Boxed.toList) .
+      Aeson.withArray "array containing key/value pairs" (kmapM $ pPair kschema vschema)
 
 ppCollection :: TableSchema -> Collection -> Either JsonValueEncodeError Aeson.Value
 ppCollection schema collection0 =
@@ -66,14 +106,12 @@ ppCollection schema collection0 =
     Schema.Binary
       | Binary bs <- collection0
       ->
-        -- FIXME we need some metadata in the schema to say this is ok
-        pure . Aeson.String $ Text.decodeUtf8 bs
+        pure $ ppBinary bs
 
     Schema.Array element
-      | Array values <- collection0
+      | Array xs <- collection0
       ->
-        fmap Aeson.Array $
-          traverse (ppValue element) values
+        Aeson.Array <$> traverse (ppValue element) xs
 
     Schema.Map kschema vschema
       | Map kvs <- collection0
@@ -86,12 +124,57 @@ ppCollection schema collection0 =
     _ ->
       Left $ JsonCollectionSchemaMismatch schema collection0
 
+pPair :: ColumnSchema -> ColumnSchema -> Aeson.Value -> Aeson.Parser (Value, Value)
+pPair kschema vschema =
+  Aeson.withObject "object containing key/value pair" $ \o ->
+    (,)
+      <$> withStructField "key" o (pValue kschema)
+      <*> withStructField "value" o (pValue vschema)
+
 ppPair :: Aeson.Value -> Aeson.Value -> Aeson.Value
 ppPair key value =
   ppStruct [
       Field "key" key
     , Field "value" value
     ]
+
+pValue :: ColumnSchema -> Aeson.Value -> Aeson.Parser Value
+pValue schema =
+  case schema of
+    Schema.Unit ->
+      (Unit <$) . pUnit
+
+    Schema.Int ->
+      fmap Int . pInt
+
+    Schema.Double ->
+      fmap Double . pDouble
+
+    Schema.Enum variants0 ->
+      let
+        variants =
+          mkVariantMap variants0
+      in
+        pEnum $ flip Map.lookup variants
+
+    Schema.Struct fields0 ->
+      Aeson.withObject "object containing a struct" $ \o ->
+        fmap Struct . for fields0 $ \(Field name fschema) ->
+          withStructField name o (pValue fschema)
+
+    Schema.Nested snested ->
+      fmap Nested . pCollection snested
+
+    Schema.Reversed sreversed ->
+      fmap Reversed . pValue sreversed
+
+mkVariantMap :: Cons Boxed.Vector (Variant ColumnSchema) -> Map VariantName (Aeson.Value -> Aeson.Parser Value)
+mkVariantMap =
+  let
+    fromVariant (tag, Variant name schema) =
+      (name, fmap (Enum tag) . pValue schema)
+  in
+    Map.fromList . fmap fromVariant . List.zip [0..] . Cons.toList
 
 ppValue :: ColumnSchema -> Value -> Either JsonValueEncodeError Aeson.Value
 ppValue schema value0 =
@@ -113,9 +196,9 @@ ppValue schema value0 =
 
     Schema.Enum variants
       | Enum tag x <- value0
-      , Just variant <- Schema.lookupVariant tag variants
+      , Just var <- Schema.lookupVariant tag variants
       ->
-        ppEnum <$> traverse (flip ppValue x) variant
+        ppEnum <$> traverse (flip ppValue x) var
 
     Schema.Struct fields
       | Struct values <- value0

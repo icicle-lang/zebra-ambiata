@@ -146,6 +146,5 @@ prop_runStreamMany_getStrings_filtered =
 
 return []
 tests :: IO Bool
-tests = $disorderCheckEnvAll TestRunNormal
-
-
+tests =
+  $disorderCheckEnvAll TestRunNormal

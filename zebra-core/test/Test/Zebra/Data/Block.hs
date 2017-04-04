@@ -10,7 +10,7 @@ import qualified Data.Vector as Boxed
 
 import           Disorder.Core.Run (ExpectedTestSpeed(..), disorderCheckEnvAll)
 import           Disorder.Jack (Property, counterexample)
-import           Disorder.Jack ((===), gamble, property, listOf)
+import           Disorder.Jack ((===), gamble, listOf)
 
 import           P
 
@@ -81,26 +81,6 @@ prop_collection_from_block =
         table0
         ===
         table
-
-trippingBoth :: (Monad m, Show (m a), Show (m b), Eq (m a)) => (a -> m b) -> (b -> m a) -> a -> Property
-trippingBoth to from x =
-  let
-    original =
-      pure x
-
-    intermediate =
-      to x
-
-    roundtrip =
-      from =<< intermediate
-  in
-    counterexample "" .
-    counterexample "Roundtrip failed." .
-    counterexample "" .
-    counterexample "=== Intermediate ===" .
-    counterexample (ppShow intermediate) .
-    counterexample "" $
-      property (original === roundtrip)
 
 return []
 tests :: IO Bool

@@ -1,0 +1,40 @@
+{
+  "version": "v0",
+  "schema": {
+    "array": {
+      "element": {
+        "struct": {
+          "fields": [
+            {
+              "name": "schleem",
+              "column": {
+                "enum": {
+                  "variants": [
+                    {
+                      "name": "none",
+                      "column": { "unit": {} }
+                    },
+                    {
+                      "name": "some",
+                      "column": { "int": {} }
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "entity_id",
+              "column": {
+                "nested": {
+                  "table": {
+                    "binary": {}
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

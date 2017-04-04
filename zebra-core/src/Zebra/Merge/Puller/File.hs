@@ -17,6 +17,7 @@ module Zebra.Merge.Puller.File
 
 import           Control.Monad.IO.Class (MonadIO(..))
 import           Control.Monad.Trans.Class (lift)
+import           Control.Monad.Trans.Resource (MonadResource(..))
 
 import qualified Data.IORef as IORef
 
@@ -44,7 +45,7 @@ newtype PullId =
    deriving Show
 
 
-blockChainPuller :: MonadIO m
+blockChainPuller :: MonadResource m
   => Boxed.Vector FilePath
   -> EitherT PullerError m (PullId -> EitherT FileError m (Maybe Block), Boxed.Vector PullId)
 blockChainPuller files

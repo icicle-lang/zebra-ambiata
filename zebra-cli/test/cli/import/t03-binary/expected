@@ -1,0 +1,14 @@
+=== Schema ===
+{
+  "version": "v0",
+  "schema": {
+    "binary": {}
+  }
+}
+
+=== Data ===
+zebra is a typed data format for storing arbitrary combinations of sums,
+products and arrays in compressed form. It achieves high compression by
+decomposing this data in to a "struct of arrays" representation on disk. zebra
+stores data in blocks so that files can be streamed without loading the entire
+file in memory.

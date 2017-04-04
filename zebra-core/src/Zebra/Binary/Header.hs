@@ -6,14 +6,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
 module Zebra.Binary.Header (
-    Header(..)
-  , BinaryVersion(..)
-
-  , headerOfAttributes
-  , attributesOfHeader
-  , schemaOfHeader
-
-  , bHeader
+    bHeader
   , bVersion
 
   , getHeader
@@ -42,47 +35,12 @@ import qualified Data.Vector as Boxed
 import           P
 
 import           Zebra.Binary.Array
-import           Zebra.Data.Block
+import           Zebra.Binary.Data
 import           Zebra.Data.Core
-import           Zebra.Json.Codec
 import           Zebra.Json.Schema
 import           Zebra.Schema (TableSchema, ColumnSchema)
 import qualified Zebra.Schema as Schema
 
-
-data Header =
-    HeaderV2 !(Map AttributeName ColumnSchema)
-  | HeaderV3 !TableSchema
-    deriving (Eq, Ord, Show)
-
-data BinaryVersion =
---  BinaryV0 -- x Initial version.
---  BinaryV1 -- x Store factset-id instead of priority, this flips sort order.
-    BinaryV2 -- ^ Schema is stored in header, instead of encoding.
-  | BinaryV3 -- ^ Data is stored as tables instead of entity blocks.
-    deriving (Eq, Ord, Show)
-
-headerOfAttributes :: BinaryVersion -> Map AttributeName ColumnSchema -> Header
-headerOfAttributes version attributes =
-  case version of
-    BinaryV2 ->
-      HeaderV2 attributes
-    BinaryV3 ->
-      HeaderV3 (tableSchemaOfAttributes attributes)
-
-attributesOfHeader :: Header -> Either BlockTableError (Map AttributeName ColumnSchema)
-attributesOfHeader = \case
-  HeaderV2 attributes ->
-    pure attributes
-  HeaderV3 table ->
-    attributesOfTableSchema table
-
-schemaOfHeader :: Header -> TableSchema
-schemaOfHeader = \case
-  HeaderV2 attributes ->
-    tableSchemaOfAttributes attributes
-  HeaderV3 table ->
-    table
 
 -- | Encode a zebra header.
 --
@@ -118,7 +76,7 @@ getHeader = do
 -- @
 bHeaderV3 :: TableSchema -> Builder
 bHeaderV3 schema =
-  bSizedByteArray (encodeSchema JsonV0 schema)
+  bSizedByteArray (encodeSchema SchemaV0 schema)
 
 getHeaderV3 :: Get TableSchema
 getHeaderV3 =
@@ -150,7 +108,7 @@ bHeaderV2 features =
 
     schema =
       bStrings .
-      fmap (encodeSchema JsonV0 . Schema.Array) .
+      fmap (encodeSchema SchemaV0 . Schema.Array) .
       Boxed.fromList $
       Map.elems features
   in
@@ -175,7 +133,7 @@ getHeaderV2 = do
 
 parseSchema :: ByteString -> Get TableSchema
 parseSchema =
-  either (fail . Text.unpack . renderJsonDecodeError) pure . decodeSchema
+  either (fail . Text.unpack . renderJsonSchemaDecodeError) pure . decodeSchema SchemaV0
 
 -- | The zebra 8-byte magic number, including version.
 --

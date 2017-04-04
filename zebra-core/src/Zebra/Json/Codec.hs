@@ -2,32 +2,32 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 module Zebra.Json.Codec (
-    JsonVersion(..)
-
-  , encodeJson
+    encodeJson
   , encodeJsonIndented
-  , encodeJsonRows
   , decodeJson
-
-  , JsonEncodeError(..)
-  , renderJsonEncodeError
 
   , JsonDecodeError(..)
   , renderJsonDecodeError
 
   -- * Parsing
-  , withKey
-  , kmapM
+  , pText
+  , pBinary
+  , pUnit
+  , pInt
+  , pDouble
   , pEnum
+  , withStructField
+  , kmapM
 
   -- * Pretty Printing
-  , ppVersion
+  , ppText
+  , ppBinary
+  , ppUnit
   , ppInt
   , ppDouble
   , ppEnum
   , ppStruct
   , ppStructField
-  , ppUnit
   ) where
 
 import           Data.Aeson ((.=), (.:))
@@ -38,11 +38,12 @@ import qualified Data.Aeson.Internal as Aeson
 import qualified Data.Aeson.Parser as Aeson
 import qualified Data.Aeson.Types as Aeson
 import           Data.ByteString (ByteString)
-import qualified Data.ByteString.Char8 as Char8
+import qualified Data.ByteString.Base64 as Base64
 import qualified Data.ByteString.Lazy as Lazy
 import qualified Data.HashMap.Strict as HashMap
 import qualified Data.List as List
 import qualified Data.Text as Text
+import qualified Data.Text.Encoding as Text
 import qualified Data.Vector as Boxed
 
 import           P
@@ -51,39 +52,14 @@ import           Zebra.Schema (Field(..), FieldName(..))
 import           Zebra.Schema (Variant(..), VariantName(..))
 
 
-data JsonVersion =
-    JsonV0
-    deriving (Eq, Show)
-
-data JsonEncodeError =
-    JsonCannotConvertNonArrayToRows !Aeson.Value
-    deriving (Eq, Show)
-
 data JsonDecodeError =
     JsonDecodeError !Aeson.JSONPath !Text
     deriving (Eq, Show)
-
-renderJsonEncodeError :: JsonEncodeError -> Text
-renderJsonEncodeError = \case
-  JsonCannotConvertNonArrayToRows value ->
-    "Cannot encode non-array JSON value as rows: " <>
-    renderSnippet 30 (show value)
 
 renderJsonDecodeError :: JsonDecodeError -> Text
 renderJsonDecodeError = \case
   JsonDecodeError path msg ->
     Text.pack . Aeson.formatError path $ Text.unpack msg
-
-renderSnippet :: Int -> [Char] -> Text
-renderSnippet n xs =
-  let
-    snippet =
-      Text.pack (List.take (n + 1) xs)
-  in
-    if Text.length snippet == n + 1 then
-      Text.take n snippet <> "..."
-    else
-      Text.take n snippet
 
 encodeJson :: [Text] -> Aeson.Value -> ByteString
 encodeJson keyOrder =
@@ -92,13 +68,6 @@ encodeJson keyOrder =
 encodeJsonIndented :: [Text] -> Aeson.Value -> ByteString
 encodeJsonIndented keyOrder =
   Lazy.toStrict . Aeson.encodePretty' (indentConfig keyOrder)
-
-encodeJsonRows :: [Text] -> Aeson.Value -> Either JsonEncodeError ByteString
-encodeJsonRows keyOrder = \case
-  Aeson.Array xs ->
-    pure . Char8.unlines . Boxed.toList $ fmap (encodeJson keyOrder) xs
-  value ->
-    Left $ JsonCannotConvertNonArrayToRows value
 
 decodeJson :: (Aeson.Value -> Aeson.Parser a) -> ByteString -> Either JsonDecodeError a
 decodeJson p =
@@ -127,15 +96,80 @@ indentConfig keyOrder =
         Aeson.Generic
     }
 
-withKey :: Aeson.FromJSON a => Text -> Aeson.Object ->  (a -> Aeson.Parser b) -> Aeson.Parser b
-withKey key o p = do
-  x <- o .: key
-  p x <?> Aeson.Key key
+pText :: Aeson.Value -> Aeson.Parser Text
+pText =
+  Aeson.parseJSON
 
-kmapM :: (Aeson.Value -> Aeson.Parser a) -> Boxed.Vector Aeson.Value -> Aeson.Parser (Boxed.Vector a)
-kmapM f =
-  Boxed.imapM $ \i x ->
-    f x <?> Aeson.Index i
+ppText :: Text -> Aeson.Value
+ppText =
+  Aeson.toJSON
+
+pBinary :: Aeson.Value -> Aeson.Parser ByteString
+pBinary = \case
+  Aeson.String x ->
+    pure $ Text.encodeUtf8 x
+
+  Aeson.Object o ->
+    withStructField "base64" o . Aeson.withText "base64 encoded binary data" $ \txt ->
+      case Base64.decode $ Text.encodeUtf8 txt of
+        Left err ->
+          fail $ "could not decode base64 encoded binary data: " <> err
+        Right bs ->
+          pure bs
+
+  v ->
+    Aeson.typeMismatch "utf8 text or base64 encoded binary" v
+
+-- | Attempt to store a 'ByteString' directly as a JSON string if it happens to
+--   be valid UTF-8, otherwise Base64 encode it.
+--
+ppBinary :: ByteString -> Aeson.Value
+ppBinary bs =
+  case Text.decodeUtf8' bs of
+    Left _ ->
+      Aeson.object [
+          "base64" .= Text.decodeUtf8 (Base64.encode bs)
+        ]
+    Right x ->
+     ppText x
+
+pUnit :: Aeson.Value -> Aeson.Parser ()
+pUnit =
+  Aeson.withObject "object containing unit (i.e. {})" $ \o ->
+    if HashMap.null o then
+      pure ()
+    else
+      fail $
+        "expected an object containing unit (i.e. {})," <>
+        "\nbut found an object with one or more members"
+
+ppUnit :: Aeson.Value
+ppUnit =
+  Aeson.Object HashMap.empty
+
+pInt :: Aeson.Value -> Aeson.Parser Int64
+pInt =
+  Aeson.parseJSON
+
+ppInt :: Int64 -> Aeson.Value
+ppInt =
+  Aeson.toJSON
+
+pDouble :: Aeson.Value -> Aeson.Parser Double
+pDouble =
+  Aeson.parseJSON
+
+ppDouble :: Double -> Aeson.Value
+ppDouble =
+  --
+  -- This maps NaN/Inf -> 'null', and uses 'fromFloatDigits' to convert
+  -- Double -> Scientific.
+  --
+  -- Don't use 'realToFrac' here, it converts the Double to a Scientific
+  -- with far more decimal places than a 64-bit floating point number can
+  -- possibly represent.
+  --
+  Aeson.toJSON
 
 pEnum :: (VariantName -> Maybe (Aeson.Value -> Aeson.Parser a)) -> Aeson.Value -> Aeson.Parser a
 pEnum mkParser =
@@ -157,32 +191,16 @@ pEnum mkParser =
           "\nbut found an object with more than one member:" <>
           "\n  " <> List.intercalate ", " (fmap (Text.unpack . fst) kvs)
 
-ppVersion :: JsonVersion -> Aeson.Value
-ppVersion = \case
-  JsonV0 ->
-    Aeson.String "v0"
-
-ppInt :: Int64 -> Aeson.Value
-ppInt =
-  Aeson.Number . fromIntegral
-
-ppDouble :: Double -> Aeson.Value
-ppDouble =
-  --
-  -- This maps NaN/Inf -> 'null', and uses 'fromFloatDigits' to convert
-  -- Double -> Scientific.
-  --
-  -- Don't use 'realToFrac' here, it converts the Double to a Scientific
-  -- with far more decimal places than a 64-bit floating point number can
-  -- possibly represent.
-  --
-  Aeson.toJSON
-
 ppEnum :: Variant Aeson.Value -> Aeson.Value
 ppEnum (Variant (VariantName name) value) =
   Aeson.object [
       name .= value
     ]
+
+withStructField :: FieldName -> Aeson.Object -> (Aeson.Value -> Aeson.Parser a) -> Aeson.Parser a
+withStructField name o p = do
+  x <- o .: unFieldName name
+  p x <?> Aeson.Key (unFieldName name)
 
 ppStruct :: [Field Aeson.Value] -> Aeson.Value
 ppStruct =
@@ -192,6 +210,7 @@ ppStructField :: Field Aeson.Value -> Aeson.Pair
 ppStructField (Field (FieldName name) value) =
   name .= value
 
-ppUnit :: Aeson.Value
-ppUnit =
-  Aeson.Object HashMap.empty
+kmapM :: (Aeson.Value -> Aeson.Parser a) -> Boxed.Vector Aeson.Value -> Aeson.Parser (Boxed.Vector a)
+kmapM f =
+  Boxed.imapM $ \i x ->
+    f x <?> Aeson.Index i

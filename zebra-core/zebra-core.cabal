@@ -23,6 +23,7 @@ library
                     , aeson                           >= 1.0        && < 1.2
                     , aeson-pretty                    == 0.8.*
                     , attoparsec                      >= 0.13       && < 0.14
+                    , base64-bytestring               == 1.0.*
                     , bifunctors                      >= 4.2        && < 5.5
                     , binary                          >= 0.7.2      && < 0.9
                     , bindings-DSL                    >= 1.0.0      && <= 1.0.23
@@ -35,6 +36,7 @@ library
                     , old-locale                      == 1.0.*
                     , pretty-show                     == 1.6.*
                     , primitive                       == 0.6.*
+                    , resourcet                       == 1.1.*
                     , semigroups                      == 0.18.*
                     , text                            == 1.2.*
                     , thyme                           == 0.3.*
@@ -59,6 +61,7 @@ library
                     Zebra.Binary
                     Zebra.Binary.Array
                     Zebra.Binary.Block
+                    Zebra.Binary.Data
                     Zebra.Binary.File
                     Zebra.Binary.Header
                     Zebra.Binary.Table
@@ -96,6 +99,11 @@ library
                     Zebra.Merge.Puller.File
                     Zebra.Merge.Puller.List
                     Zebra.Merge.Table
+
+                    Zebra.Text
+                    Zebra.Text.Schema
+                    Zebra.Text.Table
+                    Zebra.Text.Value
 
   include-dirs:
                        csrc
