@@ -1,0 +1,50 @@
+#!/bin/sh
+: ${UPDATE:=0}
+: ${ZEBRA:=$PWD/dist/build/zebra/zebra}
+
+if hash colordiff 2>/dev/null; then
+  diff=colordiff
+else
+  diff=diff
+fi
+
+FAILURES=0
+TESTS=0
+
+export ZEBRA
+ZEBRA_TEMP_ROOT=$(mktemp -d 2>/dev/null || mktemp -d -t 'zebra-cli-test')
+
+clean_up () {
+    rm -rf "$ZEBRA_TEMP_ROOT"
+}
+
+trap clean_up EXIT
+
+for REL_DIR in test/cli/import/t*; do
+    echo "─── $REL_DIR ───"
+    ABS_DIR=$PWD/$REL_DIR
+
+    export ZEBRA_TEMP=$ZEBRA_TEMP_ROOT/$REL_DIR
+    mkdir -p $ZEBRA_TEMP
+
+    if [ $UPDATE -eq 0 ]; then
+        (cd $REL_DIR; $ABS_DIR/script 2>&1 | $diff -u $ABS_DIR/expected -)
+    else
+        echo " * Updating expected"
+        (cd $REL_DIR; $ABS_DIR/script 2>&1 | tee $ABS_DIR/expected)
+    fi
+
+    if [ $? -ne 0 ]; then
+        FAILURES=$(expr $FAILURES + 1)
+        echo " * FAILED: $REL_DIR"
+    fi
+
+    TESTS=$(expr $TESTS + 1)
+done
+
+if [ $FAILURES -ne 0 ]; then
+    echo " * Some failures: $FAILURES"
+    exit $FAILURES
+else
+    echo " * Passed $TESTS tests!"
+fi

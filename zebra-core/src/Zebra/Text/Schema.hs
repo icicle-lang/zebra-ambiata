@@ -36,8 +36,8 @@ renderTextSchemaDecodeError = \case
     renderJsonDecodeError err
 
 encodeSchema :: TextVersion -> TableSchema -> ByteString
-encodeSchema version =
-  encodeJsonIndented ["version", "key", "name"] . ppVersionedSchema version
+encodeSchema version schema =
+  encodeJsonIndented ["version", "key", "name"] (ppVersionedSchema version schema) <> "\n"
 
 decodeSchema :: ByteString -> Either TextSchemaDecodeError TableSchema
 decodeSchema =

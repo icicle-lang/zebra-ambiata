@@ -1,0 +1,6 @@
+#!/bin/sh -eu
+
+ZBIN=$ZEBRA_TEMP/intermediate.zbin
+
+$ZEBRA import input.ztxt --schema input.zschema --output $ZBIN
+$ZEBRA export $ZBIN --schema-stdout --output-stdout

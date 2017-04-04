@@ -1,0 +1,48 @@
+{
+  "version": "v0",
+  "schema": {
+    "array": {
+      "element": {
+        "struct": {
+          "fields": [
+            {
+              "name": "schleem",
+              "column": {
+                "enum": {
+                  "variants": [
+                    {
+                      "name": "none",
+                      "column": {
+                        "unit": {}
+                      }
+                    },
+                    {
+                      "name": "some",
+                      "column": {
+                        "int": {}
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "entity_id",
+              "column": {
+                "nested": {
+                  "table": {
+                    "binary": {}
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}
+{"entity_id":"abc","schleem":{"none":{}}}
+{"entity_id":"def","schleem":{"some":456}}
+{"entity_id":"schleem","schleem":{"some":789}}
+{"entity_id":"slhn\u000feo","schleem":{"none":{}}}

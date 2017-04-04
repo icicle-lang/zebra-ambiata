@@ -1,0 +1,43 @@
+{
+  "version": "v0",
+  "schema": {
+    "map": {
+      "key": {
+        "struct": {
+          "fields": [
+            {
+              "name": "entity_hash",
+              "column": {
+                "int": {}
+              }
+            },
+            {
+              "name": "entity_id",
+              "column": {
+                "nested": { "table": { "binary": {} } }
+              }
+            }
+          ]
+        }
+      },
+      "value": {
+        "enum": {
+          "variants": [
+            {
+              "name": "cash",
+              "column": {
+                "double": {}
+              }
+            },
+            {
+              "name": "item",
+              "column": {
+                "nested": { "table": { "binary": {} } }
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}
