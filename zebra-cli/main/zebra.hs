@@ -52,53 +52,53 @@ cmd p name desc =
 commands :: [Mod CommandFields Command]
 commands =
   [ cmd
-      (ZebraCat <$> some1 pInputZebra <*> pCatOptions)
+      (ZebraCat <$> some1 pInputBinary <*> pCatOptions)
       "cat"
       "Dump all information in a zebra file."
   , cmd
-      (ZebraFacts <$> pInputZebra)
+      (ZebraFacts <$> pInputBinary)
       "facts"
       "Dump a zebra file as facts."
   , cmd
-      (ZebraMerge <$> some1 pInputZebra <*> pMaybeOutputZebra <*> pMergeOptions)
+      (ZebraMerge <$> some1 pInputBinary <*> pMaybeOutputBinary <*> pMergeOptions)
       "merge"
       "Merge multiple input files together."
   , cmd
-      (ZebraUnion <$> some1 pInputZebra <*> pOutputZebra)
+      (ZebraUnion <$> some1 pInputBinary <*> pOutputBinary)
       "union"
       "Union multiple input files together."
   , cmd
       (ZebraImport <$> pImport)
       "import"
-      "Import a zebra json file into a zebra binary file."
+      "Import a zebra text file into a zebra binary file."
   , cmd
       (ZebraExport <$> pExport)
       "export"
-      "Export a zebra binary file to a zebra json file."
+      "Export a zebra binary file to a zebra text file."
   ]
 
-pInputZebra :: Parser FilePath
-pInputZebra =
+pInputBinary :: Parser FilePath
+pInputBinary =
   Options.argument Options.str $
-    Options.metavar "INPUT_ZEBRA" <>
+    Options.metavar "INPUT_ZEBRA_BINARY" <>
     Options.help "Path to an input file (in zebra binary format)"
 
-pMaybeOutputZebra :: Parser (Maybe FilePath)
-pMaybeOutputZebra =
+pMaybeOutputBinary :: Parser (Maybe FilePath)
+pMaybeOutputBinary =
   let
     none =
       Options.flag' Nothing $
         Options.long "no-output" <>
         Options.help "Don't output block file, just print entity-id"
   in
-    (Just <$> pOutputZebra) <|> none
+    (Just <$> pOutputBinary) <|> none
 
-pOutputZebra :: Parser FilePath
-pOutputZebra =
+pOutputBinary :: Parser FilePath
+pOutputBinary =
   Options.option Options.str $
     Options.short 'o' <>
     Options.long "output" <>
-    Options.metavar "OUTPUT_ZEBRA" <>
+    Options.metavar "OUTPUT_ZEBRA_BINARY" <>
     Options.help "Write the output to a file (in zebra binary format)"
 
 pImport :: Parser Import
@@ -106,27 +106,33 @@ pImport =
  Import
    <$> pInputJson
    <*> pInputSchema
-   <*> pOutputZebra
+   <*> ((Just <$> pOutputBinary) <|> pOutputBinaryStdout <|> pure Nothing)
 
 pInputJson :: Parser FilePath
 pInputJson =
-  Options.option Options.str $
-    Options.long "json" <>
-    Options.metavar "INPUT_JSON" <>
-    Options.help "Path to an input file (in zebra json format)"
+  Options.argument Options.str $
+    Options.metavar "INPUT_ZEBRA_TEXT" <>
+    Options.help "Path to an input file (in zebra text format)"
 
 pInputSchema :: Parser FilePath
 pInputSchema =
   Options.option Options.str $
+    Options.short 's' <>
     Options.long "schema" <>
-    Options.metavar "INPUT_SCHEMA" <>
+    Options.metavar "INPUT_ZEBRA_SCHEMA" <>
     Options.help "Path to a schema file which describes the input file"
+
+pOutputBinaryStdout :: Parser (Maybe FilePath)
+pOutputBinaryStdout =
+  Options.flag' Nothing $
+    Options.long "output-stdout" <>
+    Options.help "Write the output to stdout (in zebra binary format, default)"
 
 pExport :: Parser Export
 pExport =
  Export
-   <$> pInputZebra
-   <*> fmap (defaultOnEmpty ExportJsonStdout) (many pExportOutput)
+   <$> pInputBinary
+   <*> fmap (defaultOnEmpty ExportTextStdout) (many pExportOutput)
 
 defaultOnEmpty :: a -> [a] -> NonEmpty a
 defaultOnEmpty def = \case
@@ -137,24 +143,25 @@ defaultOnEmpty def = \case
 
 pExportOutput :: Parser ExportOutput
 pExportOutput =
-      pExportJson
-  <|> pExportJsonStdout
-  <|> pExportSchema
+      pExportSchema
   <|> pExportSchemaStdout
+  <|> pExportJson
+  <|> pExportJsonStdout
 
 pExportJsonStdout :: Parser ExportOutput
 pExportJsonStdout =
-  Options.flag' ExportJsonStdout $
-    Options.long "json-stdout" <>
-    Options.help "Write data to stdout (in zebra json format, default)"
+  Options.flag' ExportTextStdout $
+    Options.long "output-stdout" <>
+    Options.help "Write output to stdout (in zebra text format, default)"
 
 pExportJson :: Parser ExportOutput
 pExportJson =
-  fmap ExportJson .
+  fmap ExportText .
   Options.option Options.str $
-    Options.long "json" <>
-    Options.metavar "OUTPUT_JSON" <>
-    Options.help "Write data to a file (in zebra json format)"
+    Options.short 'o' <>
+    Options.long "output" <>
+    Options.metavar "OUTPUT_ZEBRA_TEXT" <>
+    Options.help "Write output to a file (in zebra text format)"
 
 pExportSchemaStdout :: Parser ExportOutput
 pExportSchemaStdout =
@@ -166,8 +173,9 @@ pExportSchema :: Parser ExportOutput
 pExportSchema =
   fmap ExportSchema .
   Options.option Options.str $
+    Options.short 's' <>
     Options.long "schema" <>
-    Options.metavar "OUTPUT_SCHEMA" <>
+    Options.metavar "OUTPUT_ZEBRA_SCHEMA" <>
     Options.help "Write schema to a file"
 
 pCatOptions :: Parser CatOptions

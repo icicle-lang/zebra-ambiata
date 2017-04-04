@@ -7,6 +7,9 @@ module Zebra.Json.Schema (
   , decodeSchema
   , decodeVersionedSchema
 
+  , JsonSchemaDecodeError(..)
+  , renderJsonSchemaDecodeError
+
   -- * Decode
   , pTableSchemaV0
   , pColumnSchemaV0
@@ -32,22 +35,31 @@ import           Zebra.Json.Codec
 import           Zebra.Schema
 
 
+data JsonSchemaDecodeError =
+    JsonSchemaDecodeError !JsonDecodeError
+    deriving (Eq, Show)
+
+renderJsonSchemaDecodeError :: JsonSchemaDecodeError -> Text
+renderJsonSchemaDecodeError = \case
+  JsonSchemaDecodeError err ->
+    renderJsonDecodeError err
+
 encodeSchema :: JsonVersion -> TableSchema -> ByteString
 encodeSchema version =
-  encodeJsonIndented ["key", "name"] . ppTableSchema version
+  encodeJson ["key", "name"] . ppTableSchema version
 
 encodeVersionedSchema :: JsonVersion -> TableSchema -> ByteString
 encodeVersionedSchema version =
   encodeJsonIndented ["version", "key", "name"] . ppVersionedSchema version
 
-decodeSchema :: JsonVersion -> ByteString -> Either JsonDecodeError TableSchema
+decodeSchema :: JsonVersion -> ByteString -> Either JsonSchemaDecodeError TableSchema
 decodeSchema = \case
   JsonV0 ->
-    decodeJson pTableSchemaV0
+    first JsonSchemaDecodeError . decodeJson pTableSchemaV0
 
-decodeVersionedSchema :: ByteString -> Either JsonDecodeError TableSchema
+decodeVersionedSchema :: ByteString -> Either JsonSchemaDecodeError TableSchema
 decodeVersionedSchema =
-  decodeJson pVersionedSchema
+  first JsonSchemaDecodeError . decodeJson pVersionedSchema
 
 pVersionedSchema :: Aeson.Value -> Aeson.Parser TableSchema
 pVersionedSchema =

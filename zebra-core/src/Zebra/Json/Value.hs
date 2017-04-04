@@ -27,7 +27,6 @@ module Zebra.Json.Value (
 import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.Types as Aeson
 import           Data.ByteString (ByteString)
-import qualified Data.ByteString.Char8 as Char8
 import qualified Data.List as List
 import           Data.Map (Map)
 import qualified Data.Map.Strict as Map
@@ -71,59 +70,21 @@ renderJsonValueDecodeError = \case
   JsonValueDecodeError err ->
     renderJsonDecodeError err
 
+encodeCollection :: TableSchema -> Collection -> Either JsonValueEncodeError ByteString
+encodeCollection schema value =
+  encodeJson ["key"] <$> ppCollection schema value
+
 encodeValue :: ColumnSchema -> Value -> Either JsonValueEncodeError ByteString
 encodeValue schema value =
   encodeJson ["key"] <$> ppValue schema value
 
+decodeCollection :: TableSchema -> ByteString -> Either JsonValueDecodeError Collection
+decodeCollection schema =
+  first JsonValueDecodeError . decodeJson (pCollection schema)
+
 decodeValue :: ColumnSchema -> ByteString -> Either JsonValueDecodeError Value
 decodeValue schema =
   first JsonValueDecodeError . decodeJson (pValue schema)
-
-encodeJsonRows :: [Text] -> Boxed.Vector Aeson.Value -> ByteString
-encodeJsonRows keyOrder =
-  Char8.unlines . Boxed.toList . fmap (encodeJson keyOrder)
-
-encodeCollection :: TableSchema -> Collection -> Either JsonValueEncodeError ByteString
-encodeCollection schema collection0 =
-  case schema of
-    Schema.Binary
-      | Binary bs <- collection0
-      ->
-        pure bs
-
-    Schema.Array element
-      | Array xs <- collection0
-      ->
-        encodeJsonRows ["key"] <$> traverse (ppValue element) xs
-
-    Schema.Map kschema vschema
-      | Map kvs <- collection0
-      -> do
-        ks <- traverse (ppValue kschema) $ Map.keys kvs
-        vs <- traverse (ppValue vschema) $ Map.elems kvs
-        pure . encodeJsonRows ["key"] . Boxed.fromList $
-          List.zipWith ppPair ks vs
-
-    _ ->
-      Left $ JsonCollectionSchemaMismatch schema collection0
-
-decodeJsonRows :: (Aeson.Value -> Aeson.Parser a) -> ByteString -> Either JsonDecodeError (Boxed.Vector a)
-decodeJsonRows p =
-  traverse (decodeJson p) . Boxed.fromList . Char8.lines
-
-decodeCollection :: TableSchema -> ByteString -> Either JsonValueDecodeError Collection
-decodeCollection schema bs =
-  case schema of
-    Schema.Binary ->
-      pure $ Binary bs
-
-    Schema.Array element ->
-      first JsonValueDecodeError $
-        Array <$> decodeJsonRows (pValue element) bs
-
-    Schema.Map kschema vschema ->
-      first JsonValueDecodeError $
-        Map . Map.fromList . Boxed.toList <$> decodeJsonRows (pPair kschema vschema) bs
 
 pCollection :: TableSchema -> Aeson.Value -> Aeson.Parser Collection
 pCollection schema =

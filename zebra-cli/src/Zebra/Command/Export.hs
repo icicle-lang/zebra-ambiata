@@ -26,9 +26,11 @@ import           X.Data.Vector.Stream (Stream)
 import qualified X.Data.Vector.Stream as Stream
 
 import           Zebra.Binary.File
-import           Zebra.Json
+import           Zebra.Json.Codec
+import           Zebra.Json.Schema
 import           Zebra.Schema (TableSchema)
 import           Zebra.Table (Table)
+import           Zebra.Text
 
 
 data Export =
@@ -38,35 +40,35 @@ data Export =
     } deriving (Eq, Ord, Show)
 
 data ExportOutput =
-    ExportJsonStdout
-  | ExportJson !FilePath
+    ExportTextStdout
+  | ExportText !FilePath
   | ExportSchemaStdout
   | ExportSchema !FilePath
     deriving (Eq, Ord, Show)
 
 data ExportError =
     ExportFileError !FileError
-  | ExportJsonTableEncodeError !JsonTableEncodeError
+  | ExportTextTableEncodeError !TextTableEncodeError
     deriving (Eq, Show)
 
 renderExportError :: ExportError -> Text
 renderExportError = \case
   ExportFileError err ->
     renderFileError err
-  ExportJsonTableEncodeError err ->
-    renderJsonTableEncodeError err
+  ExportTextTableEncodeError err ->
+    renderTextTableEncodeError err
 
 zebraExport :: MonadResource m => Export -> EitherT ExportError m ()
 zebraExport export = do
   (schema, tables) <- firstT ExportFileError $ readTables (exportInput export)
 
   for_ (exportOutputs export) $ \case
-    ExportJsonStdout ->
-      writeJson "<stdout>" stdout tables
+    ExportTextStdout ->
+      writeText "<stdout>" stdout tables
 
-    ExportJson path -> do
+    ExportText path -> do
       (close, handle) <- firstT ExportFileError $ openFile path WriteMode
-      writeJson path handle tables
+      writeText path handle tables
       firstT ExportFileError close
 
     ExportSchemaStdout ->
@@ -77,17 +79,17 @@ zebraExport export = do
       writeSchema path handle schema
       firstT ExportFileError close
 
-writeJson ::
+writeText ::
   MonadResource m =>
   FilePath ->
   Handle ->
   Stream (EitherT FileError m) Table ->
   EitherT ExportError m ()
-writeJson path handle tables =
+writeText path handle tables =
   joinEitherT id .
     firstT ExportFileError .
     hPutStream path handle .
-    Stream.mapM (hoistEither . first ExportJsonTableEncodeError . encodeTable) $
+    Stream.mapM (hoistEither . first ExportTextTableEncodeError . encodeTable) $
     Stream.trans (firstT ExportFileError) tables
 
 writeSchema :: MonadIO m => FilePath -> Handle -> TableSchema -> EitherT ExportError m ()

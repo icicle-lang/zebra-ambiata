@@ -10,7 +10,7 @@ import qualified Data.Vector as Boxed
 
 import           Disorder.Core.Run (ExpectedTestSpeed(..), disorderCheckEnvAll)
 import           Disorder.Jack (Property, counterexample)
-import           Disorder.Jack ((===), gamble, property, listOf)
+import           Disorder.Jack ((===), gamble, listOf)
 
 import           P
 
