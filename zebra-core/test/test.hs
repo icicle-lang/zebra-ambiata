@@ -16,6 +16,7 @@ import qualified Test.Zebra.Json.Table
 import qualified Test.Zebra.Json.Value
 import qualified Test.Zebra.Merge.Entity
 import qualified Test.Zebra.Table
+import qualified Test.Zebra.Text.Schema
 import qualified Test.Zebra.Text.Table
 import qualified Test.Zebra.Text.Value
 import qualified Test.Zebra.Value
@@ -39,6 +40,7 @@ main =
     , Test.Zebra.Json.Value.tests
     , Test.Zebra.Merge.Entity.tests
     , Test.Zebra.Table.tests
+    , Test.Zebra.Text.Schema.tests
     , Test.Zebra.Text.Table.tests
     , Test.Zebra.Text.Value.tests
     , Test.Zebra.Value.tests

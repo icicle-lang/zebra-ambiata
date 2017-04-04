@@ -2,9 +2,7 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 module Zebra.Json.Codec (
-    JsonVersion(..)
-
-  , encodeJson
+    encodeJson
   , encodeJsonIndented
   , decodeJson
 
@@ -12,7 +10,6 @@ module Zebra.Json.Codec (
   , renderJsonDecodeError
 
   -- * Parsing
-  , pVersion
   , pText
   , pBinary
   , pUnit
@@ -23,7 +20,6 @@ module Zebra.Json.Codec (
   , kmapM
 
   -- * Pretty Printing
-  , ppVersion
   , ppText
   , ppBinary
   , ppUnit
@@ -55,10 +51,6 @@ import           P
 import           Zebra.Schema (Field(..), FieldName(..))
 import           Zebra.Schema (Variant(..), VariantName(..))
 
-
-data JsonVersion =
-    JsonV0
-    deriving (Eq, Show, Enum, Bounded)
 
 data JsonDecodeError =
     JsonDecodeError !Aeson.JSONPath !Text
@@ -103,19 +95,6 @@ indentConfig keyOrder =
     , Aeson.confNumFormat =
         Aeson.Generic
     }
-
-pVersion :: Aeson.Value -> Aeson.Parser JsonVersion
-pVersion =
-  Aeson.withText "string containing version number" $ \case
-    "v0" ->
-      pure JsonV0
-    v ->
-      fail $ "unknown/unsupported version: " <> Text.unpack v
-
-ppVersion :: JsonVersion -> Aeson.Value
-ppVersion = \case
-  JsonV0 ->
-    Aeson.String "v0"
 
 pText :: Aeson.Value -> Aeson.Parser Text
 pText =

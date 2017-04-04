@@ -33,7 +33,6 @@ import           Zebra.Binary.Data
 import           Zebra.Binary.File
 import           Zebra.Binary.Header
 import           Zebra.Data.Block
-import           Zebra.Json.Schema
 import           Zebra.Text
 
 
@@ -46,7 +45,7 @@ data Import =
 
 data ImportError =
     ImportFileError !FileError
-  | ImportJsonSchemaDecodeError !JsonSchemaDecodeError
+  | ImportTextSchemaDecodeError !TextSchemaDecodeError
   | ImportTextTableDecodeError !TextTableDecodeError
   | ImportBlockTableError !BlockTableError
     deriving (Eq, Show)
@@ -55,8 +54,8 @@ renderImportError :: ImportError -> Text
 renderImportError = \case
   ImportFileError err ->
     renderFileError err
-  ImportJsonSchemaDecodeError err ->
-    renderJsonSchemaDecodeError err
+  ImportTextSchemaDecodeError err ->
+    renderTextSchemaDecodeError err
   ImportTextTableDecodeError err ->
     renderTextTableDecodeError err
   ImportBlockTableError err ->
@@ -116,7 +115,7 @@ zebraImport x = do
       pure ()
     Just (close, handle) -> do
       schema0 <- liftIO . ByteString.readFile $ importSchema x
-      schema <- firstT ImportJsonSchemaDecodeError . hoistEither $ decodeVersionedSchema schema0
+      schema <- firstT ImportTextSchemaDecodeError . hoistEither $ decodeSchema schema0
 
       bytes <- firstT ImportFileError . readBytes $ importInput x
 

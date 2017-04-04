@@ -101,6 +101,7 @@ library
                     Zebra.Merge.Table
 
                     Zebra.Text
+                    Zebra.Text.Schema
                     Zebra.Text.Table
                     Zebra.Text.Value
 

@@ -26,8 +26,6 @@ import           X.Data.Vector.Stream (Stream)
 import qualified X.Data.Vector.Stream as Stream
 
 import           Zebra.Binary.File
-import           Zebra.Json.Codec
-import           Zebra.Json.Schema
 import           Zebra.Schema (TableSchema)
 import           Zebra.Table (Table)
 import           Zebra.Text
@@ -95,4 +93,4 @@ writeText path handle tables =
 writeSchema :: MonadIO m => FilePath -> Handle -> TableSchema -> EitherT ExportError m ()
 writeSchema path handle schema =
   tryIO (ExportFileError . FileWriteError path) $
-    ByteString.hPut handle (encodeVersionedSchema JsonV0 schema)
+    ByteString.hPut handle (encodeSchema TextV0 schema)

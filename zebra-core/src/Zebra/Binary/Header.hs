@@ -37,7 +37,6 @@ import           P
 import           Zebra.Binary.Array
 import           Zebra.Binary.Data
 import           Zebra.Data.Core
-import           Zebra.Json.Codec
 import           Zebra.Json.Schema
 import           Zebra.Schema (TableSchema, ColumnSchema)
 import qualified Zebra.Schema as Schema
@@ -77,7 +76,7 @@ getHeader = do
 -- @
 bHeaderV3 :: TableSchema -> Builder
 bHeaderV3 schema =
-  bSizedByteArray (encodeSchema JsonV0 schema)
+  bSizedByteArray (encodeSchema SchemaV0 schema)
 
 getHeaderV3 :: Get TableSchema
 getHeaderV3 =
@@ -109,7 +108,7 @@ bHeaderV2 features =
 
     schema =
       bStrings .
-      fmap (encodeSchema JsonV0 . Schema.Array) .
+      fmap (encodeSchema SchemaV0 . Schema.Array) .
       Boxed.fromList $
       Map.elems features
   in
@@ -134,7 +133,7 @@ getHeaderV2 = do
 
 parseSchema :: ByteString -> Get TableSchema
 parseSchema =
-  either (fail . Text.unpack . renderJsonSchemaDecodeError) pure . decodeSchema JsonV0
+  either (fail . Text.unpack . renderJsonSchemaDecodeError) pure . decodeSchema SchemaV0
 
 -- | The zebra 8-byte magic number, including version.
 --

@@ -2,10 +2,9 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 module Zebra.Json.Schema (
-    encodeSchema
-  , encodeVersionedSchema
+    SchemaVersion(..)
+  , encodeSchema
   , decodeSchema
-  , decodeVersionedSchema
 
   , JsonSchemaDecodeError(..)
   , renderJsonSchemaDecodeError
@@ -35,6 +34,10 @@ import           Zebra.Json.Codec
 import           Zebra.Schema
 
 
+data SchemaVersion =
+    SchemaV0
+    deriving (Eq, Show, Enum, Bounded)
+
 data JsonSchemaDecodeError =
     JsonSchemaDecodeError !JsonDecodeError
     deriving (Eq, Show)
@@ -44,43 +47,18 @@ renderJsonSchemaDecodeError = \case
   JsonSchemaDecodeError err ->
     renderJsonDecodeError err
 
-encodeSchema :: JsonVersion -> TableSchema -> ByteString
+encodeSchema :: SchemaVersion -> TableSchema -> ByteString
 encodeSchema version =
   encodeJson ["key", "name"] . ppTableSchema version
 
-encodeVersionedSchema :: JsonVersion -> TableSchema -> ByteString
-encodeVersionedSchema version =
-  encodeJsonIndented ["version", "key", "name"] . ppVersionedSchema version
-
-decodeSchema :: JsonVersion -> ByteString -> Either JsonSchemaDecodeError TableSchema
+decodeSchema :: SchemaVersion -> ByteString -> Either JsonSchemaDecodeError TableSchema
 decodeSchema = \case
-  JsonV0 ->
+  SchemaV0 ->
     first JsonSchemaDecodeError . decodeJson pTableSchemaV0
 
-decodeVersionedSchema :: ByteString -> Either JsonSchemaDecodeError TableSchema
-decodeVersionedSchema =
-  first JsonSchemaDecodeError . decodeJson pVersionedSchema
-
-pVersionedSchema :: Aeson.Value -> Aeson.Parser TableSchema
-pVersionedSchema =
-  Aeson.withObject "object containing versioned schema" $ \o -> do
-    version <- withStructField "version" o pVersion
-    case version of
-      JsonV0 ->
-        withStructField "schema" o pTableSchemaV0
-
-ppVersionedSchema :: JsonVersion -> TableSchema -> Aeson.Value
-ppVersionedSchema version schema =
-  ppStruct [
-      Field "version" $
-        ppVersion version
-    , Field "schema" $
-        ppTableSchema version schema
-    ]
-
-ppTableSchema :: JsonVersion -> TableSchema -> Aeson.Value
+ppTableSchema :: SchemaVersion -> TableSchema -> Aeson.Value
 ppTableSchema = \case
-  JsonV0 ->
+  SchemaV0 ->
     ppTableSchemaV0
 
 ------------------------------------------------------------------------
