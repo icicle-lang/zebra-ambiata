@@ -66,7 +66,6 @@ import qualified Data.ByteString.Char8 as Char8
 import qualified Data.Char as Char
 import qualified Data.List as List
 import qualified Data.Map as Map
-import qualified Data.Set as Set
 import           Data.Thyme.Calendar (Year, Day, YearMonthDay(..), gregorianValid)
 import qualified Data.Vector as Boxed
 import qualified Data.Vector.Storable as Storable
@@ -555,26 +554,7 @@ smallConsOf gen =
 smallConsUniqueBy :: Ord b => (a -> b) -> Jack a -> Jack (Cons Boxed.Vector a)
 smallConsUniqueBy f gen =
   sized $ \n ->
-    Cons.unsafeFromList . ordNubBy f <$> listOfN 1 (1 + (n `div` 10)) gen
-
--- should be in P
-ordNubBy :: Ord b => (a -> b) -> [a] -> [a]
-ordNubBy f =
-  let
-    loop seen = \case
-      [] ->
-        []
-      x : xs ->
-        let
-          y =
-            f x
-        in
-          if Set.member y seen then
-            loop seen xs
-          else
-            x : loop (Set.insert y seen) xs
-   in
-     loop Set.empty
+    Cons.unsafeFromList . ordNubBy (comparing f) <$> listOfN 1 (1 + (n `div` 10)) gen
 
 ------------------------------------------------------------------------
 
