@@ -40,20 +40,21 @@ import qualified X.Data.Vector.Storable as Storable
 import qualified X.Data.Vector.Stream as Stream
 import qualified X.Data.Vector.Unboxed as Unboxed
 
-import           Zebra.Binary (BinaryVersion(..))
-import qualified Zebra.Binary as Binary
-import qualified Zebra.Binary.File as Binary
-import qualified Zebra.Data.Block as Block
-import qualified Zebra.Data.Core as Core
-import qualified Zebra.Data.Entity as Entity
-import qualified Zebra.Data.Fact as Fact
-import qualified Zebra.Data.Vector.Cons as Cons
+import           Zebra.Serial.Binary (BinaryVersion(..))
+import qualified Zebra.Serial.Binary as Binary
+import qualified Zebra.Serial.Binary.File as Binary
+import qualified Zebra.Factset.Block as Block
+import qualified Zebra.Factset.Table as Block
+import qualified Zebra.Factset.Data as Core
+import qualified Zebra.Factset.Entity as Entity
+import qualified Zebra.Factset.Fact as Fact
+import qualified Zebra.X.Vector.Cons as Cons
 import qualified Zebra.Foreign.Block as Foreign
 import qualified Zebra.Foreign.Entity as Foreign
 import qualified Zebra.Merge.BlockC as Merge
 import qualified Zebra.Merge.Puller.File as Merge
 import qualified Zebra.Merge.Table as Merge
-import           Zebra.Schema (ColumnSchema)
+import           Zebra.Table.Schema (ColumnSchema)
 
 
 data CatOptions =

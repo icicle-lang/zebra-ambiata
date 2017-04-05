@@ -53,30 +53,14 @@ library
                     src
 
   exposed-modules:
-                    Zebra.Schema
-                    Zebra.Segment
-                    Zebra.Table
-                    Zebra.Value
-
-                    Zebra.Binary
-                    Zebra.Binary.Array
-                    Zebra.Binary.Block
-                    Zebra.Binary.Data
-                    Zebra.Binary.File
-                    Zebra.Binary.Header
-                    Zebra.Binary.Table
-
-                    Zebra.Data.Block
-                    Zebra.Data.Block.Block
-                    Zebra.Data.Block.Entity
-                    Zebra.Data.Block.Index
-                    Zebra.Data.Block.Table
-                    Zebra.Data.Core
-                    Zebra.Data.Entity
-                    Zebra.Data.Fact
-                    Zebra.Data.Vector.Cons
-                    Zebra.Data.Vector.Generic
-                    Zebra.Data.Vector.Storable
+                    Zebra.Factset.Block
+                    Zebra.Factset.Block.Block
+                    Zebra.Factset.Block.Entity
+                    Zebra.Factset.Block.Index
+                    Zebra.Factset.Data
+                    Zebra.Factset.Entity
+                    Zebra.Factset.Fact
+                    Zebra.Factset.Table
 
                     Zebra.Foreign.Bindings
                     Zebra.Foreign.Block
@@ -86,12 +70,6 @@ library
                     Zebra.Foreign.Table
                     Zebra.Foreign.Util
 
-                    Zebra.Json
-                    Zebra.Json.Codec
-                    Zebra.Json.Schema
-                    Zebra.Json.Table
-                    Zebra.Json.Value
-
                     Zebra.Merge.Base
                     Zebra.Merge.Block
                     Zebra.Merge.BlockC
@@ -100,10 +78,33 @@ library
                     Zebra.Merge.Puller.List
                     Zebra.Merge.Table
 
-                    Zebra.Text
-                    Zebra.Text.Schema
-                    Zebra.Text.Table
-                    Zebra.Text.Value
+                    Zebra.Serial.Binary
+                    Zebra.Serial.Binary.Array
+                    Zebra.Serial.Binary.Block
+                    Zebra.Serial.Binary.Data
+                    Zebra.Serial.Binary.File
+                    Zebra.Serial.Binary.Header
+                    Zebra.Serial.Binary.Striped
+
+                    Zebra.Serial.Json
+                    Zebra.Serial.Json.Logical
+                    Zebra.Serial.Json.Schema
+                    Zebra.Serial.Json.Striped
+                    Zebra.Serial.Json.Util
+
+                    Zebra.Serial.Text
+                    Zebra.Serial.Text.Logical
+                    Zebra.Serial.Text.Schema
+                    Zebra.Serial.Text.Striped
+
+                    Zebra.Table.Logical
+                    Zebra.Table.Schema
+                    Zebra.Table.Striped
+
+                    Zebra.X.Vector.Cons
+                    Zebra.X.Vector.Generic
+                    Zebra.X.Vector.Segment
+                    Zebra.X.Vector.Storable
 
   include-dirs:
                        csrc

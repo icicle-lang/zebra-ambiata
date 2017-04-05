@@ -23,12 +23,12 @@ import           Text.Show.Pretty (ppShow)
 import qualified X.Data.Vector as Boxed
 import qualified X.Data.Vector.Stream as Stream
 
-import           Zebra.Data.Block
-import           Zebra.Data.Fact
+import           Zebra.Factset.Block
+import           Zebra.Factset.Fact
 import           Zebra.Merge.Base
 import           Zebra.Merge.Entity
-import           Zebra.Schema (ColumnSchema)
-import           Zebra.Table (Table(..))
+import           Zebra.Table.Schema (ColumnSchema)
+import qualified Zebra.Table.Striped as Striped
 
 
 fakeBlockId :: BlockDataId
@@ -88,7 +88,7 @@ prop_entitiesOfBlock_tables_1_entity =
     ( length facts > 0
     ==> Boxed.concatMap id (getFakeTableValues es) === blockTables block )
 
-getFakeTableValues :: Boxed.Vector EntityValues -> Boxed.Vector (Boxed.Vector Table)
+getFakeTableValues :: Boxed.Vector EntityValues -> Boxed.Vector (Boxed.Vector Striped.Table)
 getFakeTableValues = fmap (fmap (Map.! fakeBlockId) . evTables)
 
 prop_mergeEntityTables_1_block :: Property

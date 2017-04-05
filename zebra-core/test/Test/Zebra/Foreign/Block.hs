@@ -30,13 +30,13 @@ import           Text.Show.Pretty (ppShow)
 
 import           X.Control.Monad.Trans.Either (EitherT, pattern EitherT, runEitherT, hoistEither)
 
-import           Zebra.Data.Block
-import           Zebra.Data.Entity
-import qualified Zebra.Data.Entity as Entity
+import           Zebra.Factset.Block
+import           Zebra.Factset.Entity
+import qualified Zebra.Factset.Entity as Entity
 import           Zebra.Foreign.Block
 import           Zebra.Foreign.Entity
 import           Zebra.Foreign.Util
-import qualified Zebra.Table as Table
+import qualified Zebra.Table.Striped as Striped
 
 
 data CommonError =
@@ -126,7 +126,7 @@ check_entities_of_block convert block =
           fmap (sumAttribute $ Storable.length . attributeTombstone) entities
 
       , check "# of table rows" recordCount $
-          fmap (sumAttribute $ Table.length . attributeTable) entities
+          fmap (sumAttribute $ Striped.length . attributeTable) entities
       ]
 
 fromEither :: Show x => EitherT x IO Property -> IO Property

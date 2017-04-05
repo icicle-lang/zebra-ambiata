@@ -24,7 +24,7 @@ struct zebra_column;
 typedef struct zebra_column zebra_column_t;
 
 // ------------------------
-// Zebra.Table.Table
+// Zebra.Table.Striped.Table
 // ------------------------
 typedef enum zebra_table_tag {
     ZEBRA_TABLE_BINARY,
@@ -79,7 +79,7 @@ typedef struct zebra_named_columns {
 
 
 // ------------------------
-// Zebra.Table.Column
+// Zebra.Table.Striped.Column
 // ------------------------
 typedef enum zebra_column_tag {
     ZEBRA_COLUMN_UNIT,

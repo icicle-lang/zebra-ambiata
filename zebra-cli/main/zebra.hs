@@ -20,10 +20,10 @@ import           X.Control.Monad.Trans.Either.Exit (orDie)
 import           X.Options.Applicative (Parser, Mod, CommandFields)
 import qualified X.Options.Applicative as Options
 
-import           Zebra.Binary (BinaryVersion(..))
 import           Zebra.Command
 import           Zebra.Command.Export
 import           Zebra.Command.Import
+import           Zebra.Serial.Binary (BinaryVersion(..))
 
 
 main :: IO ()

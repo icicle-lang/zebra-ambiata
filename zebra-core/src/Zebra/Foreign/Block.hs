@@ -34,8 +34,8 @@ import qualified Prelude as Savage
 
 import           X.Control.Monad.Trans.Either (EitherT)
 
-import           Zebra.Data.Block
-import           Zebra.Data.Core
+import           Zebra.Factset.Block
+import           Zebra.Factset.Data
 import           Zebra.Foreign.Bindings
 import           Zebra.Foreign.Entity
 import           Zebra.Foreign.Table

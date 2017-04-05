@@ -11,7 +11,7 @@ module Zebra.Merge.Block
   ( mergeFiles
   ) where
 
-import Zebra.Data.Block
+import Zebra.Factset.Block
 import Zebra.Merge.Base
 import Zebra.Merge.Entity
 

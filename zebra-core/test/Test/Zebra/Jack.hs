@@ -1,7 +1,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 module Test.Zebra.Jack (
-  -- -- * Zebra.Data.Block
+  -- -- * Zebra.Factset.Block
     jBlock
   , jYoloBlock
   , jBlockEntity
@@ -9,7 +9,7 @@ module Test.Zebra.Jack (
   , jBlockIndex
   , jTombstone
 
-  -- * Zebra.Data.Core
+  -- * Zebra.Factset.Data
   , jBinaryVersion
   , jEntityId
   , jEntityHashId
@@ -19,42 +19,42 @@ module Test.Zebra.Jack (
   , jDay
   , jFactsetId
 
-  -- -- * Zebra.Data.Entity
+  -- * Zebra.Factset.Entity
   , jEntity
   , jAttribute
 
-  -- * Zebra.Data.Fact
+  -- * Zebra.Factset.Fact
   , jFacts
   , jFact
 
-  -- * Zebra.Schema
+  -- * Zebra.Table.Schema
   , jField
   , jFieldName
   , jVariant
   , jVariantName
 
-  -- * Zebra.Schema
+  -- * Zebra.Table.Schema
   , jTableSchema
   , jMapSchema
   , jColumnSchema
 
-  -- * Zebra.Table
-  , jSizedTable
-  , jTable
-  , jArrayTable
-  , jColumn
+  -- * Zebra.Table.Striped
+  , jSizedStriped
+  , jStriped
+  , jStripedArray
+  , jStripedColumn
 
-  -- * Zebra.Value
-  , jSizedCollection
-  , jCollection
-  , jValue
+  -- * Zebra.Table.Logical
+  , jSizedLogical
+  , jLogical
+  , jLogicalValue
 
   , jMaybe'
 
   -- * Normalization
-  , normalizeTable
-  , normalizeCollection
-  , normalizeValue
+  , normalizeStriped
+  , normalizeLogical
+  , normalizeLogicalValue
 
   -- * x-disorder-jack
   , trippingBoth
@@ -87,21 +87,19 @@ import           Test.QuickCheck.Instances ()
 import           Text.Printf (printf)
 import           Text.Show.Pretty (ppShow)
 
-import           Zebra.Data.Block
-import           Zebra.Data.Core
-import           Zebra.Data.Entity
-import           Zebra.Data.Fact
+import           Zebra.Factset.Block
+import           Zebra.Factset.Data
+import           Zebra.Factset.Entity
+import           Zebra.Factset.Fact
 
-import           Zebra.Binary.Data
-import           Zebra.Data.Vector.Cons (Cons)
-import qualified Zebra.Data.Vector.Cons as Cons
-import           Zebra.Schema (TableSchema, ColumnSchema)
-import           Zebra.Schema (Variant(..), VariantName(..), Field(..), FieldName(..), Tag)
-import qualified Zebra.Schema as Schema
-import           Zebra.Table (Table, Column)
-import qualified Zebra.Table as Table
-import           Zebra.Value (Collection, Value)
-import qualified Zebra.Value as Value
+import           Zebra.Serial.Binary.Data
+import qualified Zebra.Table.Logical as Logical
+import           Zebra.Table.Schema (TableSchema, ColumnSchema)
+import           Zebra.Table.Schema (Variant(..), VariantName(..), Field(..), FieldName(..), Tag)
+import qualified Zebra.Table.Schema as Schema
+import qualified Zebra.Table.Striped as Striped
+import           Zebra.X.Vector.Cons (Cons)
+import qualified Zebra.X.Vector.Cons as Cons
 
 ------------------------------------------------------------------------
 
@@ -207,74 +205,74 @@ jColumnSchema =
 
 ------------------------------------------------------------------------
 
-tableTables :: Table -> [Table]
+tableTables :: Striped.Table -> [Striped.Table]
 tableTables = \case
-  Table.Binary _ ->
+  Striped.Binary _ ->
     []
-  Table.Array x ->
+  Striped.Array x ->
     columnTables x
-  Table.Map k v ->
+  Striped.Map k v ->
     columnTables k <>
     columnTables v
 
-tableColumns :: Table -> [Column]
+tableColumns :: Striped.Table -> [Striped.Column]
 tableColumns = \case
-  Table.Binary _ ->
+  Striped.Binary _ ->
     []
-  Table.Array x ->
+  Striped.Array x ->
     [x]
-  Table.Map k v ->
+  Striped.Map k v ->
     [k, v]
 
-columnTables :: Column -> [Table]
+columnTables :: Striped.Column -> [Striped.Table]
 columnTables = \case
-  Table.Unit _ ->
+  Striped.Unit _ ->
     []
-  Table.Int _ ->
+  Striped.Int _ ->
     []
-  Table.Double _ ->
+  Striped.Double _ ->
     []
-  Table.Enum _ variants ->
+  Striped.Enum _ variants ->
     concatMap columnTables $
       fmap Schema.variant (Cons.toList variants)
-  Table.Struct fields ->
+  Striped.Struct fields ->
     concatMap columnTables $
       fmap Schema.field (Cons.toList fields)
-  Table.Nested _ table ->
+  Striped.Nested _ table ->
     [table]
-  Table.Reversed column ->
+  Striped.Reversed column ->
     columnTables column
 
-columnColumns :: Column -> [Column]
+columnColumns :: Striped.Column -> [Striped.Column]
 columnColumns = \case
-  Table.Unit _ ->
+  Striped.Unit _ ->
     []
-  Table.Int _ ->
+  Striped.Int _ ->
     []
-  Table.Double _ ->
+  Striped.Double _ ->
     []
-  Table.Enum _ variants ->
+  Striped.Enum _ variants ->
     fmap Schema.variant $ Cons.toList variants
-  Table.Struct fields ->
+  Striped.Struct fields ->
     fmap Schema.field $ Cons.toList fields
-  Table.Nested _ table ->
+  Striped.Nested _ table ->
     tableColumns table
-  Table.Reversed column ->
+  Striped.Reversed column ->
     columnColumns column
 
-jSizedTable :: Jack Table
-jSizedTable =
+jSizedStriped :: Jack Striped.Table
+jSizedStriped =
   sized $ \size ->
-    jTable =<< chooseInt (0, size `div` 5)
+    jStriped =<< chooseInt (0, size `div` 5)
 
-jTable :: Int -> Jack Table
-jTable n =
+jStriped :: Int -> Jack Striped.Table
+jStriped n =
   reshrink tableTables $
   oneOfRec [
-      jBinaryTable n
+      jStripedBinary n
     ] [
-      jArrayTable n
-    , jMapTable n
+      jStripedArray n
+    , jStripedMap n
     ]
 
 jByteString :: Int -> Jack ByteString
@@ -284,65 +282,65 @@ jByteString n =
     , ByteString.pack <$> vectorOf n boundedEnum
     ]
 
-jBinaryTable  :: Int -> Jack Table
-jBinaryTable n =
-  Table.Binary <$> jByteString n
+jStripedBinary  :: Int -> Jack Striped.Table
+jStripedBinary n =
+  Striped.Binary <$> jByteString n
 
-jArrayTable :: Int -> Jack Table
-jArrayTable n = do
-  Table.Array
-    <$> jColumn n
+jStripedArray :: Int -> Jack Striped.Table
+jStripedArray n = do
+  Striped.Array
+    <$> jStripedColumn n
 
 -- FIXME this constructs a corrupt table
-jMapTable :: Int -> Jack Table
-jMapTable n = do
-  Table.Map
-    <$> jColumn n
-    <*> jColumn n
+jStripedMap :: Int -> Jack Striped.Table
+jStripedMap n = do
+  Striped.Map
+    <$> jStripedColumn n
+    <*> jStripedColumn n
 
-jColumn :: Int -> Jack Column
-jColumn n =
+jStripedColumn :: Int -> Jack Striped.Column
+jStripedColumn n =
   reshrink columnColumns $
   oneOfRec [
-      jIntColumn n
-    , jDoubleColumn n
+      jStripedInt n
+    , jStripedDouble n
     ] [
-      jEnumColumn n
-    , jStructColumn n
-    , jNestedColumn n
-    , jReversedColumn n
+      jStripedEnum n
+    , jStripedStruct n
+    , jStripedNested n
+    , jStripedReversed n
     ]
 
-jIntColumn :: Int -> Jack Column
-jIntColumn n =
-  Table.Int . Storable.fromList <$> vectorOf n sizedBounded
+jStripedInt :: Int -> Jack Striped.Column
+jStripedInt n =
+  Striped.Int . Storable.fromList <$> vectorOf n sizedBounded
 
-jDoubleColumn :: Int -> Jack Column
-jDoubleColumn n =
-  Table.Double . Storable.fromList <$> vectorOf n arbitrary
+jStripedDouble :: Int -> Jack Striped.Column
+jStripedDouble n =
+  Striped.Double . Storable.fromList <$> vectorOf n arbitrary
 
-jEnumColumn :: Int -> Jack Column
-jEnumColumn n = do
+jStripedEnum :: Int -> Jack Striped.Column
+jStripedEnum n = do
   sized $ \size -> do
     ntags <- chooseInt (1, 1 + (size `div` 10))
     tags <- Storable.fromList . fmap fromIntegral <$> vectorOf n (chooseInt (0, ntags - 1))
-    vs <- Cons.unsafeFromList <$> vectorOf ntags (jVariant . jColumn $ Storable.length tags)
+    vs <- Cons.unsafeFromList <$> vectorOf ntags (jVariant . jStripedColumn $ Storable.length tags)
     pure $
-      Table.Enum tags vs
+      Striped.Enum tags vs
 
-jStructColumn :: Int -> Jack Column
-jStructColumn n =
-  Table.Struct <$> smallConsOf (jField (jColumn n))
+jStripedStruct :: Int -> Jack Striped.Column
+jStripedStruct n =
+  Striped.Struct <$> smallConsOf (jField (jStripedColumn n))
 
-jNestedColumn :: Int -> Jack Column
-jNestedColumn n =
+jStripedNested :: Int -> Jack Striped.Column
+jStripedNested n =
   sized $ \size -> do
     ns <- Storable.fromList . fmap fromIntegral <$> vectorOf n (chooseInt (0, size `div` 10))
-    Table.Nested ns <$> jTable (fromIntegral $ Storable.sum ns)
+    Striped.Nested ns <$> jStriped (fromIntegral $ Storable.sum ns)
 
-jReversedColumn :: Int -> Jack Column
-jReversedColumn n =
-  Table.Reversed <$> jColumn n
+jStripedReversed :: Int -> Jack Striped.Column
+jStripedReversed n =
+  Striped.Reversed <$> jStripedColumn n
 
 ------------------------------------------------------------------------
 
@@ -359,41 +357,41 @@ jFact schema aid =
     <*> pure aid
     <*> jTime
     <*> jFactsetId
-    <*> (strictMaybe <$> maybeOf (jValue schema))
+    <*> (strictMaybe <$> maybeOf (jLogicalValue schema))
 
-jSizedCollection :: TableSchema -> Jack Collection
-jSizedCollection schema =
+jSizedLogical :: TableSchema -> Jack Logical.Table
+jSizedLogical schema =
   sized $ \size ->
-    jCollection schema =<< chooseInt (0, size `div` 5)
+    jLogical schema =<< chooseInt (0, size `div` 5)
 
-jCollection :: TableSchema -> Int -> Jack Collection
-jCollection tschema n =
+jLogical :: TableSchema -> Int -> Jack Logical.Table
+jLogical tschema n =
   case tschema of
     Schema.Binary ->
-      Value.Binary <$> jByteString n
+      Logical.Binary <$> jByteString n
     Schema.Array x ->
-      Value.Array . Boxed.fromList <$> vectorOf n (jValue x)
+      Logical.Array . Boxed.fromList <$> vectorOf n (jLogicalValue x)
     Schema.Map k v ->
-      Value.Map . Map.fromList <$> vectorOf n (jMapping k v)
+      Logical.Map . Map.fromList <$> vectorOf n (jMapping k v)
 
-jMapping :: ColumnSchema -> ColumnSchema -> Jack (Value, Value)
+jMapping :: ColumnSchema -> ColumnSchema -> Jack (Logical.Value, Logical.Value)
 jMapping k v =
-  (,) <$> jValue k <*> jValue v
+  (,) <$> jLogicalValue k <*> jLogicalValue v
 
 jTag :: Cons Boxed.Vector (Variant a) -> Jack Tag
 jTag xs =
   fromIntegral <$> choose (0, Cons.length xs - 1)
 
-jValue :: ColumnSchema -> Jack Value
-jValue = \case
+jLogicalValue :: ColumnSchema -> Jack Logical.Value
+jLogicalValue = \case
   Schema.Unit ->
-    pure Value.Unit
+    pure Logical.Unit
 
   Schema.Int ->
-    Value.Int <$> sizedBounded
+    Logical.Int <$> sizedBounded
 
   Schema.Double ->
-    Value.Double <$> arbitrary
+    Logical.Double <$> arbitrary
 
   Schema.Enum variants -> do
     tag <- jTag variants
@@ -401,21 +399,21 @@ jValue = \case
       Nothing ->
         Savage.error $ renderTagLookupError tag variants
       Just (Variant _ schema) ->
-        Value.Enum tag <$> jValue schema
+        Logical.Enum tag <$> jLogicalValue schema
 
   Schema.Struct fields ->
-    Value.Struct <$> traverse (jValue . Schema.field) fields
+    Logical.Struct <$> traverse (jLogicalValue . Schema.field) fields
 
   Schema.Nested tschema ->
     sized $ \size -> do
-      fmap Value.Nested $ jCollection tschema =<< chooseInt (0, size `div` 10)
+      fmap Logical.Nested $ jLogical tschema =<< chooseInt (0, size `div` 10)
 
   Schema.Reversed schema ->
-    Value.Reversed <$> jValue schema
+    Logical.Reversed <$> jLogicalValue schema
 
 renderTagLookupError :: Show a => Tag -> Cons Boxed.Vector (Variant a) -> [Char]
 renderTagLookupError tag variants =
-  "jValue: internal error, tag not found" <>
+  "jLogicalValue: internal error, tag not found" <>
   "\n" <>
   "\n  tag = " <> show tag <>
   "\n" <>
@@ -499,7 +497,7 @@ jYoloBlock = do
     Block
       <$> (Boxed.fromList <$> listOfN 0 (size `div` 5) jBlockEntity)
       <*> (Unboxed.fromList <$> listOfN 0 (size `div` 5) jBlockIndex)
-      <*> (Boxed.fromList <$> listOfN 0 (size `div` 5) (jArrayTable =<< chooseInt (0, size `div` 5)))
+      <*> (Boxed.fromList <$> listOfN 0 (size `div` 5) (jStripedArray =<< chooseInt (0, size `div` 5)))
 
 jBlockEntity :: Jack BlockEntity
 jBlockEntity =
@@ -533,7 +531,7 @@ jAttribute = do
     <$> pure (Storable.fromList ts)
     <*> pure (Storable.fromList ps)
     <*> pure (Storable.fromList bs)
-    <*> jArrayTable (List.length ts)
+    <*> jStripedArray (List.length ts)
 
 jTombstone :: Jack Tombstone
 jTombstone =
@@ -558,40 +556,40 @@ smallConsUniqueBy f gen =
 
 ------------------------------------------------------------------------
 
-normalizeTable :: Table -> Table
-normalizeTable table =
+normalizeStriped :: Striped.Table -> Striped.Table
+normalizeStriped table =
   let
     Right x =
-      Table.fromCollection (Table.schema table) . normalizeCollection =<<
-      Table.toCollection table
+      Striped.fromLogical (Striped.schema table) . normalizeLogical =<<
+      Striped.toLogical table
   in
     x
 
-normalizeCollection :: Collection -> Collection
-normalizeCollection = \case
-  Value.Binary bs ->
-    Value.Binary $ ByteString.sort bs
-  Value.Array xs ->
-    Value.Array . Boxed.fromList . List.sort $ Boxed.toList xs
-  Value.Map kvs ->
-    Value.Map $ fmap normalizeValue kvs
+normalizeLogical :: Logical.Table -> Logical.Table
+normalizeLogical = \case
+  Logical.Binary bs ->
+    Logical.Binary $ ByteString.sort bs
+  Logical.Array xs ->
+    Logical.Array . Boxed.fromList . List.sort $ Boxed.toList xs
+  Logical.Map kvs ->
+    Logical.Map $ fmap normalizeLogicalValue kvs
 
-normalizeValue :: Value -> Value
-normalizeValue = \case
-  Value.Unit ->
-    Value.Unit
-  Value.Int x ->
-    Value.Int x
-  Value.Double x ->
-    Value.Double x
-  Value.Enum tag x ->
-    Value.Enum tag (normalizeValue x)
-  Value.Struct xs ->
-    Value.Struct $ fmap normalizeValue xs
-  Value.Nested x ->
-    Value.Nested $ normalizeCollection x
-  Value.Reversed x ->
-    Value.Reversed $ normalizeValue x
+normalizeLogicalValue :: Logical.Value -> Logical.Value
+normalizeLogicalValue = \case
+  Logical.Unit ->
+    Logical.Unit
+  Logical.Int x ->
+    Logical.Int x
+  Logical.Double x ->
+    Logical.Double x
+  Logical.Enum tag x ->
+    Logical.Enum tag (normalizeLogicalValue x)
+  Logical.Struct xs ->
+    Logical.Struct $ fmap normalizeLogicalValue xs
+  Logical.Nested x ->
+    Logical.Nested $ normalizeLogical x
+  Logical.Reversed x ->
+    Logical.Reversed $ normalizeLogicalValue x
 
 ------------------------------------------------------------------------
 

@@ -18,8 +18,8 @@ import           System.IO (IO)
 import           X.Control.Monad.Trans.Either (EitherT, joinEitherT)
 import qualified X.Data.Vector as Boxed
 
-import           Zebra.Data.Block
-import           Zebra.Data.Entity
+import           Zebra.Factset.Block
+import           Zebra.Factset.Entity
 import           Zebra.Foreign.Entity
 import           Zebra.Merge.BlockC
 
