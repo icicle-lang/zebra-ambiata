@@ -29,12 +29,12 @@ import           P
 
 import           X.Control.Monad.Trans.Either (EitherT)
 
-import           Zebra.Data.Core
-import           Zebra.Data.Entity
+import           Zebra.Factset.Data
+import           Zebra.Factset.Entity
 import           Zebra.Foreign.Bindings
 import           Zebra.Foreign.Table
 import           Zebra.Foreign.Util
-import qualified Zebra.Table as Table
+import qualified Zebra.Table.Striped as Striped
 
 
 newtype CEntity =
@@ -99,7 +99,7 @@ peekEntityId c_entity = do
 peekAttribute :: MonadIO m => Ptr C'zebra_attribute -> EitherT ForeignError m Attribute
 peekAttribute c_attribute = do
   table <- peekTable (p'zebra_attribute'table c_attribute)
-  let n_rows = Table.length table
+  let n_rows = Striped.length table
   times <- fmap timesOfForeign . peekVector n_rows $ p'zebra_attribute'times c_attribute
   factset_ids <- fmap factsetIdsOfForeign . peekVector n_rows $ p'zebra_attribute'factset_ids c_attribute
   tombstones <- fmap tombstonesOfForeign . peekVector n_rows $ p'zebra_attribute'tombstones c_attribute

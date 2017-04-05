@@ -34,15 +34,14 @@ import           P
 
 import           X.Control.Monad.Trans.Either (EitherT, left, hoistEither, hoistMaybe)
 
-import           Zebra.Data.Vector.Cons (Cons)
-import qualified Zebra.Data.Vector.Cons as Cons
 import           Zebra.Foreign.Bindings
 import           Zebra.Foreign.Util
-import           Zebra.Schema (Field(..), FieldName(..), Variant(..), VariantName(..))
-import           Zebra.Schema (tagsOfForeign, foreignOfTags)
-import qualified Zebra.Segment as Segment
-import           Zebra.Table (Table, Column)
-import qualified Zebra.Table as Table
+import           Zebra.Table.Schema (Field(..), FieldName(..), Variant(..), VariantName(..))
+import           Zebra.Table.Schema (tagsOfForeign, foreignOfTags)
+import qualified Zebra.Table.Striped as Striped
+import           Zebra.X.Vector.Cons (Cons)
+import qualified Zebra.X.Vector.Cons as Cons
+import qualified Zebra.X.Vector.Segment as Segment
 
 
 newtype CTable =
@@ -50,11 +49,11 @@ newtype CTable =
       unCTable :: Ptr C'zebra_table
     }
 
-tableOfForeign :: MonadIO m => CTable -> EitherT ForeignError m Table
+tableOfForeign :: MonadIO m => CTable -> EitherT ForeignError m Striped.Table
 tableOfForeign (CTable c_table) =
   peekTable c_table
 
-foreignOfTable :: MonadIO m => Mempool -> Table -> m CTable
+foreignOfTable :: MonadIO m => Mempool -> Striped.Table -> m CTable
 foreignOfTable pool table = do
   c_table <- liftIO $ alloc pool
   pokeTable pool c_table table
@@ -82,7 +81,7 @@ growTable :: MonadIO m => Mempool -> CTable -> Int -> EitherT ForeignError m ()
 growTable pool (CTable c_table) grow_by = do
   liftCError $ unsafe'c'zebra_grow_table pool c_table (fromIntegral grow_by)
 
-peekTable :: MonadIO m => Ptr C'zebra_table -> EitherT ForeignError m Table
+peekTable :: MonadIO m => Ptr C'zebra_table -> EitherT ForeignError m Striped.Table
 peekTable c_table = do
   n_rows <- fromIntegral <$> peekIO (p'zebra_table'row_count c_table)
   n_cap <- fromIntegral <$> peekIO (p'zebra_table'row_capacity c_table)
@@ -95,22 +94,22 @@ peekTable c_table = do
   tag <- peekIO (p'zebra_table'tag c_table)
   case tag of
     C'ZEBRA_TABLE_BINARY ->
-      Table.Binary
+      Striped.Binary
         <$> peekByteString n_rows (p'zebra_table_variant'_binary'bytes c_of)
 
     C'ZEBRA_TABLE_ARRAY ->
-      Table.Array
+      Striped.Array
         <$> (peekColumn n_rows =<< peekIO (p'zebra_table_variant'_array'values c_of))
 
     C'ZEBRA_TABLE_MAP ->
-      Table.Map
+      Striped.Map
         <$> (peekColumn n_rows =<< peekIO (p'zebra_table_variant'_map'keys c_of))
         <*> (peekColumn n_rows =<< peekIO (p'zebra_table_variant'_map'values c_of))
 
     _ ->
       left ForeignInvalidTableType
 
-pokeTable :: MonadIO m => Mempool -> Ptr C'zebra_table -> Table -> m ()
+pokeTable :: MonadIO m => Mempool -> Ptr C'zebra_table -> Striped.Table -> m ()
 pokeTable pool c_table table = do
   let
     c_tag =
@@ -120,23 +119,23 @@ pokeTable pool c_table table = do
       p'zebra_table'of c_table
 
     n_rows =
-      Table.length table
+      Striped.length table
 
   pokeIO (p'zebra_table'row_count c_table) $ fromIntegral n_rows
   pokeIO (p'zebra_table'row_capacity c_table) $ fromIntegral n_rows
 
   case table of
-    Table.Binary bytes -> do
+    Striped.Binary bytes -> do
       pokeIO c_tag C'ZEBRA_TABLE_BINARY
       pokeByteString pool (p'zebra_table_variant'_binary'bytes c_of) bytes
 
-    Table.Array values -> do
+    Striped.Array values -> do
       pokeIO c_tag C'ZEBRA_TABLE_ARRAY
       c_values <- liftIO $ calloc pool 1
       pokeIO (p'zebra_table_variant'_array'values c_of) c_values
       pokeColumn pool c_values values
 
-    Table.Map keys values -> do
+    Striped.Map keys values -> do
       pokeIO c_tag C'ZEBRA_TABLE_MAP
       c_keys <- liftIO $ calloc pool 1
       c_values <- liftIO $ calloc pool 1
@@ -145,45 +144,45 @@ pokeTable pool c_table table = do
       pokeColumn pool c_keys keys
       pokeColumn pool c_values values
 
-peekColumn :: MonadIO m => Int -> Ptr C'zebra_column -> EitherT ForeignError m Column
+peekColumn :: MonadIO m => Int -> Ptr C'zebra_column -> EitherT ForeignError m Striped.Column
 peekColumn n_rows c_column = do
   let column = p'zebra_column'of c_column
   tag <- peekIO (p'zebra_column'tag c_column)
   case tag of
     C'ZEBRA_COLUMN_UNIT ->
-      Table.Unit
+      Striped.Unit
         <$> pure n_rows
 
     C'ZEBRA_COLUMN_INT ->
-      Table.Int
+      Striped.Int
         <$> peekVector n_rows (p'zebra_column_variant'_int'values column)
 
     C'ZEBRA_COLUMN_DOUBLE ->
-      Table.Double
+      Striped.Double
         <$> peekVector n_rows (p'zebra_column_variant'_double'values column)
 
     C'ZEBRA_COLUMN_ENUM ->
-      Table.Enum
+      Striped.Enum
         <$> (tagsOfForeign <$> peekVector n_rows (p'zebra_column_variant'_enum'tags column))
         <*> peekNamedColumns mkVariant n_rows (p'zebra_column_variant'_enum'columns column)
 
     C'ZEBRA_COLUMN_STRUCT ->
-      Table.Struct
+      Striped.Struct
         <$> peekNamedColumns mkField n_rows (p'zebra_column_variant'_struct'columns column)
 
     C'ZEBRA_COLUMN_NESTED ->
-      Table.Nested
+      Striped.Nested
         <$> peekOffsetsVector n_rows (p'zebra_column_variant'_nested'indices column)
         <*> peekTable (p'zebra_column_variant'_nested'table column)
 
     C'ZEBRA_COLUMN_REVERSED ->
-      Table.Reversed
+      Striped.Reversed
         <$> (peekColumn n_rows =<< peekIO (p'zebra_column_variant'_reversed'column column))
 
     _ ->
       left ForeignInvalidColumnType
 
-pokeColumn :: MonadIO m => Mempool -> Ptr C'zebra_column -> Column -> m ()
+pokeColumn :: MonadIO m => Mempool -> Ptr C'zebra_column -> Striped.Column -> m ()
 pokeColumn pool c_column column =
   let
     c_tag =
@@ -193,32 +192,32 @@ pokeColumn pool c_column column =
       p'zebra_column'of c_column
   in
     case column of
-      Table.Unit _ ->
+      Striped.Unit _ ->
         pokeIO c_tag C'ZEBRA_COLUMN_UNIT
 
-      Table.Int xs -> do
+      Striped.Int xs -> do
         pokeIO c_tag C'ZEBRA_COLUMN_INT
         pokeVector pool (p'zebra_column_variant'_int'values c_of) xs
 
-      Table.Double xs -> do
+      Striped.Double xs -> do
         pokeIO c_tag C'ZEBRA_COLUMN_DOUBLE
         pokeVector pool (p'zebra_column_variant'_double'values c_of) xs
 
-      Table.Enum tags vs -> do
+      Striped.Enum tags vs -> do
         pokeIO c_tag C'ZEBRA_COLUMN_ENUM
         pokeVector pool (p'zebra_column_variant'_enum'tags c_of) (foreignOfTags tags)
         pokeNamedColumns fromVariant pool (p'zebra_column_variant'_enum'columns c_of) vs
 
-      Table.Struct fs -> do
+      Striped.Struct fs -> do
         pokeIO c_tag C'ZEBRA_COLUMN_STRUCT
         pokeNamedColumns fromField pool (p'zebra_column_variant'_struct'columns c_of) fs
 
-      Table.Nested ns table -> do
+      Striped.Nested ns table -> do
         pokeIO c_tag C'ZEBRA_COLUMN_NESTED
         pokeOffsetsVector pool (p'zebra_column_variant'_nested'indices c_of) ns
         pokeTable pool (p'zebra_column_variant'_nested'table c_of) table
 
-      Table.Reversed inner -> do
+      Striped.Reversed inner -> do
         c_inner <- liftIO $ calloc pool 1
         pokeIO c_tag C'ZEBRA_COLUMN_REVERSED
         pokeIO (p'zebra_column_variant'_reversed'column c_of) c_inner
@@ -226,7 +225,7 @@ pokeColumn pool c_column column =
 
 peekNamedColumns ::
   MonadIO m =>
-  (ByteString -> Column -> a) ->
+  (ByteString -> Striped.Column -> a) ->
   Int ->
   Ptr C'zebra_named_columns ->
   EitherT ForeignError m (Cons Boxed.Vector a)
@@ -247,7 +246,7 @@ peekNamedColumns f n_rows ptr = do
 
 pokeNamedColumns ::
   MonadIO m =>
-  (a -> (ByteString, Column)) ->
+  (a -> (ByteString, Striped.Column)) ->
   Mempool ->
   Ptr C'zebra_named_columns ->
   Cons Boxed.Vector a ->

@@ -27,8 +27,8 @@ import           P
 import           X.Control.Monad.Trans.Either (EitherT, left)
 import qualified X.Data.Vector as Boxed
 
-import           Zebra.Data.Block
-import           Zebra.Data.Core
+import           Zebra.Factset.Block
+import           Zebra.Factset.Data
 import           Zebra.Foreign.Block
 import           Zebra.Foreign.Entity
 import           Zebra.Foreign.Merge

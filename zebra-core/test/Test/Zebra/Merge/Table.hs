@@ -18,26 +18,26 @@ import           Test.Zebra.Jack
 
 import           Text.Show.Pretty (ppShow)
 
-import           Zebra.Data.Vector.Cons (Cons)
-import qualified Zebra.Data.Vector.Cons as Cons
+import           Zebra.X.Vector.Cons (Cons)
+import qualified Zebra.X.Vector.Cons as Cons
 import           Zebra.Merge.Table (UnionTableError(..))
-import qualified Zebra.Merge.Table as Table
-import           Zebra.Schema (TableSchema)
-import           Zebra.Table (Table, TableError(..))
-import qualified Zebra.Table as Table
+import qualified Zebra.Merge.Table as Striped
+import           Zebra.Table.Schema (TableSchema)
+import           Zebra.Table.Striped (Table, TableError(..))
+import qualified Zebra.Table.Striped as Striped
 
-jFileTable :: TableSchema -> Jack Table
+jFileTable :: TableSchema -> Jack Striped.Table
 jFileTable schema = do
-  Right x <- Table.fromCollection schema <$> jSizedCollection schema
+  Right x <- Striped.fromCollection schema <$> jSizedCollection schema
   pure x
 
-jFile :: TableSchema -> Jack (NonEmpty Table)
+jFile :: TableSchema -> Jack (NonEmpty Striped.Table)
 jFile schema = do
   NonEmpty.fromList <$> listOfN 1 10 (jFileTable schema)
 
-unionSimple :: Cons Boxed.Vector (NonEmpty Table) -> Either String (Maybe Table)
+unionSimple :: Cons Boxed.Vector (NonEmpty Striped.Table) -> Either String (Maybe Striped.Table)
 unionSimple xss0 =
-  case Table.unions =<< traverse Table.unions (fmap Cons.fromNonEmpty xss0) of
+  case Striped.unions =<< traverse Striped.unions (fmap Cons.fromNonEmpty xss0) of
     Left (TableValueUnionError _) ->
       pure Nothing
     Left err ->
@@ -45,15 +45,15 @@ unionSimple xss0 =
     Right x ->
       pure $ pure x
 
-unionList :: Cons Boxed.Vector (NonEmpty Table) -> Either String (Maybe Table)
+unionList :: Cons Boxed.Vector (NonEmpty Striped.Table) -> Either String (Maybe Striped.Table)
 unionList xss0 =
-  case Table.unionList xss0 of
+  case Striped.unionList xss0 of
     Left (UnionValueUnionError _) ->
       pure Nothing
     Left err ->
       Left $ ppShow err
     Right xs ->
-      case Table.unions (Cons.fromNonEmpty xs) of
+      case Striped.unions (Cons.fromNonEmpty xs) of
         Left (TableValueUnionError _) ->
           pure Nothing
         Left err ->

@@ -32,9 +32,10 @@ import qualified X.Data.Vector as Boxed
 import qualified X.Data.Vector.Unboxed as Unboxed
 import qualified X.Text.Show as Show
 
-import           Zebra.Data.Block
-import           Zebra.Data.Core
-import           Zebra.Table (Table, TableError)
+import           Zebra.Factset.Block
+import           Zebra.Factset.Data
+import           Zebra.Table.Striped (StripedError)
+import qualified Zebra.Table.Striped as Striped
 
 
 -- | A BlockDataId roughly corresponds to the id of the file, where a Table came from.
@@ -51,7 +52,7 @@ derivingUnbox "BlockDataId"
   [| \x -> BlockDataId x |]
 
 data MergeError =
-    MergeTableError !TableError
+    MergeStripedError !StripedError
   | MergeAttributeWithoutTable !AttributeId
   | MergeBlockDataWithoutTable !AttributeId !BlockDataId
     deriving (Eq, Show)
@@ -59,7 +60,7 @@ data MergeError =
 -- This could certainly be nicer
 renderMergeError :: MergeError -> Text
 renderMergeError = \case
-  MergeTableError r ->
+  MergeStripedError r ->
     -- Wouldn't hurt to add a renderTableError
     "Merge error when appending tables. This might mean the files have different schemas or one of the files is invalid.\n" <>
     "The error was: " <> Text.pack (show r)
@@ -76,7 +77,7 @@ data EntityMerged
  , emEntityId   :: !EntityId
  , emIndices    :: !(Boxed.Vector (Unboxed.Vector BlockIndex))
    -- ^ Indices for current entity, indexed by attribute id
- , emTables    :: !(Boxed.Vector Table)
+ , emTables    :: !(Boxed.Vector Striped.Table)
    -- ^ Table values for current entity, indexed by attribute id
  }
  deriving (Eq, Generic)
@@ -109,7 +110,7 @@ data EntityValues
  { evEntity    :: !BlockEntity
  , evIndices   :: !(Boxed.Vector (Unboxed.Vector (BlockIndex, BlockDataId)))
    -- ^ Indices for current entity, indexed by attribute id
- , evTables   :: !(Boxed.Vector (Map.Map BlockDataId Table))
+ , evTables   :: !(Boxed.Vector (Map.Map BlockDataId Striped.Table))
    -- ^ Table values for current entity, indexed by attribute id
  }
  deriving (Eq, Generic)

@@ -22,12 +22,12 @@ import           Test.Zebra.Util
 import           X.Control.Monad.Trans.Either (EitherT)
 
 import           Zebra.Foreign.Table
-import           Zebra.Table (Table)
-import qualified Zebra.Table as Table
+import           Zebra.Table.Striped (Table)
+import qualified Zebra.Table.Striped as Striped
 
 prop_roundtrip_table :: Property
 prop_roundtrip_table =
-  gamble jSizedTable $ \table ->
+  gamble jSizedStriped $ \table ->
   testIO . bracket Mempool.create Mempool.free $ \pool ->
     trippingIO (liftE . foreignOfTable pool) tableOfForeign table
 
@@ -41,16 +41,16 @@ prop_neritic_clone_table =
 
 prop_agile_clone_table :: Property
 prop_agile_clone_table =
-  testClone Table.schema agileCloneTable
+  testClone Striped.schema agileCloneTable
 
 prop_grow_table :: Property
 prop_grow_table =
   gamble (chooseInt (0, 100)) $ \n ->
-    testClone Table.schema (\pool table -> growTable pool table n >> pure table)
+    testClone Striped.schema (\pool table -> growTable pool table n >> pure table)
 
 testClone :: (Show a, Show x, Eq a, Eq x) => (Table -> a) -> (Mempool -> CTable -> EitherT x IO CTable) -> Property
 testClone select clone =
-  gamble jSizedTable $ \table ->
+  gamble jSizedStriped $ \table ->
   testIO . bracket Mempool.create Mempool.free $ \pool ->
     trippingByIO select (bind (clone pool) . foreignOfTable pool) tableOfForeign table
 

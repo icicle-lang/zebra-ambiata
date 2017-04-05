@@ -25,10 +25,10 @@ import           X.Control.Monad.Trans.Either (EitherT, hoistEither, joinEitherT
 import           X.Data.Vector.Stream (Stream)
 import qualified X.Data.Vector.Stream as Stream
 
-import           Zebra.Binary.File
-import           Zebra.Schema (TableSchema)
-import           Zebra.Table (Table)
-import           Zebra.Text
+import           Zebra.Serial.Binary.File
+import           Zebra.Serial.Text
+import           Zebra.Table.Schema (TableSchema)
+import qualified Zebra.Table.Striped as Striped
 
 
 data Export =
@@ -46,15 +46,15 @@ data ExportOutput =
 
 data ExportError =
     ExportFileError !FileError
-  | ExportTextTableEncodeError !TextTableEncodeError
+  | ExportTextStripedEncodeError !TextStripedEncodeError
     deriving (Eq, Show)
 
 renderExportError :: ExportError -> Text
 renderExportError = \case
   ExportFileError err ->
     renderFileError err
-  ExportTextTableEncodeError err ->
-    renderTextTableEncodeError err
+  ExportTextStripedEncodeError err ->
+    renderTextStripedEncodeError err
 
 zebraExport :: MonadResource m => Export -> EitherT ExportError m ()
 zebraExport export = do
@@ -81,13 +81,13 @@ writeText ::
   MonadResource m =>
   FilePath ->
   Handle ->
-  Stream (EitherT FileError m) Table ->
+  Stream (EitherT FileError m) Striped.Table ->
   EitherT ExportError m ()
 writeText path handle tables =
   joinEitherT id .
     firstT ExportFileError .
     hPutStream path handle .
-    Stream.mapM (hoistEither . first ExportTextTableEncodeError . encodeTable) $
+    Stream.mapM (hoistEither . first ExportTextStripedEncodeError . encodeStriped) $
     Stream.trans (firstT ExportFileError) tables
 
 writeSchema :: MonadIO m => FilePath -> Handle -> TableSchema -> EitherT ExportError m ()

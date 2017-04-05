@@ -32,11 +32,11 @@ import           X.Control.Monad.Trans.Either (runEitherT, firstEitherT)
 import           Zebra.Foreign.Merge
 import           Zebra.Foreign.Entity
 
-import           Zebra.Data.Block
-import           Zebra.Data.Core
-import           Zebra.Data.Entity
-import           Zebra.Data.Fact
-import           Zebra.Schema (ColumnSchema)
+import           Zebra.Factset.Block
+import           Zebra.Factset.Data
+import           Zebra.Factset.Entity
+import           Zebra.Factset.Fact
+import           Zebra.Table.Schema (ColumnSchema)
 
 import qualified Zebra.Merge.Puller.List as TestMerge
 
@@ -62,7 +62,7 @@ jFactForEntity eid schema aid =
     <*> pure aid
     <*> jSmallTime
     <*> jSmallFactsetId
-    <*> (strictMaybe <$> maybeOf (jValue schema))
+    <*> (strictMaybe <$> maybeOf (jLogicalValue schema))
 
 -- | Generate a bunch of facts that all have the same entity
 -- Used for testing merging the same entity
@@ -88,7 +88,7 @@ jSmallFact schema aid =
     <*> pure aid
     <*> jSmallTime
     <*> jSmallFactsetId
-    <*> (strictMaybe <$> maybeOf (jValue schema))
+    <*> (strictMaybe <$> maybeOf (jLogicalValue schema))
 
 
 jSmallFacts :: [ColumnSchema] -> Jack [Fact]

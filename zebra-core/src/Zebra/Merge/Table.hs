@@ -32,23 +32,23 @@ import qualified X.Data.Vector.Ref as Ref
 import           X.Data.Vector.Stream (Stream(..), SPEC(..))
 import qualified X.Data.Vector.Stream as Stream
 
-import           Zebra.Binary.Block
-import           Zebra.Binary.Data
-import           Zebra.Binary.File
-import           Zebra.Binary.Header
-import           Zebra.Data.Vector.Cons (Cons)
-import qualified Zebra.Data.Vector.Cons as Cons
-import           Zebra.Schema (TableSchema, SchemaError)
-import           Zebra.Table (Table, TableError)
-import qualified Zebra.Table as Table
-import           Zebra.Value (Value, ValueSchemaError, ValueUnionError)
-import qualified Zebra.Value as Value
+import           Zebra.Serial.Binary.Block
+import           Zebra.Serial.Binary.Data
+import           Zebra.Serial.Binary.File
+import           Zebra.Serial.Binary.Header
+import           Zebra.Table.Logical (LogicalSchemaError, LogicalMergeError)
+import qualified Zebra.Table.Logical as Logical
+import           Zebra.Table.Schema (TableSchema, SchemaError)
+import           Zebra.Table.Striped (StripedError)
+import qualified Zebra.Table.Striped as Striped
+import           Zebra.X.Vector.Cons (Cons)
+import qualified Zebra.X.Vector.Cons as Cons
 
 data UnionTableError =
     UnionFileError !FileError
-  | UnionTableError !TableError
-  | UnionValueSchemaError !ValueSchemaError
-  | UnionValueUnionError !ValueUnionError
+  | UnionStripedError !StripedError
+  | UnionLogicalSchemaError !LogicalSchemaError
+  | UnionLogicalMergeError !LogicalMergeError
   | UnionSchemaMismatch !TableSchema !TableSchema
   | UnionSchemaError !SchemaError
     deriving (Eq, Show)
@@ -62,19 +62,19 @@ data Input m =
   Input {
       inputSchema :: !TableSchema
     , inputStatus :: !Status
-    , inputData :: !(Map Value Value)
-    , inputRead :: EitherT UnionTableError m (Maybe Table)
+    , inputData :: !(Map Logical.Value Logical.Value)
+    , inputRead :: EitherT UnionTableError m (Maybe Striped.Table)
     }
 
 data Output m a =
   Output {
-      outputWrite :: Table -> EitherT UnionTableError m ()
+      outputWrite :: Striped.Table -> EitherT UnionTableError m ()
     , outputClose :: EitherT UnionTableError m a
     } deriving (Functor)
 
 data Step m =
   Step {
-      _stepComplete :: !(Map Value Value)
+      _stepComplete :: !(Map Logical.Value Logical.Value)
     , _stepRemaining :: !(Cons Boxed.Vector (Input m))
     }
 
@@ -101,7 +101,7 @@ hasData :: Input m -> Bool
 hasData =
   not . Map.null . inputData
 
-replaceData :: Input m -> Map Value Value -> Input m
+replaceData :: Input m -> Map Logical.Value Logical.Value -> Input m
 replaceData input values =
   input {
       inputData = values
@@ -131,16 +131,16 @@ updateInput input = do
           Nothing ->
             pure $ completeInput input
 
-          Just table -> do
-            collection <- firstT UnionTableError . hoistEither $ Table.toCollection table
-            values <- firstT UnionValueSchemaError . hoistEither $ Value.takeMap collection
+          Just striped -> do
+            logical <- firstT UnionStripedError . hoistEither $ Striped.toLogical striped
+            values <- firstT UnionLogicalSchemaError . hoistEither $ Logical.takeMap logical
             pure $ replaceData input values
 
-writeOutput :: Monad m => Output m a -> Table -> EitherT UnionTableError m ()
+writeOutput :: Monad m => Output m a -> Striped.Table -> EitherT UnionTableError m ()
 writeOutput output table =
   let
     n =
-      Table.length table
+      Striped.length table
   in
     if n == 0 then
       pure ()
@@ -149,18 +149,18 @@ writeOutput output table =
     else do
       let
         (table0, table1) =
-          Table.splitAt 4096 table
+          Striped.splitAt 4096 table
 
       outputWrite output table0
       writeOutput output table1
 
 unionStep :: Monad m => Cons Boxed.Vector (Input m) -> EitherT UnionTableError m (Step m)
 unionStep inputs = do
-  step <- firstT UnionValueUnionError . hoistEither . Value.unionStep $ fmap inputData inputs
+  step <- firstT UnionLogicalMergeError . hoistEither . Logical.unionStep $ fmap inputData inputs
   pure $
     Step
-      (Value.unionComplete step)
-      (Cons.zipWith replaceData inputs (Value.unionRemaining step))
+      (Logical.unionComplete step)
+      (Cons.zipWith replaceData inputs (Logical.unionRemaining step))
 
 unionLoop :: Monad m => TableSchema -> Cons Boxed.Vector (Input m) -> Output m a -> EitherT UnionTableError m a
 unionLoop schema inputs0 output = do
@@ -170,7 +170,7 @@ unionLoop schema inputs0 output = do
   else do
     Step values inputs <- unionStep inputs1
 
-    table <- firstT UnionTableError . hoistEither $ Table.fromCollection schema (Value.Map values)
+    table <- firstT UnionStripedError . hoistEither $ Striped.fromLogical schema (Logical.Map values)
     writeOutput output table
 
     unionLoop schema inputs output
@@ -178,11 +178,11 @@ unionLoop schema inputs0 output = do
 ------------------------------------------------------------------------
 -- List
 
-mkListInput :: PrimMonad m => NonEmpty Table -> EitherT UnionTableError m (Input m)
+mkListInput :: PrimMonad m => NonEmpty Striped.Table -> EitherT UnionTableError m (Input m)
 mkListInput = \case
   x :| xs -> do
     ref <- boxed $ Ref.newRef (x : xs)
-    pure . Input (Table.schema x) Active Map.empty $ do
+    pure . Input (Striped.schema x) Active Map.empty $ do
       ys0 <- Ref.readRef ref
       case ys0 of
         [] ->
@@ -191,7 +191,7 @@ mkListInput = \case
           Ref.writeRef ref ys
           pure $ Just y
 
-mkListOutput :: PrimMonad m => EitherT UnionTableError m (Output m [Table])
+mkListOutput :: PrimMonad m => EitherT UnionTableError m (Output m [Striped.Table])
 mkListOutput = do
   ref <- boxed $ Ref.newRef []
 
@@ -204,7 +204,7 @@ mkListOutput = do
 
   pure $ Output append close
 
-unionList :: Cons Boxed.Vector (NonEmpty Table) -> Either UnionTableError (NonEmpty Table)
+unionList :: Cons Boxed.Vector (NonEmpty Striped.Table) -> Either UnionTableError (NonEmpty Striped.Table)
 unionList inputLists =
   runST $ runEitherT $ do
     inputs <- traverse mkListInput inputLists
@@ -213,7 +213,7 @@ unionList inputLists =
     result <- unionLoop schema inputs output
     case result of
       [] ->
-        pure $ Table.empty schema :| []
+        pure $ Striped.empty schema :| []
       x : xs ->
         pure $ x :| xs
 

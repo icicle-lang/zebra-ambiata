@@ -47,7 +47,7 @@ import           System.IO (IO)
 import           X.Control.Monad.Trans.Either (EitherT, pattern EitherT, runEitherT, hoistEither)
 
 import           Zebra.Foreign.Bindings
-import           Zebra.Segment (SegmentError)
+import           Zebra.X.Vector.Segment (SegmentError)
 
 
 data ForeignError =

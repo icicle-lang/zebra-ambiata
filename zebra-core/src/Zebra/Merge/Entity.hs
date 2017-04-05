@@ -23,11 +23,11 @@ import qualified X.Data.Vector.Unboxed as Unboxed
 import qualified X.Data.Vector.Generic as Generic
 import qualified X.Data.Vector.Stream as Stream
 
-import           Zebra.Data.Core
-import           Zebra.Data.Block
+import           Zebra.Factset.Block
+import           Zebra.Factset.Data
 import           Zebra.Merge.Base
-import           Zebra.Table (Table)
-import qualified Zebra.Table as Table
+import           Zebra.Table.Striped (Table)
+import qualified Zebra.Table.Striped as Striped
 
 
 entityValuesOfBlock :: Monad m => BlockDataId -> Block -> Stream.Stream m EntityValues
@@ -43,7 +43,7 @@ entityValuesOfBlock blockId (Block entities indices tables) =
            dense_attrs       = denseAttributeCount rx attrs
            ix_attrs          = Generic.unsafeSplits id ix_here dense_attrs
            dense_counts      = Boxed.map Unboxed.length ix_attrs
-           (rx_here,rx_rest) = Boxed.unzip $ Boxed.zipWith Table.splitAt dense_counts rx
+           (rx_here,rx_rest) = Boxed.unzip $ Boxed.zipWith Striped.splitAt dense_counts rx
 
            acc'              = (ix_rest, rx_rest)
            ix_blockId        = Boxed.map (Unboxed.map (,blockId)) ix_attrs
@@ -62,7 +62,7 @@ entityValuesOfBlock blockId (Block entities indices tables) =
 -- >    [ BlockAttribute (AttributeId 1) 10 , BlockAttribute (AttributeId 3) 20 ]
 -- > = [ 0, 10, 0, 20, 0 ]
 --
-denseAttributeCount :: Boxed.Vector Table -> Unboxed.Vector BlockAttribute -> Unboxed.Vector Int
+denseAttributeCount :: Boxed.Vector Striped.Table -> Unboxed.Vector BlockAttribute -> Unboxed.Vector Int
 denseAttributeCount rs attr =
   Unboxed.mapAccumulate go attr $
   Unboxed.enumFromN 0 $ Boxed.length rs
@@ -106,19 +106,19 @@ mergeEntityTables (EntityValues _ aixs recs) =
     go ((aid, aix), rec)
      = mergeEntityTable (AttributeId $ fromIntegral aid) aix rec
 
-mergeEntityTable :: AttributeId -> Unboxed.Vector (BlockIndex, BlockDataId) -> Map.Map BlockDataId Table -> Either MergeError Table
+mergeEntityTable :: AttributeId -> Unboxed.Vector (BlockIndex, BlockDataId) -> Map.Map BlockDataId Table -> Either MergeError Striped.Table
 mergeEntityTable aid aixs tables = do
   i <- init
   fst <$> Unboxed.foldM go (i, tables) aixs
   where
-    -- Get an 'empty' Table for this attribute.
+    -- Get an 'empty' table for this attribute.
     -- The shape of this depends on the schema of the attribute, which specifies how many columns,
     -- their types, and so on.
     -- We already have at least one non-empty table though, so we can chop it up to make an empty one.
     init =
       case Map.minView tables of
         Just (r,_) ->
-          return $ fst $ Table.splitAt 0 r
+          return $ fst $ Striped.splitAt 0 r
         Nothing ->
           Left $ MergeAttributeWithoutTable aid
 
@@ -130,13 +130,13 @@ mergeEntityTable aid aixs tables = do
     splitLookup blockid recs =
       case Map.lookup blockid recs of
         Just r -> do
-          let (this,that) = Table.splitAt 1 r
+          let (this,that) = Striped.splitAt 1 r
           return (this, Map.insert blockid that recs)
         Nothing ->
           Left $ MergeBlockDataWithoutTable aid blockid
 
     appendTables a b
-     = first MergeTableError $ Table.unsafeAppend a b
+     = first MergeStripedError $ Striped.unsafeAppend a b
 
 
 entityMergedOfEntityValues :: EntityValues -> Either MergeError EntityMerged

@@ -38,7 +38,7 @@ import Anemone.Foreign.Mempool (Mempool(..))
 #znum ZEBRA_UNPACK_BUFFER_TOO_LARGE
 
 
--- Zebra.Table.Table
+-- Zebra.Table.Striped.Table
 #integral_t enum zebra_table_tag
 #znum ZEBRA_TABLE_BINARY
 #znum ZEBRA_TABLE_ARRAY
@@ -73,7 +73,7 @@ import Anemone.Foreign.Mempool (Mempool(..))
 #stoptype
 
 
--- Zebra.Table.Column
+-- Zebra.Table.Striped.Column
 #integral_t enum zebra_column_tag
 #znum ZEBRA_COLUMN_UNIT
 #znum ZEBRA_COLUMN_INT
