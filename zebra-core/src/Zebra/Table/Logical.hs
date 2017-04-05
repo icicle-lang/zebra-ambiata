@@ -62,10 +62,10 @@ import           P hiding (some, length)
 
 import           Text.Show.Pretty (ppShow)
 
+import           Zebra.Table.Schema (Tag)
+import qualified Zebra.Table.Schema as Schema
 import           Zebra.X.Vector.Cons (Cons)
 import qualified Zebra.X.Vector.Cons as Cons
-import           Zebra.Table.Schema (TableSchema, ColumnSchema, Tag)
-import qualified Zebra.Table.Schema as Schema
 
 
 data Table =
@@ -319,7 +319,7 @@ unionStep kvss =
 
 ------------------------------------------------------------------------
 
-defaultTable :: TableSchema -> Table
+defaultTable :: Schema.Table -> Table
 defaultTable = \case
   Schema.Binary ->
     Binary ByteString.empty
@@ -328,7 +328,7 @@ defaultTable = \case
   Schema.Map _ _ ->
     Map Map.empty
 
-defaultValue :: ColumnSchema -> Value
+defaultValue :: Schema.Column -> Value
 defaultValue = \case
   Schema.Unit ->
     Unit

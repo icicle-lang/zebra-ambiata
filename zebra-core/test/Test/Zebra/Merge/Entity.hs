@@ -27,7 +27,7 @@ import           Zebra.Factset.Block
 import           Zebra.Factset.Fact
 import           Zebra.Merge.Base
 import           Zebra.Merge.Entity
-import           Zebra.Table.Schema (ColumnSchema)
+import qualified Zebra.Table.Schema as Schema
 import qualified Zebra.Table.Striped as Striped
 
 
@@ -43,10 +43,10 @@ ppCounter heading thing prop
  $ counterexample (ppShow thing) prop
 
 
-jColumnSchemas :: Jack [ColumnSchema]
+jColumnSchemas :: Jack [Schema.Column]
 jColumnSchemas = listOfN 0 5 jColumnSchema
 
-blockOfFacts' :: [ColumnSchema] -> [Fact] -> Block
+blockOfFacts' :: [Schema.Column] -> [Fact] -> Block
 blockOfFacts' schemas facts =
   case blockOfFacts (Boxed.fromList schemas) (Boxed.fromList facts) of
    Left e -> Savage.error

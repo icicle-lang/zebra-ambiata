@@ -36,7 +36,7 @@ import           Zebra.Factset.Block
 import           Zebra.Factset.Data
 import           Zebra.Factset.Entity
 import           Zebra.Factset.Fact
-import           Zebra.Table.Schema (ColumnSchema)
+import qualified Zebra.Table.Schema as Schema
 
 import qualified Zebra.Merge.Puller.List as TestMerge
 
@@ -45,7 +45,7 @@ import qualified Zebra.Merge.Puller.List as TestMerge
 -- Generators
 --
 
-jColumnSchemas :: Jack [ColumnSchema]
+jColumnSchemas :: Jack [Schema.Column]
 jColumnSchemas = listOfN 0 5 jColumnSchema
 
 jSmallTime :: Jack Time
@@ -55,7 +55,7 @@ jSmallFactsetId :: Jack FactsetId
 jSmallFactsetId = FactsetId <$> choose (0, 100)
 
 -- | Fact for a single entity
-jFactForEntity :: (EntityHash, EntityId) -> ColumnSchema -> AttributeId -> Jack Fact
+jFactForEntity :: (EntityHash, EntityId) -> Schema.Column -> AttributeId -> Jack Fact
 jFactForEntity eid schema aid =
   uncurry Fact
     <$> pure eid
@@ -66,7 +66,7 @@ jFactForEntity eid schema aid =
 
 -- | Generate a bunch of facts that all have the same entity
 -- Used for testing merging the same entity
-jFactsFor :: (EntityHash, EntityId) -> [ColumnSchema] -> Jack [Fact]
+jFactsFor :: (EntityHash, EntityId) -> [Schema.Column] -> Jack [Fact]
 jFactsFor eid schemas = sized $ \size -> do
   let schemas' = List.zip schemas (fmap AttributeId [0..])
   let maxFacts = size `div` length schemas
@@ -81,7 +81,7 @@ jSmallEntity =
   in
     (\eid -> (hash eid, eid)) <$> (EntityId <$> elements southpark)
 
-jSmallFact :: ColumnSchema -> AttributeId -> Jack Fact
+jSmallFact :: Schema.Column -> AttributeId -> Jack Fact
 jSmallFact schema aid =
   uncurry Fact
     <$> jSmallEntity
@@ -91,7 +91,7 @@ jSmallFact schema aid =
     <*> (strictMaybe <$> maybeOf (jLogicalValue schema))
 
 
-jSmallFacts :: [ColumnSchema] -> Jack [Fact]
+jSmallFacts :: [Schema.Column] -> Jack [Fact]
 jSmallFacts schemas =
   fmap (sortFacts . List.concat) .
   scale (`div` max 1 (length schemas)) $
@@ -122,7 +122,7 @@ bisectBlockFacts split fs =
    = List.span (\f' -> factEntity f == factEntity f')
 
 -- | Generate a pair of facts that can be used as blocks in a single file
-jBlockPair :: (FactsetId -> FactsetId) -> [ColumnSchema] -> Jack ([Fact],[Fact])
+jBlockPair :: (FactsetId -> FactsetId) -> [Schema.Column] -> Jack ([Fact],[Fact])
 jBlockPair factsetId_mode schemas = do
   fs <- jSmallFacts schemas
   let fs' = fmap (\f -> f { factFactsetId = factsetId_mode $ factFactsetId f }) fs
@@ -130,7 +130,7 @@ jBlockPair factsetId_mode schemas = do
   return $ bisectBlockFacts split fs'
 
 -- | Construct a C Block from a bunch of facts
-testForeignOfFacts :: Mempool.Mempool -> [ColumnSchema] -> [Fact] -> IO (Block, Boxed.Vector CEntity)
+testForeignOfFacts :: Mempool.Mempool -> [Schema.Column] -> [Fact] -> IO (Block, Boxed.Vector CEntity)
 testForeignOfFacts pool schemas facts = do
   let Right block    = blockOfFacts (Boxed.fromList schemas) (Boxed.fromList facts)
   let Right entities = entitiesOfBlock block
@@ -140,7 +140,7 @@ testForeignOfFacts pool schemas facts = do
 -- | This is the slow obvious implementation to check against.
 -- It sorts all the facts by entity and turns them into entities.
 -- This must be a stable sort.
-testMergeFacts :: [ColumnSchema] -> [Fact] -> Boxed.Vector Entity
+testMergeFacts :: [Schema.Column] -> [Fact] -> Boxed.Vector Entity
 testMergeFacts schemas facts =
   let Right block    = blockOfFacts (Boxed.fromList schemas) (Boxed.fromList $ sortFacts facts)
       Right entities = entitiesOfBlock block

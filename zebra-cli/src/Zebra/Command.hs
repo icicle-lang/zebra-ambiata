@@ -40,21 +40,21 @@ import qualified X.Data.Vector.Storable as Storable
 import qualified X.Data.Vector.Stream as Stream
 import qualified X.Data.Vector.Unboxed as Unboxed
 
-import           Zebra.Serial.Binary (BinaryVersion(..))
-import qualified Zebra.Serial.Binary as Binary
-import qualified Zebra.Serial.Binary.File as Binary
 import qualified Zebra.Factset.Block as Block
-import qualified Zebra.Factset.Table as Block
 import qualified Zebra.Factset.Data as Core
 import qualified Zebra.Factset.Entity as Entity
 import qualified Zebra.Factset.Fact as Fact
-import qualified Zebra.X.Vector.Cons as Cons
+import qualified Zebra.Factset.Table as Block
 import qualified Zebra.Foreign.Block as Foreign
 import qualified Zebra.Foreign.Entity as Foreign
 import qualified Zebra.Merge.BlockC as Merge
 import qualified Zebra.Merge.Puller.File as Merge
 import qualified Zebra.Merge.Table as Merge
-import           Zebra.Table.Schema (ColumnSchema)
+import           Zebra.Serial.Binary (BinaryVersion(..))
+import qualified Zebra.Serial.Binary as Binary
+import qualified Zebra.Serial.Binary.File as Binary
+import qualified Zebra.Table.Schema as Schema
+import qualified Zebra.X.Vector.Cons as Cons
 
 
 data CatOptions =
@@ -176,7 +176,7 @@ withOutputPusher opts inputfile outputfile runWith = do
   Resource.release poolKey
   firstTshow closeOutfd
 
-catFacts :: MonadIO m => [ColumnSchema] -> Stream.Stream (EitherT Binary.FileError m) Block.Block -> EitherT Text m ()
+catFacts :: MonadIO m => [Schema.Column] -> Stream.Stream (EitherT Binary.FileError m) Block.Block -> EitherT Text m ()
 catFacts schemas0 blocks =
   let
     schemas =

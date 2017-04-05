@@ -38,7 +38,8 @@ import           Zebra.Serial.Binary.File
 import           Zebra.Serial.Binary.Header
 import           Zebra.Table.Logical (LogicalSchemaError, LogicalMergeError)
 import qualified Zebra.Table.Logical as Logical
-import           Zebra.Table.Schema (TableSchema, SchemaError)
+import           Zebra.Table.Schema (SchemaError)
+import qualified Zebra.Table.Schema as Schema
 import           Zebra.Table.Striped (StripedError)
 import qualified Zebra.Table.Striped as Striped
 import           Zebra.X.Vector.Cons (Cons)
@@ -49,7 +50,7 @@ data UnionTableError =
   | UnionStripedError !StripedError
   | UnionLogicalSchemaError !LogicalSchemaError
   | UnionLogicalMergeError !LogicalMergeError
-  | UnionSchemaMismatch !TableSchema !TableSchema
+  | UnionSchemaMismatch !Schema.Table !Schema.Table
   | UnionSchemaError !SchemaError
     deriving (Eq, Show)
 
@@ -60,7 +61,7 @@ data Status =
 
 data Input m =
   Input {
-      inputSchema :: !TableSchema
+      inputSchema :: !Schema.Table
     , inputStatus :: !Status
     , inputData :: !(Map Logical.Value Logical.Value)
     , inputRead :: EitherT UnionTableError m (Maybe Striped.Table)
@@ -85,7 +86,7 @@ boxed :: m (Ref MBoxed.MVector s a) -> m (Ref MBoxed.MVector s a)
 boxed =
   id
 
-takeSchema :: Cons Boxed.Vector (Input m) -> Either UnionTableError TableSchema
+takeSchema :: Cons Boxed.Vector (Input m) -> Either UnionTableError Schema.Table
 takeSchema inputs =
   let
     (schema0, schemas) =
@@ -162,7 +163,7 @@ unionStep inputs = do
       (Logical.unionComplete step)
       (Cons.zipWith replaceData inputs (Logical.unionRemaining step))
 
-unionLoop :: Monad m => TableSchema -> Cons Boxed.Vector (Input m) -> Output m a -> EitherT UnionTableError m a
+unionLoop :: Monad m => Schema.Table -> Cons Boxed.Vector (Input m) -> Output m a -> EitherT UnionTableError m a
 unionLoop schema inputs0 output = do
   inputs1 <- traverse updateInput inputs0
   if Cons.all isComplete inputs1 then do
@@ -247,7 +248,7 @@ mkFileInput path = do
     firstT UnionFileError reader
 
 -- FIXME MonadResource
-mkFileOutput :: MonadIO m => TableSchema -> FilePath -> EitherT UnionTableError m (Output m ())
+mkFileOutput :: MonadIO m => Schema.Table -> FilePath -> EitherT UnionTableError m (Output m ())
 mkFileOutput schema path = do
   hout <- liftIO $ IO.openBinaryFile path WriteMode
   liftIO . Builder.hPutBuilder hout . bHeader $ HeaderV3 schema

@@ -27,7 +27,7 @@ import qualified X.Data.Vector.Stream as Stream
 
 import           Zebra.Serial.Binary.File
 import           Zebra.Serial.Text
-import           Zebra.Table.Schema (TableSchema)
+import qualified Zebra.Table.Schema as Schema
 import qualified Zebra.Table.Striped as Striped
 
 
@@ -90,7 +90,7 @@ writeText path handle tables =
     Stream.mapM (hoistEither . first ExportTextStripedEncodeError . encodeStriped) $
     Stream.trans (firstT ExportFileError) tables
 
-writeSchema :: MonadIO m => FilePath -> Handle -> TableSchema -> EitherT ExportError m ()
+writeSchema :: MonadIO m => FilePath -> Handle -> Schema.Table -> EitherT ExportError m ()
 writeSchema path handle schema =
   tryIO (ExportFileError . FileWriteError path) $
     ByteString.hPut handle (encodeSchema TextV0 schema)

@@ -17,7 +17,7 @@ import           Data.ByteString (ByteString)
 import           P
 
 import           Zebra.Serial.Json.Logical
-import           Zebra.Table.Schema (TableSchema)
+import qualified Zebra.Table.Schema as Schema
 import           Zebra.Table.Striped (StripedError)
 import qualified Zebra.Table.Striped as Striped
 
@@ -50,7 +50,7 @@ encodeStriped striped = do
   logical <- first JsonStripedEncodeError $ Striped.toLogical striped
   first JsonStripedLogicalEncodeError $ encodeLogical (Striped.schema striped) logical
 
-decodeStriped :: TableSchema -> ByteString -> Either JsonStripedDecodeError Striped.Table
+decodeStriped :: Schema.Table -> ByteString -> Either JsonStripedDecodeError Striped.Table
 decodeStriped schema bs = do
   logical <- first JsonStripedLogicalDecodeError $ decodeLogical schema bs
   first JsonStripedDecodeError $ Striped.fromLogical schema logical

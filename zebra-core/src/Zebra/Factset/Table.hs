@@ -37,7 +37,7 @@ import           Zebra.Factset.Block.Block
 import           Zebra.Factset.Block.Entity
 import           Zebra.Factset.Block.Index
 import           Zebra.Factset.Data
-import           Zebra.Table.Schema (SchemaError, TableSchema, ColumnSchema, Field(..), FieldName(..), Variant(..), Tag(..))
+import           Zebra.Table.Schema (SchemaError, Field(..), FieldName(..), Variant(..), Tag(..))
 import qualified Zebra.Table.Schema as Schema
 import qualified Zebra.Table.Striped as Striped
 import           Zebra.X.Vector.Cons (Cons)
@@ -53,10 +53,10 @@ data BlockTableError =
   | BlockTableSchemaError !SchemaError
   | BlockEntityIdLengthMismatch !SegmentError
   | BlockIndexLengthMismatch !SegmentError
-  | BlockExpectedEntityFields !(Cons Boxed.Vector (Field ColumnSchema))
-  | BlockExpectedIndexFields !(Cons Boxed.Vector (Field ColumnSchema))
-  | BlockExpectedAttributes !ColumnSchema
-  | BlockExpectedOption !ColumnSchema
+  | BlockExpectedEntityFields !(Cons Boxed.Vector (Field Schema.Column))
+  | BlockExpectedIndexFields !(Cons Boxed.Vector (Field Schema.Column))
+  | BlockExpectedAttributes !Schema.Column
+  | BlockExpectedOption !Schema.Column
     deriving (Eq, Ord, Show)
 
 renderBlockTableError :: BlockTableError -> Text
@@ -394,9 +394,9 @@ blockOfTable table = do
   pure $ Block entities indices tables
 
 ------------------------------------------------------------------------
--- TableSchema -> Map AttributeName TableSchema
+-- Schema.Table -> Map AttributeName Schema.Table
 
-fromAttribute :: AttributeName -> ColumnSchema -> Field ColumnSchema
+fromAttribute :: AttributeName -> Schema.Column -> Field Schema.Column
 fromAttribute (AttributeName name) column =
   Field (FieldName name) . Schema.Nested $
     Schema.Map
@@ -405,7 +405,7 @@ fromAttribute (AttributeName name) column =
         (Field "factset_id" $ Schema.Reversed Schema.Int))
       (Schema.Nested . Schema.Array $ Schema.option column)
 
-fromFields :: Boxed.Vector (Field ColumnSchema) -> ColumnSchema
+fromFields :: Boxed.Vector (Field Schema.Column) -> Schema.Column
 fromFields xs0 =
   case Cons.fromVector xs0 of
     Nothing ->
@@ -413,7 +413,7 @@ fromFields xs0 =
     Just xs ->
       Schema.Struct xs
 
-tableSchemaOfAttributes :: Map AttributeName ColumnSchema -> TableSchema
+tableSchemaOfAttributes :: Map AttributeName Schema.Column -> Schema.Table
 tableSchemaOfAttributes attrs0 =
   let
     attrs =
@@ -429,9 +429,9 @@ tableSchemaOfAttributes attrs0 =
       attrs
 
 ------------------------------------------------------------------------
--- Map AttributeName TableSchema -> TableSchema
+-- Map AttributeName Schema.Table -> Schema.Table
 
-takeAttribute :: Field ColumnSchema -> Either BlockTableError (AttributeName, ColumnSchema)
+takeAttribute :: Field Schema.Column -> Either BlockTableError (AttributeName, Schema.Column)
 takeAttribute (Field (FieldName name) column) = do
   kv_table <- first BlockTableSchemaError $ Schema.takeNested column
   (k, v) <- first BlockTableSchemaError $ Schema.takeMap kv_table
@@ -445,7 +445,7 @@ takeAttribute (Field (FieldName name) column) = do
     _ ->
       Left $ BlockExpectedIndexFields k_fields
 
-takeFields :: ColumnSchema -> Either BlockTableError (Boxed.Vector (Field ColumnSchema))
+takeFields :: Schema.Column -> Either BlockTableError (Boxed.Vector (Field Schema.Column))
 takeFields = \case
   Schema.Unit ->
     pure Boxed.empty
@@ -454,7 +454,7 @@ takeFields = \case
   x ->
     Left $ BlockExpectedAttributes x
 
-attributesOfTableSchema :: TableSchema -> Either BlockTableError (Map AttributeName ColumnSchema)
+attributesOfTableSchema :: Schema.Table -> Either BlockTableError (Map AttributeName Schema.Column)
 attributesOfTableSchema table = do
   (k, v) <- first BlockTableSchemaError $ Schema.takeMap table
   k_fields <- first BlockTableSchemaError $ Schema.takeStruct k

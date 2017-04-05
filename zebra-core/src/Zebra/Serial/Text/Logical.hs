@@ -27,12 +27,11 @@ import           Zebra.Serial.Json.Logical (JsonLogicalEncodeError, renderJsonLo
 import           Zebra.Serial.Json.Logical (ppValue, ppPair, pValue, pPair)
 import           Zebra.Serial.Json.Util
 import qualified Zebra.Table.Logical as Logical
-import           Zebra.Table.Schema (TableSchema)
 import qualified Zebra.Table.Schema as Schema
 
 
 data TextLogicalEncodeError =
-    TextLogicalSchemaMismatch !TableSchema !Logical.Table
+    TextLogicalSchemaMismatch !Schema.Table !Logical.Table
   | TextLogicalEncodeError !JsonLogicalEncodeError
     deriving (Eq, Show)
 
@@ -59,7 +58,7 @@ encodeJsonRows :: [Text] -> Boxed.Vector Aeson.Value -> ByteString
 encodeJsonRows keyOrder =
   Char8.unlines . Boxed.toList . fmap (encodeJson keyOrder)
 
-encodeLogical :: TableSchema -> Logical.Table -> Either TextLogicalEncodeError ByteString
+encodeLogical :: Schema.Table -> Logical.Table -> Either TextLogicalEncodeError ByteString
 encodeLogical schema table0 =
   case schema of
     Schema.Binary
@@ -89,7 +88,7 @@ decodeJsonRows :: (Aeson.Value -> Aeson.Parser a) -> ByteString -> Either JsonDe
 decodeJsonRows p =
   traverse (decodeJson p) . Boxed.fromList . Char8.lines
 
-decodeLogical :: TableSchema -> ByteString -> Either TextLogicalDecodeError Logical.Table
+decodeLogical :: Schema.Table -> ByteString -> Either TextLogicalDecodeError Logical.Table
 decodeLogical schema bs =
   case schema of
     Schema.Binary ->

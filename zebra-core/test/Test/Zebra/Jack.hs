@@ -94,7 +94,6 @@ import           Zebra.Factset.Fact
 
 import           Zebra.Serial.Binary.Data
 import qualified Zebra.Table.Logical as Logical
-import           Zebra.Table.Schema (TableSchema, ColumnSchema)
 import           Zebra.Table.Schema (Variant(..), VariantName(..), Field(..), FieldName(..), Tag)
 import qualified Zebra.Table.Schema as Schema
 import qualified Zebra.Table.Striped as Striped
@@ -121,7 +120,7 @@ jVariantName =
 
 ------------------------------------------------------------------------
 
-tableSchemaTables :: TableSchema -> [TableSchema]
+tableSchemaTables :: Schema.Table -> [Schema.Table]
 tableSchemaTables = \case
   Schema.Binary ->
     []
@@ -131,7 +130,7 @@ tableSchemaTables = \case
     columnSchemaTables k <>
     columnSchemaTables v
 
-tableSchemaColumns :: TableSchema -> [ColumnSchema]
+tableSchemaColumns :: Schema.Table -> [Schema.Column]
 tableSchemaColumns = \case
   Schema.Binary ->
     []
@@ -140,7 +139,7 @@ tableSchemaColumns = \case
   Schema.Map k v ->
     [k, v]
 
-columnSchemaTables :: ColumnSchema -> [TableSchema]
+columnSchemaTables :: Schema.Column -> [Schema.Table]
 columnSchemaTables = \case
   Schema.Unit ->
     []
@@ -159,7 +158,7 @@ columnSchemaTables = \case
   Schema.Reversed schema ->
     columnSchemaTables schema
 
-columnSchemaColumns :: ColumnSchema -> [ColumnSchema]
+columnSchemaColumns :: Schema.Column -> [Schema.Column]
 columnSchemaColumns = \case
   Schema.Unit ->
     []
@@ -176,7 +175,7 @@ columnSchemaColumns = \case
   Schema.Reversed schema ->
     [schema]
 
-jTableSchema :: Jack TableSchema
+jTableSchema :: Jack Schema.Table
 jTableSchema =
   reshrink tableSchemaTables $
   oneOfRec [
@@ -186,11 +185,11 @@ jTableSchema =
     , jMapSchema
     ]
 
-jMapSchema :: Jack TableSchema
+jMapSchema :: Jack Schema.Table
 jMapSchema =
   Schema.Map <$> jColumnSchema <*> jColumnSchema
 
-jColumnSchema :: Jack ColumnSchema
+jColumnSchema :: Jack Schema.Column
 jColumnSchema =
   reshrink columnSchemaColumns $
   oneOfRec [
@@ -344,13 +343,13 @@ jStripedReversed n =
 
 ------------------------------------------------------------------------
 
-jFacts :: [ColumnSchema] -> Jack [Fact]
+jFacts :: [Schema.Column] -> Jack [Fact]
 jFacts schemas =
   fmap (List.sort . List.concat) .
   scale (`div` max 1 (length schemas)) $
   zipWithM (\e a -> listOf $ jFact e a) schemas (fmap AttributeId [0..])
 
-jFact :: ColumnSchema -> AttributeId -> Jack Fact
+jFact :: Schema.Column -> AttributeId -> Jack Fact
 jFact schema aid =
   uncurry Fact
     <$> jEntityHashId
@@ -359,12 +358,12 @@ jFact schema aid =
     <*> jFactsetId
     <*> (strictMaybe <$> maybeOf (jLogicalValue schema))
 
-jSizedLogical :: TableSchema -> Jack Logical.Table
+jSizedLogical :: Schema.Table -> Jack Logical.Table
 jSizedLogical schema =
   sized $ \size ->
     jLogical schema =<< chooseInt (0, size `div` 5)
 
-jLogical :: TableSchema -> Int -> Jack Logical.Table
+jLogical :: Schema.Table -> Int -> Jack Logical.Table
 jLogical tschema n =
   case tschema of
     Schema.Binary ->
@@ -374,7 +373,7 @@ jLogical tschema n =
     Schema.Map k v ->
       Logical.Map . Map.fromList <$> vectorOf n (jMapping k v)
 
-jMapping :: ColumnSchema -> ColumnSchema -> Jack (Logical.Value, Logical.Value)
+jMapping :: Schema.Column -> Schema.Column -> Jack (Logical.Value, Logical.Value)
 jMapping k v =
   (,) <$> jLogicalValue k <*> jLogicalValue v
 
@@ -382,7 +381,7 @@ jTag :: Cons Boxed.Vector (Variant a) -> Jack Tag
 jTag xs =
   fromIntegral <$> choose (0, Cons.length xs - 1)
 
-jLogicalValue :: ColumnSchema -> Jack Logical.Value
+jLogicalValue :: Schema.Column -> Jack Logical.Value
 jLogicalValue = \case
   Schema.Unit ->
     pure Logical.Unit

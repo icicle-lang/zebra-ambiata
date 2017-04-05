@@ -58,7 +58,6 @@ import           Zebra.Factset.Table
 import           Zebra.Serial.Binary.Array
 import           Zebra.Serial.Binary.Data
 import           Zebra.Serial.Binary.Striped
-import           Zebra.Table.Schema (TableSchema, ColumnSchema)
 import qualified Zebra.Table.Schema as Schema
 import qualified Zebra.Table.Striped as Striped
 
@@ -101,7 +100,7 @@ bBlockV3 attributes block = do
   table <- tableOfBlock attributes block
   pure $ bRootTableV3 table
 
-getBlockV3 :: TableSchema -> Get Block
+getBlockV3 :: Schema.Table -> Get Block
 getBlockV3 schema = do
   table <- getRootTableV3 schema
   case blockOfTable table of
@@ -115,7 +114,7 @@ bRootTableV3 table =
   Builder.word32LE (fromIntegral $ Striped.length table) <>
   bTable BinaryV3 table
 
-getRootTableV3 :: TableSchema -> Get Striped.Table
+getRootTableV3 :: Schema.Table -> Get Striped.Table
 getRootTableV3 schema = do
   n <- fromIntegral <$> Get.getWord32le
   getTable BinaryV3 n schema
@@ -128,7 +127,7 @@ bBlockV2 block =
   bIndices (blockIndices block) <>
   bTables (blockTables block)
 
-getBlockV2 :: Map AttributeName ColumnSchema -> Get Block
+getBlockV2 :: Map AttributeName Schema.Column -> Get Block
 getBlockV2 schemas = do
   entities <- getEntities
   indices <- getIndices
@@ -140,7 +139,7 @@ bRootTableV2 :: Striped.Table -> Either BlockTableError Builder
 bRootTableV2 =
   fmap bBlockV2 . blockOfTable
 
-getRootTableV2 :: Map AttributeName ColumnSchema -> Get Striped.Table
+getRootTableV2 :: Map AttributeName Schema.Column -> Get Striped.Table
 getRootTableV2 schemas = do
   block <- getBlockV2 schemas
   case tableOfBlock (Boxed.fromList $ Map.keys schemas) block of
@@ -379,7 +378,7 @@ bTables xs =
     bIntArray counts <>
     foldMap (bTable BinaryV2) xs
 
-getTables :: Boxed.Vector ColumnSchema -> Get (Boxed.Vector Striped.Table)
+getTables :: Boxed.Vector Schema.Column -> Get (Boxed.Vector Striped.Table)
 getTables schemas = do
   tcount <- fromIntegral <$> Get.getWord32le
   ids <- fmap fromIntegral . Boxed.convert <$> getIntArray tcount

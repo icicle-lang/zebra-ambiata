@@ -17,9 +17,10 @@ import qualified Data.Text as Text
 
 import           P
 
-import           Zebra.Serial.Json.Util
 import           Zebra.Serial.Json.Schema (SchemaVersion(..), pTableSchemaV0, ppTableSchema)
-import           Zebra.Table.Schema
+import           Zebra.Serial.Json.Util
+import           Zebra.Table.Schema (Field(..))
+import qualified Zebra.Table.Schema as Schema
 
 
 data TextVersion =
@@ -35,15 +36,15 @@ renderTextSchemaDecodeError = \case
   TextSchemaDecodeError err ->
     renderJsonDecodeError err
 
-encodeSchema :: TextVersion -> TableSchema -> ByteString
+encodeSchema :: TextVersion -> Schema.Table -> ByteString
 encodeSchema version schema =
   encodeJsonIndented ["version", "key", "name"] (ppVersionedSchema version schema) <> "\n"
 
-decodeSchema :: ByteString -> Either TextSchemaDecodeError TableSchema
+decodeSchema :: ByteString -> Either TextSchemaDecodeError Schema.Table
 decodeSchema =
   first TextSchemaDecodeError . decodeJson pVersionedSchema
 
-pVersionedSchema :: Aeson.Value -> Aeson.Parser TableSchema
+pVersionedSchema :: Aeson.Value -> Aeson.Parser Schema.Table
 pVersionedSchema =
   Aeson.withObject "object containing versioned schema" $ \o -> do
     version <- withStructField "version" o pVersion
@@ -51,7 +52,7 @@ pVersionedSchema =
       TextV0 ->
         withStructField "schema" o pTableSchemaV0
 
-ppVersionedSchema :: TextVersion -> TableSchema -> Aeson.Value
+ppVersionedSchema :: TextVersion -> Schema.Table -> Aeson.Value
 ppVersionedSchema version schema =
   ppStruct [
       Field "version" $

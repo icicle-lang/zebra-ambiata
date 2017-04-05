@@ -46,7 +46,7 @@ import           Zebra.Factset.Fact (Fact(..), FactConversionError)
 import qualified Zebra.Factset.Fact as Fact
 import           Zebra.Table.Logical (LogicalSchemaError)
 import qualified Zebra.Table.Logical as Logical
-import           Zebra.Table.Schema (ColumnSchema)
+import qualified Zebra.Table.Schema as Schema
 import           Zebra.Table.Striped (StripedError)
 import qualified Zebra.Table.Striped as Striped
 
@@ -72,7 +72,7 @@ data FactError =
   | FactLeftoverValues !(Boxed.Vector (Boxed.Vector Logical.Value))
     deriving (Eq, Ord, Show, Generic, Typeable)
 
-blockOfFacts :: Boxed.Vector ColumnSchema -> Boxed.Vector Fact -> Either FactError Block
+blockOfFacts :: Boxed.Vector Schema.Column -> Boxed.Vector Fact -> Either FactError Block
 blockOfFacts schemas facts =
   first FactConversionError $
     Block (entitiesOfFacts facts) (indicesOfFacts facts) <$> Fact.toValueTable schemas facts

@@ -10,8 +10,8 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# OPTIONS_GHC -funbox-strict-fields #-}
 module Zebra.Table.Schema (
-    TableSchema(..)
-  , ColumnSchema(..)
+    Table(..)
+  , Column(..)
   , Field(..)
   , FieldName(..)
   , Variant(..)
@@ -122,34 +122,34 @@ instance Show Tag where
   showsPrec =
     gshowsPrec
 
-data TableSchema =
+data Table =
     Binary
-  | Array !ColumnSchema
-  | Map !ColumnSchema !ColumnSchema
+  | Array !Column
+  | Map !Column !Column
     deriving (Eq, Ord, Show, Generic, Typeable)
 
-data ColumnSchema =
+data Column =
     Unit
   | Int
   | Double
-  | Enum !(Cons Boxed.Vector (Variant ColumnSchema))
-  | Struct !(Cons Boxed.Vector (Field ColumnSchema))
-  | Nested !TableSchema
-  | Reversed !ColumnSchema
+  | Enum !(Cons Boxed.Vector (Variant Column))
+  | Struct !(Cons Boxed.Vector (Field Column))
+  | Nested !Table
+  | Reversed !Column
     deriving (Eq, Ord, Show, Generic, Typeable)
 
 data SchemaError =
-    SchemaExpectedBinary !TableSchema
-  | SchemaExpectedArray !TableSchema
-  | SchemaExpectedMap !TableSchema
-  | SchemaExpectedInt !ColumnSchema
-  | SchemaExpectedDouble !ColumnSchema
-  | SchemaExpectedEnum !ColumnSchema
-  | SchemaExpectedStruct !ColumnSchema
-  | SchemaExpectedNested !ColumnSchema
-  | SchemaExpectedReversed !ColumnSchema
+    SchemaExpectedBinary !Table
+  | SchemaExpectedArray !Table
+  | SchemaExpectedMap !Table
+  | SchemaExpectedInt !Column
+  | SchemaExpectedDouble !Column
+  | SchemaExpectedEnum !Column
+  | SchemaExpectedStruct !Column
+  | SchemaExpectedNested !Column
+  | SchemaExpectedReversed !Column
   -- FIXME Should non-primitive types really be here? /not sure
-  | SchemaExpectedOption !(Cons Boxed.Vector (Variant ColumnSchema))
+  | SchemaExpectedOption !(Cons Boxed.Vector (Variant Column))
     deriving (Eq, Ord, Show, Generic, Typeable)
 
 renderSchemaError :: SchemaError -> Text
@@ -198,33 +198,33 @@ lookupVariant tag xs =
 
 ------------------------------------------------------------------------
 
-false :: Variant ColumnSchema
+false :: Variant Column
 false =
   Variant (VariantName "false") Unit
 
-true :: Variant ColumnSchema
+true :: Variant Column
 true =
   Variant (VariantName "true") Unit
 
-bool :: ColumnSchema
+bool :: Column
 bool =
   Enum $ Cons.from2 false true
 
-none :: Variant ColumnSchema
+none :: Variant Column
 none =
   Variant (VariantName "none") Unit
 
-some :: ColumnSchema -> Variant ColumnSchema
+some :: Column -> Variant Column
 some =
   Variant (VariantName "some")
 
-option :: ColumnSchema -> ColumnSchema
+option :: Column -> Column
 option =
   Enum . Cons.from2 none . some
 
 ------------------------------------------------------------------------
 
-takeBinary :: TableSchema -> Either SchemaError ()
+takeBinary :: Table -> Either SchemaError ()
 takeBinary = \case
   Binary ->
     Right ()
@@ -232,7 +232,7 @@ takeBinary = \case
     Left $ SchemaExpectedBinary x
 {-# INLINE takeBinary #-}
 
-takeArray :: TableSchema -> Either SchemaError ColumnSchema
+takeArray :: Table -> Either SchemaError Column
 takeArray = \case
   Array x ->
     Right x
@@ -240,7 +240,7 @@ takeArray = \case
     Left $ SchemaExpectedArray x
 {-# INLINE takeArray #-}
 
-takeMap :: TableSchema -> Either SchemaError (ColumnSchema, ColumnSchema)
+takeMap :: Table -> Either SchemaError (Column, Column)
 takeMap = \case
   Map k v ->
     Right (k, v)
@@ -248,7 +248,7 @@ takeMap = \case
     Left $ SchemaExpectedMap x
 {-# INLINE takeMap #-}
 
-takeInt :: ColumnSchema -> Either SchemaError ()
+takeInt :: Column -> Either SchemaError ()
 takeInt = \case
   Int ->
     Right ()
@@ -256,7 +256,7 @@ takeInt = \case
     Left $ SchemaExpectedInt x
 {-# INLINE takeInt #-}
 
-takeDouble :: ColumnSchema -> Either SchemaError ()
+takeDouble :: Column -> Either SchemaError ()
 takeDouble = \case
   Double ->
     Right ()
@@ -264,7 +264,7 @@ takeDouble = \case
     Left $ SchemaExpectedDouble x
 {-# INLINE takeDouble #-}
 
-takeEnum :: ColumnSchema -> Either SchemaError (Cons Boxed.Vector (Variant ColumnSchema))
+takeEnum :: Column -> Either SchemaError (Cons Boxed.Vector (Variant Column))
 takeEnum = \case
   Enum x ->
     Right x
@@ -272,7 +272,7 @@ takeEnum = \case
     Left $ SchemaExpectedEnum x
 {-# INLINE takeEnum #-}
 
-takeStruct :: ColumnSchema -> Either SchemaError (Cons Boxed.Vector (Field ColumnSchema))
+takeStruct :: Column -> Either SchemaError (Cons Boxed.Vector (Field Column))
 takeStruct = \case
   Struct x ->
     Right x
@@ -280,7 +280,7 @@ takeStruct = \case
     Left $ SchemaExpectedStruct x
 {-# INLINE takeStruct #-}
 
-takeNested :: ColumnSchema -> Either SchemaError TableSchema
+takeNested :: Column -> Either SchemaError Table
 takeNested = \case
   Nested x ->
     Right x
@@ -288,7 +288,7 @@ takeNested = \case
     Left $ SchemaExpectedNested x
 {-# INLINE takeNested #-}
 
-takeReversed :: ColumnSchema -> Either SchemaError ColumnSchema
+takeReversed :: Column -> Either SchemaError Column
 takeReversed = \case
   Reversed x ->
     Right x
@@ -298,7 +298,7 @@ takeReversed = \case
 
 ------------------------------------------------------------------------
 
-takeOption :: ColumnSchema -> Either SchemaError ColumnSchema
+takeOption :: Column -> Either SchemaError Column
 takeOption x0 = do
   vs <- takeEnum x0
   case Cons.toList vs of
