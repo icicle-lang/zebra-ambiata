@@ -61,10 +61,11 @@ import           P hiding (some, length)
 
 import           Text.Show.Pretty (ppShow)
 
+import           X.Data.Vector.Cons (Cons)
+import qualified X.Data.Vector.Cons as Cons
+
 import           Zebra.Table.Data
 import qualified Zebra.Table.Schema as Schema
-import           Zebra.X.Vector.Cons (Cons)
-import qualified Zebra.X.Vector.Cons as Cons
 
 
 data Table =

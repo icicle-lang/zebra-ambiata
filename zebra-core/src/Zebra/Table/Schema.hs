@@ -43,10 +43,10 @@ import           P hiding (bool, some)
 import           Text.Show.Pretty (ppShow)
 
 import qualified X.Data.Vector as Boxed
+import           X.Data.Vector.Cons (Cons)
+import qualified X.Data.Vector.Cons as Cons
 
 import           Zebra.Table.Data
-import           Zebra.X.Vector.Cons (Cons)
-import qualified Zebra.X.Vector.Cons as Cons
 
 
 data Table =

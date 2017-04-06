@@ -27,6 +27,8 @@ import           System.IO (FilePath, IOMode(..))
 import qualified System.IO as IO
 
 import           X.Control.Monad.Trans.Either (EitherT, runEitherT, hoistEither)
+import           X.Data.Vector.Cons (Cons)
+import qualified X.Data.Vector.Cons as Cons
 import           X.Data.Vector.Ref (Ref)
 import qualified X.Data.Vector.Ref as Ref
 import           X.Data.Vector.Stream (Stream(..), SPEC(..))
@@ -42,8 +44,6 @@ import           Zebra.Table.Schema (SchemaError)
 import qualified Zebra.Table.Schema as Schema
 import           Zebra.Table.Striped (StripedError)
 import qualified Zebra.Table.Striped as Striped
-import           Zebra.X.Vector.Cons (Cons)
-import qualified Zebra.X.Vector.Cons as Cons
 
 data UnionTableError =
     UnionFileError !FileError

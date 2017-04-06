@@ -34,12 +34,13 @@ import qualified Data.Vector as Boxed
 
 import           P
 
+import           X.Data.Vector.Cons (Cons)
+import qualified X.Data.Vector.Cons as Cons
+
 import           Zebra.Serial.Json.Util
 import           Zebra.Table.Data
 import qualified Zebra.Table.Logical as Logical
 import qualified Zebra.Table.Schema as Schema
-import           Zebra.X.Vector.Cons (Cons)
-import qualified Zebra.X.Vector.Cons as Cons
 
 
 data JsonLogicalEncodeError =

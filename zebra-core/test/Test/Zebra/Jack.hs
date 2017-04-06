@@ -87,18 +87,18 @@ import           Test.QuickCheck.Instances ()
 import           Text.Printf (printf)
 import           Text.Show.Pretty (ppShow)
 
+import           X.Data.Vector.Cons (Cons)
+import qualified X.Data.Vector.Cons as Cons
+
 import           Zebra.Factset.Block
 import           Zebra.Factset.Data
 import           Zebra.Factset.Entity
 import           Zebra.Factset.Fact
-
 import           Zebra.Serial.Binary.Data
 import           Zebra.Table.Data
 import qualified Zebra.Table.Logical as Logical
 import qualified Zebra.Table.Schema as Schema
 import qualified Zebra.Table.Striped as Striped
-import           Zebra.X.Vector.Cons (Cons)
-import qualified Zebra.X.Vector.Cons as Cons
 
 ------------------------------------------------------------------------
 

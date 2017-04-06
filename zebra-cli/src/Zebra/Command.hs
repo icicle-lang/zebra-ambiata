@@ -36,6 +36,7 @@ import           Text.Show.Pretty (ppShow)
 
 import           X.Control.Monad.Trans.Either (EitherT, joinEitherT, hoistEither)
 import qualified X.Data.Vector as Boxed
+import qualified X.Data.Vector.Cons as Cons
 import qualified X.Data.Vector.Storable as Storable
 import qualified X.Data.Vector.Stream as Stream
 import qualified X.Data.Vector.Unboxed as Unboxed
@@ -54,7 +55,6 @@ import           Zebra.Serial.Binary (BinaryVersion(..))
 import qualified Zebra.Serial.Binary as Binary
 import qualified Zebra.Serial.Binary.File as Binary
 import qualified Zebra.Table.Schema as Schema
-import qualified Zebra.X.Vector.Cons as Cons
 
 
 data CatOptions =
