@@ -413,9 +413,9 @@ fromValues cschema values =
             <$> fromValues rschema xss
 
 fromEnum ::
-  Cons Boxed.Vector (Variant Schema.Column) ->
-  Boxed.Vector (Tag, Logical.Value) ->
-  Either StripedError (Cons Boxed.Vector (Variant Column))
+     Cons Boxed.Vector (Variant Schema.Column)
+  -> Boxed.Vector (Tag, Logical.Value)
+  -> Either StripedError (Cons Boxed.Vector (Variant Column))
 fromEnum variants txs =
   forVariant variants $ \tag _ cschema ->
     fromValues cschema $

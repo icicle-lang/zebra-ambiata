@@ -119,11 +119,11 @@ concatFor xs body =
   fmap (Boxed.concatMap id) $ for xs body
 
 takeFacts ::
-  EntityHash ->
-  EntityId ->
-  AttributeId ->
-  Int ->
-  EitherT FactError (State ValueState) (Boxed.Vector Fact)
+     EntityHash
+  -> EntityId
+  -> AttributeId
+  -> Int
+  -> EitherT FactError (State ValueState) (Boxed.Vector Fact)
 takeFacts ehash eid aid nfacts = do
   ixs <- Boxed.convert <$> takeIndices nfacts
   vs <- takeValues aid nfacts
@@ -219,10 +219,10 @@ rowsOfEntity (BlockEntity _ _ attrs) =
   fromIntegral . Unboxed.sum $ Unboxed.map attributeRows attrs
 
 fromBlockEntity ::
-  PrimMonad m =>
-  MBoxed.MVector (PrimState m) Striped.Table ->
-  IndexedEntity ->
-  EitherT EntityError m Entity
+     PrimMonad m
+  => MBoxed.MVector (PrimState m) Striped.Table
+  -> IndexedEntity
+  -> EitherT EntityError m Entity
 fromBlockEntity mtables (IndexedEntity (BlockEntity hash eid battrs) indices) = do
   mindices <- newRef indices
   let battrs' = denseBlockAttributes (MBoxed.length mtables) battrs
@@ -230,9 +230,9 @@ fromBlockEntity mtables (IndexedEntity (BlockEntity hash eid battrs) indices) = 
   pure $ Entity hash eid attrs
 
 denseBlockAttributes ::
-  Int ->
-  Unboxed.Vector BlockAttribute ->
-  Unboxed.Vector BlockAttribute
+     Int
+  -> Unboxed.Vector BlockAttribute
+  -> Unboxed.Vector BlockAttribute
 denseBlockAttributes num blockAttributes =
   Unboxed.mapAccumulate go blockAttributes $ Unboxed.enumFromN 0 num
  where
@@ -244,11 +244,11 @@ denseBlockAttributes num blockAttributes =
    = (battrs, BlockAttribute (AttributeId ix) 0)
 
 fromBlockAttribute ::
-  PrimMonad m =>
-  Ref MBoxed.MVector (PrimState m) (Unboxed.Vector BlockIndex) ->
-  MBoxed.MVector (PrimState m) Striped.Table ->
-  BlockAttribute ->
-  EitherT EntityError m Attribute
+     PrimMonad m
+  => Ref MBoxed.MVector (PrimState m) (Unboxed.Vector BlockIndex)
+  -> MBoxed.MVector (PrimState m) Striped.Table
+  -> BlockAttribute
+  -> EitherT EntityError m Attribute
 fromBlockAttribute mindices mtables (BlockAttribute aid n) = do
   indices <- takeIndexRows mindices $ fromIntegral n
   table <- takeTableRows mtables aid $ fromIntegral n
@@ -260,10 +260,10 @@ fromBlockAttribute mindices mtables (BlockAttribute aid n) = do
     table
 
 takeIndexRows ::
-  PrimMonad m =>
-  Ref MBoxed.MVector (PrimState m) (Unboxed.Vector BlockIndex) ->
-  Int ->
-  m (Unboxed.Vector BlockIndex)
+     PrimMonad m
+  => Ref MBoxed.MVector (PrimState m) (Unboxed.Vector BlockIndex)
+  -> Int
+  -> m (Unboxed.Vector BlockIndex)
 takeIndexRows ref n = do
   indices <- readRef ref
 
@@ -275,11 +275,11 @@ takeIndexRows ref n = do
   pure indices1
 
 takeTableRows ::
-  PrimMonad m =>
-  MBoxed.MVector (PrimState m) Striped.Table ->
-  AttributeId ->
-  Int ->
-  EitherT EntityError m Striped.Table
+     PrimMonad m
+  => MBoxed.MVector (PrimState m) Striped.Table
+  -> AttributeId
+  -> Int
+  -> EitherT EntityError m Striped.Table
 takeTableRows attrs aid@(AttributeId aix0) n =
   let
     aix =

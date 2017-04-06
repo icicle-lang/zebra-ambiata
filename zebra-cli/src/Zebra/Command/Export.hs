@@ -78,11 +78,11 @@ zebraExport export = do
       firstT ExportFileError close
 
 writeText ::
-  MonadResource m =>
-  FilePath ->
-  Handle ->
-  Stream (EitherT FileError m) Striped.Table ->
-  EitherT ExportError m ()
+     MonadResource m
+  => FilePath
+  -> Handle
+  -> Stream (EitherT FileError m) Striped.Table
+  -> EitherT ExportError m ()
 writeText path handle tables =
   joinEitherT id .
     firstT ExportFileError .

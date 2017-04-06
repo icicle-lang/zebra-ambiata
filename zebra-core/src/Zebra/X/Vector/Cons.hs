@@ -15,7 +15,8 @@ module Zebra.X.Vector.Cons (
 
   , length
   , index
-  , focus
+  , take
+  , drop
 
   , map
   , mapMaybe
@@ -117,15 +118,6 @@ drop n (Cons xs) =
   Generic.drop n xs
 {-# INLINE drop #-}
 
-focus :: Generic.Vector v a => Int -> Cons v a -> Maybe (v a, a, v a)
-focus i xs =
-  case index i xs of
-    Nothing ->
-      Nothing
-    Just x ->
-      Just (take i xs, x, drop i xs)
-{-# INLINE focus #-}
-
 map :: (Generic.Vector v a, Generic.Vector v b) => (a -> b) -> Cons v a -> Cons v b
 map f (Cons xs) =
   Cons $ Generic.map f xs
@@ -142,43 +134,43 @@ mapMaybe f (Cons xs) =
 {-# INLINE mapMaybe #-}
 
 imap ::
-  Generic.Vector v a =>
-  Generic.Vector v b =>
-  (Int -> a -> b) ->
-  Cons v a ->
-  Cons v b
+     Generic.Vector v a
+  => Generic.Vector v b
+  => (Int -> a -> b)
+  -> Cons v a
+  -> Cons v b
 imap f (Cons xs) =
   Cons $ Generic.imap (\i -> f i) xs
 {-# INLINE imap #-}
 
 imapM ::
-  Monad m =>
-  Generic.Vector v a =>
-  Generic.Vector v b =>
-  (Int -> a -> m b) ->
-  Cons v a ->
-  m (Cons v b)
+     Monad m
+  => Generic.Vector v a
+  => Generic.Vector v b
+  => (Int -> a -> m b)
+  -> Cons v a
+  -> m (Cons v b)
 imapM f (Cons xs) =
   Cons <$> Generic.imapM (\i -> f i) xs
 {-# INLINE imapM #-}
 
 ifor ::
-  Generic.Vector v a =>
-  Generic.Vector v b =>
-  Cons v a ->
-  (Int -> a -> b) ->
-  Cons v b
+     Generic.Vector v a
+  => Generic.Vector v b
+  => Cons v a
+  -> (Int -> a -> b)
+  -> Cons v b
 ifor =
   flip imap
 {-# INLINE ifor #-}
 
 iforM ::
-  Monad m =>
-  Generic.Vector v a =>
-  Generic.Vector v b =>
-  Cons v a ->
-  (Int -> a -> m b) ->
-  m (Cons v b)
+     Monad m
+  => Generic.Vector v a
+  => Generic.Vector v b
+  => Cons v a
+  -> (Int -> a -> m b)
+  -> m (Cons v b)
 iforM =
   flip imapM
 {-# INLINE iforM #-}
@@ -189,50 +181,50 @@ concatMap f (Cons xs) =
 {-# INLINE concatMap #-}
 
 zipWith ::
-  Generic.Vector v a =>
-  Generic.Vector v b =>
-  Generic.Vector v c =>
-  (a -> b -> c) ->
-  Cons v a ->
-  Cons v b ->
-  Cons v c
+     Generic.Vector v a
+  => Generic.Vector v b
+  => Generic.Vector v c
+  => (a -> b -> c)
+  -> Cons v a
+  -> Cons v b
+  -> Cons v c
 zipWith f (Cons xs) (Cons ys) =
   Cons $
     Generic.zipWith f xs ys
 {-# INLINE zipWith #-}
 
 zipWithM ::
-  Monad m =>
-  Generic.Vector v a =>
-  Generic.Vector v b =>
-  Generic.Vector v c =>
-  (a -> b -> m c) ->
-  Cons v a ->
-  Cons v b ->
-  m (Cons v c)
+     Monad m
+  => Generic.Vector v a
+  => Generic.Vector v b
+  => Generic.Vector v c
+  => (a -> b -> m c)
+  -> Cons v a
+  -> Cons v b
+  -> m (Cons v c)
 zipWithM f (Cons xs) (Cons ys) =
   fmap Cons $
     Generic.zipWithM f xs ys
 {-# INLINE zipWithM #-}
 
 unzip ::
-  Generic.Vector v (a, b) =>
-  Generic.Vector v a =>
-  Generic.Vector v b =>
-  Cons v (a, b) ->
-  (Cons v a, Cons v b)
+     Generic.Vector v (a, b)
+  => Generic.Vector v a
+  => Generic.Vector v b
+  => Cons v (a, b)
+  -> (Cons v a, Cons v b)
 unzip (Cons xys) =
   bimap Cons Cons $
     Generic.unzip xys
 {-# INLINE unzip #-}
 
 unzip3 ::
-  Generic.Vector v (a, b, c) =>
-  Generic.Vector v a =>
-  Generic.Vector v b =>
-  Generic.Vector v c =>
-  Cons v (a, b, c) ->
-  (Cons v a, Cons v b, Cons v c)
+     Generic.Vector v (a, b, c)
+  => Generic.Vector v a
+  => Generic.Vector v b
+  => Generic.Vector v c
+  => Cons v (a, b, c)
+  -> (Cons v a, Cons v b, Cons v c)
 unzip3 (Cons xyzs) =
   case Generic.unzip3 xyzs of
     (x, y, z) ->
@@ -270,11 +262,11 @@ maximum (Cons xs) =
 {-# INLINE maximum #-}
 
 transpose ::
-  Generic.Vector va a =>
-  Generic.Vector vv (va a) =>
-  Generic.Vector vv (Cons va a) =>
-  Cons vv (Cons va a) ->
-  Cons vv (Cons va a)
+     Generic.Vector va a
+  => Generic.Vector vv (va a)
+  => Generic.Vector vv (Cons va a)
+  => Cons vv (Cons va a)
+  -> Cons vv (Cons va a)
 transpose =
   map unsafeFromVector .
   unsafeFromVector .
@@ -284,11 +276,11 @@ transpose =
 {-# INLINE transpose #-}
 
 transposeCV ::
-  Generic.Vector va a =>
-  Generic.Vector vv (va a) =>
-  Generic.Vector vv (Cons va a) =>
-  Cons vv (va a) ->
-  vv (Cons va a)
+     Generic.Vector va a
+  => Generic.Vector vv (va a)
+  => Generic.Vector vv (Cons va a)
+  => Cons vv (va a)
+  -> vv (Cons va a)
 transposeCV =
   Generic.map unsafeFromVector .
   Generic.transpose .
@@ -296,11 +288,11 @@ transposeCV =
 {-# INLINE transposeCV #-}
 
 transposeVC ::
-  Generic.Vector va a =>
-  Generic.Vector vv (va a) =>
-  Generic.Vector vv (Cons va a) =>
-  vv (Cons va a) ->
-  Cons vv (va a)
+     Generic.Vector va a
+  => Generic.Vector vv (va a)
+  => Generic.Vector vv (Cons va a)
+  => vv (Cons va a)
+  -> Cons vv (va a)
 transposeVC =
   unsafeFromVector .
   Generic.transpose .
