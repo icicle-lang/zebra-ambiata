@@ -18,15 +18,15 @@ import           P hiding (concatMap, length, sum)
 
 -- | Run-length encode a segmented vector.
 segmentedGroup ::
-  Eq a =>
-  Vector v a =>
-  Vector v Int =>
-  Vector v (Int, a) =>
-  Vector v (Int, (Int, a)) =>
-  Vector v (Int, Int) =>
-  v Int ->
-  v a ->
-  (v Int, v (Int, a))
+     Eq a
+  => Vector v a
+  => Vector v Int
+  => Vector v (Int, a)
+  => Vector v (Int, (Int, a))
+  => Vector v (Int, Int)
+  => v Int
+  -> v a
+  -> (v Int, v (Int, a))
 segmentedGroup ns xs =
   let
     indices =

@@ -110,9 +110,9 @@ zebraUnion inputs output =
     Merge.unionFile (Cons.fromNonEmpty inputs) output
 
 withPrintPusher ::
-  MonadResource m =>
-  ((Foreign.CEntity -> EitherT Text m ()) -> EitherT Text m ()) ->
-  EitherT Text m ()
+     MonadResource m
+  => ((Foreign.CEntity -> EitherT Text m ()) -> EitherT Text m ())
+  -> EitherT Text m ()
 withPrintPusher runWith = do
   let pusher e = do
       eid     <- firstTshow $ Foreign.peekEntityId $ Foreign.unCEntity e
@@ -121,12 +121,12 @@ withPrintPusher runWith = do
   runWith pusher
 
 withOutputPusher ::
-  MonadResource m =>
-  MergeOptions ->
-  FilePath ->
-  FilePath ->
-  ((Foreign.CEntity -> EitherT Text m ()) -> EitherT Text m ()) ->
-  EitherT Text m ()
+     MonadResource m
+  => MergeOptions
+  -> FilePath
+  -> FilePath
+  -> ((Foreign.CEntity -> EitherT Text m ()) -> EitherT Text m ())
+  -> EitherT Text m ()
 withOutputPusher opts inputfile outputfile runWith = do
   (header0, _) <- firstT Binary.renderFileError $ Binary.readBlocks inputfile
   attributes <- firstT Block.renderBlockTableError . hoistEither $ Binary.attributesOfHeader header0

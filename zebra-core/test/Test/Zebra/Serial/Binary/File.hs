@@ -52,15 +52,15 @@ checkDecodeGetOne get bss =
     first (const ()) expect === first (const ()) actual
 
 getExpect ::
-  Either x (BL.ByteString, o, a) ->
-  Either x (B.ByteString, a)
+     Either x (BL.ByteString, o, a)
+  -> Either x (B.ByteString, a)
 getExpect m = do
   (leftovers, _, val) <- m
   pure (BL.toStrict leftovers, val)
 
 getActual ::
-  Either FileError (a, Stream.Stream (EitherT FileError Stream.Id) B.ByteString) ->
-  Either FileError (B.ByteString, a)
+     Either FileError (a, Stream.Stream (EitherT FileError Stream.Id) B.ByteString)
+  -> Either FileError (B.ByteString, a)
 getActual m = do
   (val, leftovers) <- m
   fmap ((, val) . fold) . Stream.unId . runEitherT $

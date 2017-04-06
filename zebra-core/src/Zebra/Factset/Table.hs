@@ -125,11 +125,11 @@ takeRowCounts aid =
 {-# INLINE takeRowCounts #-}
 
 distributeIndices ::
-  (Unboxed.Vector BlockIndex -> Unboxed.Vector Int64 -> Striped.Column -> a) ->
-  Boxed.Vector BlockEntity ->
-  Unboxed.Vector BlockIndex ->
-  Cons Boxed.Vector (Field Striped.Column) ->
-  Cons Boxed.Vector (Field a)
+     (Unboxed.Vector BlockIndex -> Unboxed.Vector Int64 -> Striped.Column -> a)
+  -> Boxed.Vector BlockEntity
+  -> Unboxed.Vector BlockIndex
+  -> Cons Boxed.Vector (Field Striped.Column)
+  -> Cons Boxed.Vector (Field a)
 distributeIndices done0 entities indices columns =
   Cons.ifor columns $ \needle0 field0 ->
     let
@@ -190,9 +190,9 @@ attributeTable indices0 counts values =
       (Striped.Map key (nested value))
 
 blockAttributes ::
-  Boxed.Vector AttributeName ->
-  Block ->
-  Either BlockTableError (Maybe (Cons Boxed.Vector (Field Striped.Column)))
+     Boxed.Vector AttributeName
+  -> Block
+  -> Either BlockTableError (Maybe (Cons Boxed.Vector (Field Striped.Column)))
 blockAttributes names block = do
   let
     tables =

@@ -43,31 +43,31 @@ liftE =
   lift
 
 trippingIO ::
-  Eq a =>
-  Eq x =>
-  Eq y =>
-  Show a =>
-  Show x =>
-  Show y =>
-  (a -> EitherT x IO b) ->
-  (b -> EitherT y IO a) ->
-  a ->
-  IO Property
+     Eq a
+  => Eq x
+  => Eq y
+  => Show a
+  => Show x
+  => Show y
+  => (a -> EitherT x IO b)
+  -> (b -> EitherT y IO a)
+  -> a
+  -> IO Property
 trippingIO =
   trippingByIO id
 
 trippingByIO ::
-  Eq c =>
-  Eq x =>
-  Eq y =>
-  Show c =>
-  Show x =>
-  Show y =>
-  (a -> c) ->
-  (a -> EitherT x IO b) ->
-  (b -> EitherT y IO a) ->
-  a ->
-  IO Property
+     Eq c
+  => Eq x
+  => Eq y
+  => Show c
+  => Show x
+  => Show y
+  => (a -> c)
+  -> (a -> EitherT x IO b)
+  -> (b -> EitherT y IO a)
+  -> a
+  -> IO Property
 trippingByIO select to from a = do
   roundtrip <-
     runEitherT $ do

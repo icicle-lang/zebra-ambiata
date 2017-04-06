@@ -1,5 +1,4 @@
 {-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DoAndIfThenElse #-}
 {-# LANGUAGE LambdaCase #-}
@@ -108,11 +107,11 @@ readBytes path = do
   pure . Stream (stepReadChunk path close) $ Just handle
 
 stepReadChunk ::
-  MonadIO m =>
-  FilePath ->
-  EitherT FileError m () ->
-  Maybe Handle ->
-  EitherT FileError m (Step (Maybe Handle) ByteString)
+     MonadIO m
+  => FilePath
+  -> EitherT FileError m ()
+  -> Maybe Handle
+  -> EitherT FileError m (Step (Maybe Handle) ByteString)
 stepReadChunk path close = \case
   Nothing ->
     pure Stream.Done
@@ -144,9 +143,9 @@ hPutStream path handle (Stream step sinit) =
     loop SPEC sinit
 
 decodeBlocks ::
-  Monad m =>
-  Stream (EitherT FileError m) ByteString ->
-  EitherT FileError m (Header, Stream (EitherT FileError m) Block)
+     Monad m
+  => Stream (EitherT FileError m) ByteString
+  -> EitherT FileError m (Header, Stream (EitherT FileError m) Block)
 decodeBlocks input = do
   (header, rest) <- decodeGetOne getHeader input
   pure (
@@ -155,9 +154,9 @@ decodeBlocks input = do
     )
 
 decodeTables ::
-  Monad m =>
-  Stream (EitherT FileError m) ByteString ->
-  EitherT FileError m (Schema.Table, Stream (EitherT FileError m) Striped.Table)
+     Monad m
+  => Stream (EitherT FileError m) ByteString
+  -> EitherT FileError m (Schema.Table, Stream (EitherT FileError m) Striped.Table)
 decodeTables input = do
   (header, rest) <- decodeGetOne getHeader input
   pure (
@@ -172,10 +171,10 @@ decodeTables input = do
 --   Return the value we got, as well as the rest of the stream.
 --
 decodeGetOne ::
-  Monad m =>
-  Get a ->
-  Stream (EitherT FileError m) ByteString ->
-  EitherT FileError m (a, Stream (EitherT FileError m) ByteString)
+     Monad m
+  => Get a
+  -> Stream (EitherT FileError m) ByteString
+  -> EitherT FileError m (a, Stream (EitherT FileError m) ByteString)
 decodeGetOne get (Stream step sinit) =
   let
     runOne !_ s0 = \case
@@ -280,10 +279,10 @@ decodeGetAll get (Stream pull sinit) =
 ------------------------------------------------------------------------
 
 openFile ::
-  MonadResource m =>
-  FilePath ->
-  IOMode ->
-  EitherT FileError m (EitherT FileError m (), Handle)
+     MonadResource m
+  => FilePath
+  -> IOMode
+  -> EitherT FileError m (EitherT FileError m (), Handle)
 openFile path mode = do
   (key, handle) <-
     allocateT (tryIO (FileOpenError path) $ IO.openBinaryFile path mode) IO.hClose

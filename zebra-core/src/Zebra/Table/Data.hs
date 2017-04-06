@@ -104,10 +104,10 @@ lookupVariant tag xs =
 {-# INLINE lookupVariant #-}
 
 forVariant ::
-  Monad m =>
-  Cons Boxed.Vector (Variant a) ->
-  (Tag -> VariantName -> a -> m b) ->
-  m (Cons Boxed.Vector (Variant b))
+     Monad m
+  => Cons Boxed.Vector (Variant a)
+  -> (Tag -> VariantName -> a -> m b)
+  -> m (Cons Boxed.Vector (Variant b))
 forVariant xs f =
   Cons.iforM xs $ \i (Variant name x) ->
     Variant name <$> f (fromIntegral i) name x

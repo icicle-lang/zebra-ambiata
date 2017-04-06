@@ -223,11 +223,11 @@ pokeColumn pool c_column column =
         pokeColumn pool c_inner inner
 
 peekNamedColumns ::
-  MonadIO m =>
-  (ByteString -> Striped.Column -> a) ->
-  Int ->
-  Ptr C'zebra_named_columns ->
-  EitherT ForeignError m (Cons Boxed.Vector a)
+     MonadIO m
+  => (ByteString -> Striped.Column -> a)
+  -> Int
+  -> Ptr C'zebra_named_columns
+  -> EitherT ForeignError m (Cons Boxed.Vector a)
 peekNamedColumns f n_rows ptr = do
   n_columns <- peekIO $ p'zebra_named_columns'count ptr
 
@@ -244,12 +244,12 @@ peekNamedColumns f n_rows ptr = do
   hoistMaybe ForeignFoundEmptyStructOrEnum . Cons.fromVector $ Boxed.zipWith f names columns
 
 pokeNamedColumns ::
-  MonadIO m =>
-  (a -> (ByteString, Striped.Column)) ->
-  Mempool ->
-  Ptr C'zebra_named_columns ->
-  Cons Boxed.Vector a ->
-  m ()
+     MonadIO m
+  => (a -> (ByteString, Striped.Column))
+  -> Mempool
+  -> Ptr C'zebra_named_columns
+  -> Cons Boxed.Vector a
+  -> m ()
 pokeNamedColumns unpack pool c_column ncolumns = do
   let
     n_columns =
