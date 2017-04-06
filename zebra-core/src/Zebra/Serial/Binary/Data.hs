@@ -15,12 +15,12 @@ import           P
 
 import           Zebra.Factset.Data
 import           Zebra.Factset.Table
-import           Zebra.Table.Schema (TableSchema, ColumnSchema)
+import qualified Zebra.Table.Schema as Schema
 
 
 data Header =
-    HeaderV2 !(Map AttributeName ColumnSchema)
-  | HeaderV3 !TableSchema
+    HeaderV2 !(Map AttributeName Schema.Column)
+  | HeaderV3 !Schema.Table
     deriving (Eq, Ord, Show)
 
 data BinaryVersion =
@@ -30,7 +30,7 @@ data BinaryVersion =
   | BinaryV3 -- ^ Data is stored as tables instead of entity blocks.
     deriving (Eq, Ord, Show)
 
-headerOfAttributes :: BinaryVersion -> Map AttributeName ColumnSchema -> Header
+headerOfAttributes :: BinaryVersion -> Map AttributeName Schema.Column -> Header
 headerOfAttributes version attributes =
   case version of
     BinaryV2 ->
@@ -38,14 +38,14 @@ headerOfAttributes version attributes =
     BinaryV3 ->
       HeaderV3 (tableSchemaOfAttributes attributes)
 
-attributesOfHeader :: Header -> Either BlockTableError (Map AttributeName ColumnSchema)
+attributesOfHeader :: Header -> Either BlockTableError (Map AttributeName Schema.Column)
 attributesOfHeader = \case
   HeaderV2 attributes ->
     pure attributes
   HeaderV3 table ->
     attributesOfTableSchema table
 
-schemaOfHeader :: Header -> TableSchema
+schemaOfHeader :: Header -> Schema.Table
 schemaOfHeader = \case
   HeaderV2 attributes ->
     tableSchemaOfAttributes attributes

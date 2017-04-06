@@ -93,9 +93,8 @@ import           Zebra.Factset.Entity
 import           Zebra.Factset.Fact
 
 import           Zebra.Serial.Binary.Data
+import           Zebra.Table.Data
 import qualified Zebra.Table.Logical as Logical
-import           Zebra.Table.Schema (TableSchema, ColumnSchema)
-import           Zebra.Table.Schema (Variant(..), VariantName(..), Field(..), FieldName(..), Tag)
 import qualified Zebra.Table.Schema as Schema
 import qualified Zebra.Table.Striped as Striped
 import           Zebra.X.Vector.Cons (Cons)
@@ -121,7 +120,7 @@ jVariantName =
 
 ------------------------------------------------------------------------
 
-tableSchemaTables :: TableSchema -> [TableSchema]
+tableSchemaTables :: Schema.Table -> [Schema.Table]
 tableSchemaTables = \case
   Schema.Binary ->
     []
@@ -131,7 +130,7 @@ tableSchemaTables = \case
     columnSchemaTables k <>
     columnSchemaTables v
 
-tableSchemaColumns :: TableSchema -> [ColumnSchema]
+tableSchemaColumns :: Schema.Table -> [Schema.Column]
 tableSchemaColumns = \case
   Schema.Binary ->
     []
@@ -140,7 +139,7 @@ tableSchemaColumns = \case
   Schema.Map k v ->
     [k, v]
 
-columnSchemaTables :: ColumnSchema -> [TableSchema]
+columnSchemaTables :: Schema.Column -> [Schema.Table]
 columnSchemaTables = \case
   Schema.Unit ->
     []
@@ -149,17 +148,17 @@ columnSchemaTables = \case
   Schema.Double ->
     []
   Schema.Enum variants ->
-    concatMap columnSchemaTables . fmap Schema.variant $
+    concatMap columnSchemaTables . fmap variantData $
       Cons.toList variants
   Schema.Struct fields ->
-    concatMap columnSchemaTables . fmap Schema.field $
+    concatMap columnSchemaTables . fmap fieldData $
       Cons.toList fields
   Schema.Nested table ->
     [table]
   Schema.Reversed schema ->
     columnSchemaTables schema
 
-columnSchemaColumns :: ColumnSchema -> [ColumnSchema]
+columnSchemaColumns :: Schema.Column -> [Schema.Column]
 columnSchemaColumns = \case
   Schema.Unit ->
     []
@@ -168,15 +167,15 @@ columnSchemaColumns = \case
   Schema.Double ->
     []
   Schema.Enum variants ->
-    fmap Schema.variant $ Cons.toList variants
+    fmap variantData $ Cons.toList variants
   Schema.Struct fields ->
-    fmap Schema.field $ Cons.toList fields
+    fmap fieldData $ Cons.toList fields
   Schema.Nested table ->
     tableSchemaColumns table
   Schema.Reversed schema ->
     [schema]
 
-jTableSchema :: Jack TableSchema
+jTableSchema :: Jack Schema.Table
 jTableSchema =
   reshrink tableSchemaTables $
   oneOfRec [
@@ -186,11 +185,11 @@ jTableSchema =
     , jMapSchema
     ]
 
-jMapSchema :: Jack TableSchema
+jMapSchema :: Jack Schema.Table
 jMapSchema =
   Schema.Map <$> jColumnSchema <*> jColumnSchema
 
-jColumnSchema :: Jack ColumnSchema
+jColumnSchema :: Jack Schema.Column
 jColumnSchema =
   reshrink columnSchemaColumns $
   oneOfRec [
@@ -234,10 +233,10 @@ columnTables = \case
     []
   Striped.Enum _ variants ->
     concatMap columnTables $
-      fmap Schema.variant (Cons.toList variants)
+      fmap variantData (Cons.toList variants)
   Striped.Struct fields ->
     concatMap columnTables $
-      fmap Schema.field (Cons.toList fields)
+      fmap fieldData (Cons.toList fields)
   Striped.Nested _ table ->
     [table]
   Striped.Reversed column ->
@@ -252,9 +251,9 @@ columnColumns = \case
   Striped.Double _ ->
     []
   Striped.Enum _ variants ->
-    fmap Schema.variant $ Cons.toList variants
+    fmap variantData $ Cons.toList variants
   Striped.Struct fields ->
-    fmap Schema.field $ Cons.toList fields
+    fmap fieldData $ Cons.toList fields
   Striped.Nested _ table ->
     tableColumns table
   Striped.Reversed column ->
@@ -344,13 +343,13 @@ jStripedReversed n =
 
 ------------------------------------------------------------------------
 
-jFacts :: [ColumnSchema] -> Jack [Fact]
+jFacts :: [Schema.Column] -> Jack [Fact]
 jFacts schemas =
   fmap (List.sort . List.concat) .
   scale (`div` max 1 (length schemas)) $
   zipWithM (\e a -> listOf $ jFact e a) schemas (fmap AttributeId [0..])
 
-jFact :: ColumnSchema -> AttributeId -> Jack Fact
+jFact :: Schema.Column -> AttributeId -> Jack Fact
 jFact schema aid =
   uncurry Fact
     <$> jEntityHashId
@@ -359,12 +358,12 @@ jFact schema aid =
     <*> jFactsetId
     <*> (strictMaybe <$> maybeOf (jLogicalValue schema))
 
-jSizedLogical :: TableSchema -> Jack Logical.Table
+jSizedLogical :: Schema.Table -> Jack Logical.Table
 jSizedLogical schema =
   sized $ \size ->
     jLogical schema =<< chooseInt (0, size `div` 5)
 
-jLogical :: TableSchema -> Int -> Jack Logical.Table
+jLogical :: Schema.Table -> Int -> Jack Logical.Table
 jLogical tschema n =
   case tschema of
     Schema.Binary ->
@@ -374,7 +373,7 @@ jLogical tschema n =
     Schema.Map k v ->
       Logical.Map . Map.fromList <$> vectorOf n (jMapping k v)
 
-jMapping :: ColumnSchema -> ColumnSchema -> Jack (Logical.Value, Logical.Value)
+jMapping :: Schema.Column -> Schema.Column -> Jack (Logical.Value, Logical.Value)
 jMapping k v =
   (,) <$> jLogicalValue k <*> jLogicalValue v
 
@@ -382,7 +381,7 @@ jTag :: Cons Boxed.Vector (Variant a) -> Jack Tag
 jTag xs =
   fromIntegral <$> choose (0, Cons.length xs - 1)
 
-jLogicalValue :: ColumnSchema -> Jack Logical.Value
+jLogicalValue :: Schema.Column -> Jack Logical.Value
 jLogicalValue = \case
   Schema.Unit ->
     pure Logical.Unit
@@ -395,14 +394,14 @@ jLogicalValue = \case
 
   Schema.Enum variants -> do
     tag <- jTag variants
-    case Schema.lookupVariant tag variants of
+    case lookupVariant tag variants of
       Nothing ->
         Savage.error $ renderTagLookupError tag variants
       Just (Variant _ schema) ->
         Logical.Enum tag <$> jLogicalValue schema
 
   Schema.Struct fields ->
-    Logical.Struct <$> traverse (jLogicalValue . Schema.field) fields
+    Logical.Struct <$> traverse (jLogicalValue . fieldData) fields
 
   Schema.Nested tschema ->
     sized $ \size -> do

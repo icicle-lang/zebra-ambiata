@@ -97,6 +97,7 @@ library
                     Zebra.Serial.Text.Schema
                     Zebra.Serial.Text.Striped
 
+                    Zebra.Table.Data
                     Zebra.Table.Logical
                     Zebra.Table.Schema
                     Zebra.Table.Striped

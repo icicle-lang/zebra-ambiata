@@ -35,17 +35,16 @@ import qualified Data.Vector as Boxed
 import           P
 
 import           Zebra.Serial.Json.Util
+import           Zebra.Table.Data
 import qualified Zebra.Table.Logical as Logical
-import           Zebra.Table.Schema (Field(..), Variant(..), VariantName(..))
-import           Zebra.Table.Schema (TableSchema, ColumnSchema)
 import qualified Zebra.Table.Schema as Schema
 import           Zebra.X.Vector.Cons (Cons)
 import qualified Zebra.X.Vector.Cons as Cons
 
 
 data JsonLogicalEncodeError =
-    JsonLogicalTableSchemaMismatch !TableSchema !Logical.Table
-  | JsonLogicalValueSchemaMismatch !ColumnSchema !Logical.Value
+    JsonLogicalTableSchemaMismatch !Schema.Table !Logical.Table
+  | JsonLogicalValueSchemaMismatch !Schema.Column !Logical.Value
     deriving (Eq, Show)
 
 data JsonLogicalDecodeError =
@@ -69,23 +68,23 @@ renderJsonLogicalDecodeError = \case
   JsonLogicalDecodeError err ->
     renderJsonDecodeError err
 
-encodeLogical :: TableSchema -> Logical.Table -> Either JsonLogicalEncodeError ByteString
+encodeLogical :: Schema.Table -> Logical.Table -> Either JsonLogicalEncodeError ByteString
 encodeLogical schema value =
   encodeJson ["key"] <$> ppTable schema value
 
-encodeLogicalValue :: ColumnSchema -> Logical.Value -> Either JsonLogicalEncodeError ByteString
+encodeLogicalValue :: Schema.Column -> Logical.Value -> Either JsonLogicalEncodeError ByteString
 encodeLogicalValue schema value =
   encodeJson ["key"] <$> ppValue schema value
 
-decodeLogical :: TableSchema -> ByteString -> Either JsonLogicalDecodeError Logical.Table
+decodeLogical :: Schema.Table -> ByteString -> Either JsonLogicalDecodeError Logical.Table
 decodeLogical schema =
   first JsonLogicalDecodeError . decodeJson (pTable schema)
 
-decodeLogicalValue :: ColumnSchema -> ByteString -> Either JsonLogicalDecodeError Logical.Value
+decodeLogicalValue :: Schema.Column -> ByteString -> Either JsonLogicalDecodeError Logical.Value
 decodeLogicalValue schema =
   first JsonLogicalDecodeError . decodeJson (pValue schema)
 
-pTable :: TableSchema -> Aeson.Value -> Aeson.Parser Logical.Table
+pTable :: Schema.Table -> Aeson.Value -> Aeson.Parser Logical.Table
 pTable schema =
   case schema of
     Schema.Binary ->
@@ -99,7 +98,7 @@ pTable schema =
       fmap (Logical.Map . Map.fromList . Boxed.toList) .
       Aeson.withArray "array containing key/value pairs" (kmapM $ pPair kschema vschema)
 
-ppTable :: TableSchema -> Logical.Table -> Either JsonLogicalEncodeError Aeson.Value
+ppTable :: Schema.Table -> Logical.Table -> Either JsonLogicalEncodeError Aeson.Value
 ppTable schema table0 =
   case schema of
     Schema.Binary
@@ -123,7 +122,7 @@ ppTable schema table0 =
     _ ->
       Left $ JsonLogicalTableSchemaMismatch schema table0
 
-pPair :: ColumnSchema -> ColumnSchema -> Aeson.Value -> Aeson.Parser (Logical.Value, Logical.Value)
+pPair :: Schema.Column -> Schema.Column -> Aeson.Value -> Aeson.Parser (Logical.Value, Logical.Value)
 pPair kschema vschema =
   Aeson.withObject "object containing key/value pair" $ \o ->
     (,)
@@ -137,7 +136,7 @@ ppPair key value =
     , Field "value" value
     ]
 
-pValue :: ColumnSchema -> Aeson.Value -> Aeson.Parser Logical.Value
+pValue :: Schema.Column -> Aeson.Value -> Aeson.Parser Logical.Value
 pValue schema =
   case schema of
     Schema.Unit ->
@@ -167,7 +166,7 @@ pValue schema =
     Schema.Reversed sreversed ->
       fmap Logical.Reversed . pValue sreversed
 
-mkVariantMap :: Cons Boxed.Vector (Variant ColumnSchema) -> Map VariantName (Aeson.Value -> Aeson.Parser Logical.Value)
+mkVariantMap :: Cons Boxed.Vector (Variant Schema.Column) -> Map VariantName (Aeson.Value -> Aeson.Parser Logical.Value)
 mkVariantMap =
   let
     fromVariant (tag, Variant name schema) =
@@ -175,7 +174,7 @@ mkVariantMap =
   in
     Map.fromList . fmap fromVariant . List.zip [0..] . Cons.toList
 
-ppValue :: ColumnSchema -> Logical.Value -> Either JsonLogicalEncodeError Aeson.Value
+ppValue :: Schema.Column -> Logical.Value -> Either JsonLogicalEncodeError Aeson.Value
 ppValue schema value0 =
   case schema of
     Schema.Unit
@@ -195,7 +194,7 @@ ppValue schema value0 =
 
     Schema.Enum variants
       | Logical.Enum tag x <- value0
-      , Just var <- Schema.lookupVariant tag variants
+      , Just var <- lookupVariant tag variants
       ->
         ppEnum <$> traverse (flip ppValue x) var
 

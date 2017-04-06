@@ -55,7 +55,7 @@ import           Zebra.Factset.Block
 import           Zebra.Serial.Binary.Block
 import           Zebra.Serial.Binary.Data
 import           Zebra.Serial.Binary.Header
-import           Zebra.Table.Schema (TableSchema)
+import qualified Zebra.Table.Schema as Schema
 import qualified Zebra.Table.Striped as Striped
 
 
@@ -97,7 +97,7 @@ readBlocks path = do
   bytes <- readBytes path
   decodeBlocks bytes
 
-readTables :: MonadResource m => FilePath -> EitherT FileError m (TableSchema, Stream (EitherT FileError m) Striped.Table)
+readTables :: MonadResource m => FilePath -> EitherT FileError m (Schema.Table, Stream (EitherT FileError m) Striped.Table)
 readTables path = do
   bytes <- readBytes path
   decodeTables bytes
@@ -157,7 +157,7 @@ decodeBlocks input = do
 decodeTables ::
   Monad m =>
   Stream (EitherT FileError m) ByteString ->
-  EitherT FileError m (TableSchema, Stream (EitherT FileError m) Striped.Table)
+  EitherT FileError m (Schema.Table, Stream (EitherT FileError m) Striped.Table)
 decodeTables input = do
   (header, rest) <- decodeGetOne getHeader input
   pure (

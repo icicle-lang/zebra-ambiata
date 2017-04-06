@@ -19,7 +19,7 @@ import qualified X.Data.Vector.Storable as Storable
 
 import           Zebra.Serial.Binary.Array
 import           Zebra.Serial.Binary.Data
-import           Zebra.Table.Schema (TableSchema, ColumnSchema, Tag)
+import           Zebra.Table.Data
 import qualified Zebra.Table.Schema as Schema
 import qualified Zebra.Table.Striped as Striped
 import qualified Zebra.X.Vector.Cons as Cons
@@ -58,10 +58,10 @@ bColumn version = \case
 
   Striped.Enum tags vs ->
     bTagArray tags <>
-    foldMap (bColumn version . Schema.variant) vs
+    foldMap (bColumn version . variantData) vs
 
   Striped.Struct fs ->
-    foldMap (bColumn version . Schema.field) fs
+    foldMap (bColumn version . fieldData) fs
 
   Striped.Nested ns x ->
     bIntArray ns <>
@@ -73,7 +73,7 @@ bColumn version = \case
 
 -- | Decode a zebra table using a row count and a schema.
 --
-getTable :: BinaryVersion -> Int -> TableSchema -> Get Striped.Table
+getTable :: BinaryVersion -> Int -> Schema.Table -> Get Striped.Table
 getTable version n = \case
   Schema.Binary ->
     case version of
@@ -93,7 +93,7 @@ getTable version n = \case
 
 -- | Decode a zebra column using a row count and a schema.
 --
-getColumn :: BinaryVersion -> Int -> ColumnSchema -> Get Striped.Column
+getColumn :: BinaryVersion -> Int -> Schema.Column -> Get Striped.Column
 getColumn version n = \case
   Schema.Unit ->
     pure $ Striped.Unit n

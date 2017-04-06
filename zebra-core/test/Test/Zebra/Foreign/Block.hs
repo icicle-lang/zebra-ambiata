@@ -44,7 +44,7 @@ data CommonError =
     -- backends find different things first, this is ok.
     ExpectedError
   | UnexpectedError String
-    deriving (Eq, Ord, Show)
+    deriving (Eq, Show)
 
 fromEntityError :: EntityError -> CommonError
 fromEntityError = \case

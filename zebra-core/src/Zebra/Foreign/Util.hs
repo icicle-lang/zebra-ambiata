@@ -66,7 +66,7 @@ data ForeignError =
   | ForeignUnpackBufferTooSmall
   | ForeignUnpackBufferTooLarge
   | ForeignUnknownError !CError
-    deriving (Eq, Ord, Show)
+    deriving (Eq, Show)
 
 fromCError :: CError -> Either ForeignError ()
 fromCError = \case

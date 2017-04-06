@@ -36,8 +36,7 @@ import           X.Control.Monad.Trans.Either (EitherT, left, hoistEither, hoist
 
 import           Zebra.Foreign.Bindings
 import           Zebra.Foreign.Util
-import           Zebra.Table.Schema (Field(..), FieldName(..), Variant(..), VariantName(..))
-import           Zebra.Table.Schema (tagsOfForeign, foreignOfTags)
+import           Zebra.Table.Data
 import qualified Zebra.Table.Striped as Striped
 import           Zebra.X.Vector.Cons (Cons)
 import qualified Zebra.X.Vector.Cons as Cons

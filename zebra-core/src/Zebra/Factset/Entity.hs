@@ -1,4 +1,3 @@
-{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveGeneric #-}
@@ -6,7 +5,6 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 module Zebra.Factset.Entity where
 
-import           Data.Typeable (Typeable)
 import qualified Data.Vector as Boxed
 import qualified Data.Vector.Storable as Storable
 
@@ -26,14 +24,14 @@ data Attribute =
     , attributeFactsetId :: !(Storable.Vector FactsetId)
     , attributeTombstone :: !(Storable.Vector Tombstone)
     , attributeTable :: !Striped.Table
-    } deriving (Eq, Ord, Generic, Typeable)
+    } deriving (Eq, Ord, Generic)
 
 data Entity =
   Entity {
       entityHash :: !EntityHash
     , entityId :: !EntityId
     , entityAttributes :: !(Boxed.Vector Attribute)
-    } deriving (Eq, Ord, Generic, Typeable)
+    } deriving (Eq, Ord, Generic)
 
 instance Show Attribute where
   showsPrec =

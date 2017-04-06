@@ -1,4 +1,3 @@
-{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -12,7 +11,6 @@ module Zebra.Factset.Block.Index (
   , indicesOfFacts
   ) where
 
-import           Data.Typeable (Typeable)
 import           Data.Vector.Unboxed.Deriving (derivingUnbox)
 
 import           GHC.Generics (Generic)
@@ -33,7 +31,7 @@ data BlockIndex =
       indexTime :: !Time
     , indexFactsetId :: !FactsetId
     , indexTombstone :: !Tombstone
-    } deriving (Eq, Ord, Show, Generic, Typeable)
+    } deriving (Eq, Ord, Show, Generic)
 
 indicesOfFacts :: Boxed.Vector Fact -> Unboxed.Vector BlockIndex
 indicesOfFacts =

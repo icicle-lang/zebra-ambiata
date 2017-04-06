@@ -1,5 +1,4 @@
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
@@ -34,11 +33,10 @@ import qualified Data.Vector as Boxed
 
 import           P
 
+import           Zebra.Factset.Data
 import           Zebra.Serial.Binary.Array
 import           Zebra.Serial.Binary.Data
-import           Zebra.Factset.Data
 import           Zebra.Serial.Json.Schema
-import           Zebra.Table.Schema (TableSchema, ColumnSchema)
 import qualified Zebra.Table.Schema as Schema
 
 
@@ -74,11 +72,11 @@ getHeader = do
 --     schema : sized_byte_array
 --   }
 -- @
-bHeaderV3 :: TableSchema -> Builder
+bHeaderV3 :: Schema.Table -> Builder
 bHeaderV3 schema =
   bSizedByteArray (encodeSchema SchemaV0 schema)
 
-getHeaderV3 :: Get TableSchema
+getHeaderV3 :: Get Schema.Table
 getHeaderV3 =
   parseSchema =<< getSizedByteArray
 
@@ -93,7 +91,7 @@ getHeaderV3 =
 --     attr_schema_string : sized_byte_array
 --   }
 -- @
-bHeaderV2 :: Map AttributeName ColumnSchema -> Builder
+bHeaderV2 :: Map AttributeName Schema.Column -> Builder
 bHeaderV2 features =
   let
     n_attrs =
@@ -116,7 +114,7 @@ bHeaderV2 features =
     names <>
     schema
 
-getHeaderV2 :: Get (Map AttributeName ColumnSchema)
+getHeaderV2 :: Get (Map AttributeName Schema.Column)
 getHeaderV2 = do
   n <- fromIntegral <$> Get.getWord32le
   ns <- fmap (AttributeName . Text.decodeUtf8) <$> getStrings n
@@ -131,7 +129,7 @@ getHeaderV2 = do
     Map.fromList . toList $
     Boxed.zip ns cs
 
-parseSchema :: ByteString -> Get TableSchema
+parseSchema :: ByteString -> Get Schema.Table
 parseSchema =
   either (fail . Text.unpack . renderJsonSchemaDecodeError) pure . decodeSchema SchemaV0
 

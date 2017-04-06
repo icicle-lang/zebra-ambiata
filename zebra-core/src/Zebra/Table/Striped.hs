@@ -1,5 +1,4 @@
 {-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveGeneric #-}
@@ -58,7 +57,6 @@ import           Data.ByteString.Internal (ByteString(..))
 import           Data.Map (Map)
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as Text
-import           Data.Typeable (Typeable)
 
 import           GHC.Generics (Generic)
 
@@ -69,9 +67,10 @@ import           Text.Show.Pretty (ppShow)
 import qualified X.Data.Vector as Boxed
 import qualified X.Data.Vector.Generic as Generic
 
+import           Zebra.Table.Data
 import           Zebra.Table.Logical (LogicalSchemaError, LogicalMergeError)
 import qualified Zebra.Table.Logical as Logical
-import           Zebra.Table.Schema (SchemaError(..), TableSchema, ColumnSchema, Field, Variant, Tag)
+import           Zebra.Table.Schema (SchemaError(..))
 import qualified Zebra.Table.Schema as Schema
 import           Zebra.X.Vector.Cons (Cons)
 import qualified Zebra.X.Vector.Cons as Cons
@@ -84,7 +83,7 @@ data Table =
     Binary !ByteString
   | Array !Column
   | Map !Column !Column
-    deriving (Eq, Ord, Show, Generic, Typeable)
+    deriving (Eq, Ord, Show, Generic)
 
 data Column =
     Unit !Int
@@ -94,18 +93,18 @@ data Column =
   | Struct !(Cons Boxed.Vector (Field Column))
   | Nested !(Storable.Vector Int64) !Table
   | Reversed !Column
-    deriving (Eq, Ord, Show, Generic, Typeable)
+    deriving (Eq, Ord, Show, Generic)
 
 data StripedError =
     StripedLogicalSchemaError !LogicalSchemaError
   | StripedLogicalMergeError !LogicalMergeError
   | StripedNoValueForEnumTag !Tag !(Cons Boxed.Vector Logical.Value)
-  | StripedNestedLengthMismatch !TableSchema !SegmentError
-  | StripedAppendTableMismatch !TableSchema !TableSchema
-  | StripedAppendColumnMismatch !ColumnSchema !ColumnSchema
-  | StripedAppendVariantMismatch !(Variant ColumnSchema) !(Variant ColumnSchema)
-  | StripedAppendFieldMismatch !(Field ColumnSchema) !(Field ColumnSchema)
-    deriving (Eq, Ord, Show, Generic, Typeable)
+  | StripedNestedLengthMismatch !Schema.Table !SegmentError
+  | StripedAppendTableMismatch !Schema.Table !Schema.Table
+  | StripedAppendColumnMismatch !Schema.Column !Schema.Column
+  | StripedAppendVariantMismatch !(Variant Schema.Column) !(Variant Schema.Column)
+  | StripedAppendFieldMismatch !(Field Schema.Column) !(Field Schema.Column)
+    deriving (Eq, Show)
 
 renderStripedError :: StripedError -> Text
 renderStripedError = \case
@@ -181,13 +180,13 @@ lengthColumn = \case
   Enum tags _ ->
     Storable.length tags
   Struct fs ->
-    lengthColumn . Schema.field $ Cons.head fs
+    lengthColumn . fieldData $ Cons.head fs
   Nested ns _ ->
     Storable.length ns
   Reversed c ->
     lengthColumn c
 
-schema :: Table -> TableSchema
+schema :: Table -> Schema.Table
 schema = \case
   Binary _ ->
     Schema.Binary
@@ -196,7 +195,7 @@ schema = \case
   Map k v ->
     Schema.Map (schemaColumn k) (schemaColumn v)
 
-schemaColumn :: Column -> ColumnSchema
+schemaColumn :: Column -> Schema.Column
 schemaColumn = \case
   Unit _ ->
     Schema.Unit
@@ -215,7 +214,7 @@ schemaColumn = \case
 
 ------------------------------------------------------------------------
 
-empty :: TableSchema -> Table
+empty :: Schema.Table -> Table
 empty = \case
   Schema.Binary ->
     Binary ByteString.empty
@@ -224,7 +223,7 @@ empty = \case
   Schema.Map k v ->
     Map (emptyColumn k) (emptyColumn v)
 
-emptyColumn :: ColumnSchema -> Column
+emptyColumn :: Schema.Column -> Column
 emptyColumn = \case
   Schema.Unit ->
     Unit 0
@@ -318,7 +317,7 @@ takeReversed = \case
 ------------------------------------------------------------------------
 -- Logical -> Striped
 
-fromLogical :: TableSchema -> Logical.Table -> Either StripedError Table
+fromLogical :: Schema.Table -> Logical.Table -> Either StripedError Table
 fromLogical tschema collection =
   case tschema of
     Schema.Binary ->
@@ -336,7 +335,7 @@ fromLogical tschema collection =
         <$> fromValues kschema (Boxed.fromList $ Map.keys kvs)
         <*> fromValues vschema (Boxed.fromList $ Map.elems kvs)
 
-fromNested :: TableSchema -> Boxed.Vector Logical.Table -> Either StripedError (Storable.Vector Int64, Table)
+fromNested :: Schema.Table -> Boxed.Vector Logical.Table -> Either StripedError (Storable.Vector Int64, Table)
 fromNested tschema xss0 =
   case tschema of
     Schema.Binary -> do
@@ -369,7 +368,7 @@ fromNested tschema xss0 =
         , Map ks vs
         )
 
-fromValues :: ColumnSchema -> Boxed.Vector Logical.Value -> Either StripedError Column
+fromValues :: Schema.Column -> Boxed.Vector Logical.Value -> Either StripedError Column
 fromValues cschema values =
   case Cons.fromVector values of
     Nothing ->
@@ -414,25 +413,25 @@ fromValues cschema values =
             <$> fromValues rschema xss
 
 fromEnum ::
-  Cons Boxed.Vector (Variant ColumnSchema) ->
+  Cons Boxed.Vector (Variant Schema.Column) ->
   Boxed.Vector (Tag, Logical.Value) ->
   Either StripedError (Cons Boxed.Vector (Variant Column))
 fromEnum variants txs =
-  Schema.forVariant variants $ \tag _ cschema ->
+  forVariant variants $ \tag _ cschema ->
     fromValues cschema $
       Boxed.map (fromVariant cschema tag) txs
 
-fromVariant :: ColumnSchema -> Tag -> (Tag, Logical.Value) -> Logical.Value
+fromVariant :: Schema.Column -> Tag -> (Tag, Logical.Value) -> Logical.Value
 fromVariant cschema expectedTag (tag, value) =
   if expectedTag == tag then
     value
   else
     Logical.defaultValue cschema
 
-fromField :: Field ColumnSchema -> Boxed.Vector Logical.Value -> Either StripedError (Field Column)
+fromField :: Field Schema.Column -> Boxed.Vector Logical.Value -> Either StripedError (Field Column)
 fromField field =
   fmap (field $>) .
-  fromValues (Schema.field field)
+  fromValues (fieldData field)
 
 ------------------------------------------------------------------------
 -- Striped -> Logical
@@ -489,12 +488,12 @@ toValues = \case
       tags =
         Storable.convert tags0
 
-    values <- Cons.transposeCV <$> traverse (toValues . Schema.variant) vs0
+    values <- Cons.transposeCV <$> traverse (toValues . variantData) vs0
 
     Boxed.zipWithM mkEnum tags values
 
   Struct fs ->
-    fmap Logical.Struct . Cons.transposeCV <$> traverse (toValues . Schema.field) fs
+    fmap Logical.Struct . Cons.transposeCV <$> traverse (toValues . fieldData) fs
 
   Nested ns0 t -> do
     fmap Logical.Nested <$> toNested ns0 t
@@ -668,14 +667,14 @@ unsafeAppendColumn x0 x1 =
 
 unsafeAppendVariant :: Variant Column -> Variant Column -> Either StripedError (Variant Column)
 unsafeAppendVariant v0 v1 =
-  if Schema.variantName v0 == Schema.variantName v1 then
-    (v0 $>) <$> unsafeAppendColumn (Schema.variant v0) (Schema.variant v1)
+  if variantName v0 == variantName v1 then
+    (v0 $>) <$> unsafeAppendColumn (variantData v0) (variantData v1)
   else
     Left $ StripedAppendVariantMismatch (fmap schemaColumn v0) (fmap schemaColumn v1)
 
 unsafeAppendField :: Field Column -> Field Column -> Either StripedError (Field Column)
 unsafeAppendField f0 f1 =
-  if Schema.fieldName f0 == Schema.fieldName f1 then
-    (f0 $>) <$> unsafeAppendColumn (Schema.field f0) (Schema.field f1)
+  if fieldName f0 == fieldName f1 then
+    (f0 $>) <$> unsafeAppendColumn (fieldData f0) (fieldData f1)
   else
     Left $ StripedAppendFieldMismatch (fmap schemaColumn f0) (fmap schemaColumn f1)

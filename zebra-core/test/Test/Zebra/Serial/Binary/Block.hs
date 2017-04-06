@@ -25,11 +25,10 @@ import           Test.Zebra.Util
 import           Text.Printf (printf)
 import           Text.Show.Pretty (ppShow)
 
-import           Zebra.Serial.Binary.Block
-import           Zebra.Serial.Binary.Data
 import           Zebra.Factset.Block
 import           Zebra.Factset.Data
-import           Zebra.Table.Schema (TableSchema, ColumnSchema)
+import           Zebra.Serial.Binary.Block
+import           Zebra.Serial.Binary.Data
 import qualified Zebra.Table.Schema as Schema
 import qualified Zebra.Table.Striped as Striped
 
@@ -91,7 +90,7 @@ prop_roundtrip_tables =
   gamble (Boxed.fromList <$> listOf (jStripedArray 1)) $ \xs ->
     trippingSerial bTables (getTables $ fmap (unsafeTakeArray . Striped.schema) xs) xs
 
-unsafeTakeArray :: TableSchema -> ColumnSchema
+unsafeTakeArray :: Schema.Table -> Schema.Column
 unsafeTakeArray =
   either (Savage.error . ppShow) id . Schema.takeArray
 

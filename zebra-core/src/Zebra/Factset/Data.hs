@@ -41,7 +41,6 @@ import           Data.ByteString (ByteString)
 import           Data.Thyme (UTCTime, Day, TimeDiff)
 import           Data.Thyme.Time.Core (addDays, diffDays, fromGregorian)
 import           Data.Thyme.Time.Core (mkUTCTime, addUTCTime, fromMicroseconds)
-import           Data.Typeable (Typeable)
 import qualified Data.Vector.Storable as Storable
 import           Data.Vector.Unboxed.Deriving (derivingUnbox)
 import           Data.Word (Word32, Word64)
@@ -59,37 +58,37 @@ import           X.Text.Show (gshowsPrec)
 newtype EntityId =
   EntityId {
       unEntityId :: ByteString
-    } deriving (Eq, Ord, Generic, Typeable)
+    } deriving (Eq, Ord, Generic)
 
 newtype EntityHash =
   EntityHash {
       unEntityHash :: Word32
-    } deriving (Eq, Ord, Generic, Typeable)
+    } deriving (Eq, Ord, Generic)
 
 newtype AttributeId =
   AttributeId {
       unAttributeId :: Int64
-    } deriving (Eq, Ord, Generic, Typeable, Storable)
+    } deriving (Eq, Ord, Generic, Storable)
 
 newtype AttributeName =
   AttributeName {
       unAttributeName :: Text
-    } deriving (Eq, Ord, Generic, Typeable)
+    } deriving (Eq, Ord, Generic)
 
 newtype Time =
   Time {
       unTime :: Int64
-    } deriving (Eq, Ord, Enum, Num, Real, Integral, Generic, Typeable, Storable)
+    } deriving (Eq, Ord, Enum, Num, Real, Integral, Generic, Storable)
 
 newtype FactsetId =
   FactsetId {
       unFactsetId :: Int64
-    } deriving (Eq, Ord, Enum, Num, Real, Integral, Generic, Typeable, Storable)
+    } deriving (Eq, Ord, Enum, Num, Real, Integral, Generic, Storable)
 
 data Tombstone =
     NotTombstone
   | Tombstone
-    deriving (Eq, Ord, Show, Generic, Typeable)
+    deriving (Eq, Ord, Show, Generic)
 
 instance Storable Tombstone where
   sizeOf _ =

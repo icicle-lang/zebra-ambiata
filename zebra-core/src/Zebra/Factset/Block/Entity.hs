@@ -1,4 +1,3 @@
-{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
@@ -12,7 +11,6 @@ module Zebra.Factset.Block.Entity (
   , entitiesOfFacts
   ) where
 
-import           Data.Typeable (Typeable)
 import           Data.Vector.Unboxed.Deriving (derivingUnbox)
 
 import           GHC.Generics (Generic)
@@ -30,7 +28,7 @@ data BlockAttribute =
   BlockAttribute {
       attributeId :: !AttributeId
     , attributeRows :: !Int64
-    } deriving (Eq, Ord, Show, Generic, Typeable)
+    } deriving (Eq, Ord, Show, Generic)
 
 -- This deriving Unbox needs to appear before using it in BlockEntity below
 derivingUnbox "BlockAttribute"
@@ -43,7 +41,7 @@ data BlockEntity =
       entityHash :: !EntityHash
     , entityId :: !EntityId
     , entityAttributes :: !(Unboxed.Vector BlockAttribute)
-    } deriving (Eq, Ord, Show, Generic, Typeable)
+    } deriving (Eq, Ord, Show, Generic)
 
 data EntityAcc =
   EntityAcc !EntityHash !EntityId !AttributeAcc !(Boxed.Vector BlockEntity)

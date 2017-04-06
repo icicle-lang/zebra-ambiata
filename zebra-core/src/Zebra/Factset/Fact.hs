@@ -19,7 +19,6 @@ import           Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as Char8
 import qualified Data.Text as Text
 import           Data.Thyme.Format (formatTime)
-import           Data.Typeable (Typeable)
 import qualified Data.Vector as Boxed
 
 import           GHC.Generics (Generic)
@@ -34,7 +33,6 @@ import           Text.Show.Pretty (ppShow)
 import           Zebra.Factset.Data
 import           Zebra.Serial.Json
 import qualified Zebra.Table.Logical as Logical
-import           Zebra.Table.Schema (TableSchema, ColumnSchema)
 import qualified Zebra.Table.Schema as Schema
 import           Zebra.Table.Striped (StripedError)
 import qualified Zebra.Table.Striped as Striped
@@ -48,22 +46,22 @@ data Fact =
     , factTime :: !Time
     , factFactsetId :: !FactsetId
     , factValue :: !(Maybe' Logical.Value)
-    } deriving (Eq, Ord, Show, Generic, Typeable)
+    } deriving (Eq, Ord, Show, Generic)
 
 data FactConversionError =
     FactStripedError !StripedError
   | FactConversionSchemaError !FactSchemaError
-    deriving (Eq, Ord, Show, Generic, Typeable)
+    deriving (Eq, Show)
 
 data FactRenderError =
     FactJsonEncodeError !JsonLogicalEncodeError
   | FactSchemaNotFoundForAttribute !AttributeId
   | FactRenderSchemaError !FactSchemaError
-    deriving (Eq, Show, Generic, Typeable)
+    deriving (Eq, Show)
 
 data FactSchemaError =
-    FactExpectedArrayTable !TableSchema
-    deriving (Eq, Ord, Show, Generic, Typeable)
+    FactExpectedArrayTable !Schema.Table
+    deriving (Eq, Show)
 
 renderFactConversionError :: FactConversionError -> Text
 renderFactConversionError = \case
@@ -86,7 +84,7 @@ renderFactSchemaError = \case
   FactExpectedArrayTable schema ->
     "Fact tables must be arrays, found: " <> Text.pack (ppShow schema)
 
-toValueTable :: Boxed.Vector ColumnSchema -> Boxed.Vector Fact -> Either FactConversionError (Boxed.Vector Striped.Table)
+toValueTable :: Boxed.Vector Schema.Column -> Boxed.Vector Fact -> Either FactConversionError (Boxed.Vector Striped.Table)
 toValueTable schemas facts =
   flip Boxed.imapM schemas $ \ix schema -> do
     let
@@ -102,7 +100,7 @@ toValueTable schemas facts =
 
     first FactStripedError . Striped.fromLogical (Schema.Array schema) $ Logical.Array values
 
-render :: Boxed.Vector ColumnSchema -> Fact -> Either FactRenderError ByteString
+render :: Boxed.Vector Schema.Column -> Fact -> Either FactRenderError ByteString
 render schemas fact = do
   let
     aid =
@@ -139,6 +137,6 @@ renderFactsetId :: FactsetId -> ByteString
 renderFactsetId (FactsetId factsetId) =
   Char8.pack $ printf "factset=%08x" factsetId
 
-renderMaybeValue :: ColumnSchema -> Maybe' Logical.Value -> Either FactRenderError ByteString
+renderMaybeValue :: Schema.Column -> Maybe' Logical.Value -> Either FactRenderError ByteString
 renderMaybeValue schema =
   maybe' (pure "NA") (first FactJsonEncodeError . encodeLogicalValue schema)

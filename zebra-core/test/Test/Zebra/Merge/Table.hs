@@ -22,16 +22,16 @@ import           Zebra.X.Vector.Cons (Cons)
 import qualified Zebra.X.Vector.Cons as Cons
 import           Zebra.Merge.Table (UnionTableError(..))
 import qualified Zebra.Merge.Table as Striped
-import           Zebra.Table.Schema (TableSchema)
+import           Zebra.Table.Schema (Schema.Table)
 import           Zebra.Table.Striped (Table, TableError(..))
 import qualified Zebra.Table.Striped as Striped
 
-jFileTable :: TableSchema -> Jack Striped.Table
+jFileTable :: Schema.Table -> Jack Striped.Table
 jFileTable schema = do
   Right x <- Striped.fromCollection schema <$> jSizedCollection schema
   pure x
 
-jFile :: TableSchema -> Jack (NonEmpty Striped.Table)
+jFile :: Schema.Table -> Jack (NonEmpty Striped.Table)
 jFile schema = do
   NonEmpty.fromList <$> listOfN 1 10 (jFileTable schema)
 

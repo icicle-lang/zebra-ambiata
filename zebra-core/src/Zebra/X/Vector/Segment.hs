@@ -74,7 +74,7 @@ instance Segment ByteString where
 
 data SegmentError =
   SegmentLengthMismatch !Int !Int
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Show)
 
 renderSegmentError :: SegmentError -> Text
 renderSegmentError = \case

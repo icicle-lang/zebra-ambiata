@@ -1,4 +1,3 @@
-{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveGeneric #-}
@@ -25,7 +24,6 @@ import           Control.Monad.ST (runST)
 import           Control.Monad.State.Strict (MonadState(..))
 import           Control.Monad.Trans.State.Strict (State, runState)
 
-import           Data.Typeable (Typeable)
 import qualified Data.Vector.Mutable as MBoxed
 
 import           GHC.Generics (Generic)
@@ -46,7 +44,7 @@ import           Zebra.Factset.Fact (Fact(..), FactConversionError)
 import qualified Zebra.Factset.Fact as Fact
 import           Zebra.Table.Logical (LogicalSchemaError)
 import qualified Zebra.Table.Logical as Logical
-import           Zebra.Table.Schema (ColumnSchema)
+import qualified Zebra.Table.Schema as Schema
 import           Zebra.Table.Striped (StripedError)
 import qualified Zebra.Table.Striped as Striped
 
@@ -56,7 +54,7 @@ data Block =
       blockEntities :: !(Boxed.Vector BlockEntity)
     , blockIndices :: !(Unboxed.Vector BlockIndex)
     , blockTables :: !(Boxed.Vector Striped.Table)
-    } deriving (Eq, Ord, Show, Generic, Typeable)
+    } deriving (Eq, Ord, Show, Generic)
 
 ------------------------------------------------------------------------
 -- Conversion to/from facts
@@ -70,9 +68,9 @@ data FactError =
   | FactNoValues !AttributeId
   | FactLeftoverIndices !(Unboxed.Vector BlockIndex)
   | FactLeftoverValues !(Boxed.Vector (Boxed.Vector Logical.Value))
-    deriving (Eq, Ord, Show, Generic, Typeable)
+    deriving (Eq, Show)
 
-blockOfFacts :: Boxed.Vector ColumnSchema -> Boxed.Vector Fact -> Either FactError Block
+blockOfFacts :: Boxed.Vector Schema.Column -> Boxed.Vector Fact -> Either FactError Block
 blockOfFacts schemas facts =
   first FactConversionError $
     Block (entitiesOfFacts facts) (indicesOfFacts facts) <$> Fact.toValueTable schemas facts
@@ -186,7 +184,7 @@ data IndexedEntity =
 data EntityError =
     EntityAttributeNotFound !AttributeId
   | EntityNotEnoughRows
-    deriving (Eq, Ord, Show, Generic, Typeable)
+    deriving (Eq, Show)
 
 entitiesOfBlock :: Block -> Either EntityError (Boxed.Vector Entity)
 entitiesOfBlock (Block entities indices tables) =
