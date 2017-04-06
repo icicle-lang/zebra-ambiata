@@ -33,13 +33,13 @@ import           Foreign.Ptr (Ptr)
 import           P
 
 import           X.Control.Monad.Trans.Either (EitherT, left, hoistEither, hoistMaybe)
+import           X.Data.Vector.Cons (Cons)
+import qualified X.Data.Vector.Cons as Cons
 
 import           Zebra.Foreign.Bindings
 import           Zebra.Foreign.Util
 import           Zebra.Table.Data
 import qualified Zebra.Table.Striped as Striped
-import           Zebra.X.Vector.Cons (Cons)
-import qualified Zebra.X.Vector.Cons as Cons
 import qualified Zebra.X.Vector.Segment as Segment
 
 

@@ -28,6 +28,8 @@ import qualified Data.Text as Text
 import           P
 
 import qualified X.Data.Vector as Boxed
+import           X.Data.Vector.Cons (Cons)
+import qualified X.Data.Vector.Cons as Cons
 import qualified X.Data.Vector.Storable as Storable
 import           X.Data.Vector.Unboxed (Unbox)
 import qualified X.Data.Vector.Unboxed as Unboxed
@@ -40,8 +42,6 @@ import           Zebra.Table.Data
 import           Zebra.Table.Schema (SchemaError)
 import qualified Zebra.Table.Schema as Schema
 import qualified Zebra.Table.Striped as Striped
-import           Zebra.X.Vector.Cons (Cons)
-import qualified Zebra.X.Vector.Cons as Cons
 import qualified Zebra.X.Vector.Generic as Generic
 import           Zebra.X.Vector.Segment (SegmentError)
 import qualified Zebra.X.Vector.Segment as Segment

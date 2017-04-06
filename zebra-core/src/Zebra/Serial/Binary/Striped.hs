@@ -15,6 +15,7 @@ import           Data.Coerce (coerce)
 
 import           P
 
+import qualified X.Data.Vector.Cons as Cons
 import qualified X.Data.Vector.Storable as Storable
 
 import           Zebra.Serial.Binary.Array
@@ -22,7 +23,6 @@ import           Zebra.Serial.Binary.Data
 import           Zebra.Table.Data
 import qualified Zebra.Table.Schema as Schema
 import qualified Zebra.Table.Striped as Striped
-import qualified Zebra.X.Vector.Cons as Cons
 
 
 -- | Encode a zebra table as bytes.

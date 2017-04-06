@@ -18,8 +18,9 @@ import           Test.Zebra.Jack
 
 import           Text.Show.Pretty (ppShow)
 
-import           Zebra.X.Vector.Cons (Cons)
-import qualified Zebra.X.Vector.Cons as Cons
+import           X.Data.Vector.Cons (Cons)
+import qualified X.Data.Vector.Cons as Cons
+
 import           Zebra.Merge.Table (UnionTableError(..))
 import qualified Zebra.Merge.Table as Striped
 import           Zebra.Table.Schema (Schema.Table)

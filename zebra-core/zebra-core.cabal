@@ -102,7 +102,6 @@ library
                     Zebra.Table.Schema
                     Zebra.Table.Striped
 
-                    Zebra.X.Vector.Cons
                     Zebra.X.Vector.Generic
                     Zebra.X.Vector.Segment
                     Zebra.X.Vector.Storable

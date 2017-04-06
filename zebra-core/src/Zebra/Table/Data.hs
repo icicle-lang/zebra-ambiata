@@ -30,11 +30,11 @@ import           GHC.Generics (Generic)
 import           P
 
 import qualified X.Data.Vector as Boxed
+import           X.Data.Vector.Cons (Cons)
+import qualified X.Data.Vector.Cons as Cons
 import qualified X.Data.Vector.Storable as Storable
 import           X.Text.Show (gshowsPrec)
 
-import           Zebra.X.Vector.Cons (Cons)
-import qualified Zebra.X.Vector.Cons as Cons
 
 newtype FieldName =
   FieldName {
