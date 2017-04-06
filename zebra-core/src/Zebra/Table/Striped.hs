@@ -1,5 +1,4 @@
 {-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveGeneric #-}
@@ -58,7 +57,6 @@ import           Data.ByteString.Internal (ByteString(..))
 import           Data.Map (Map)
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as Text
-import           Data.Typeable (Typeable)
 
 import           GHC.Generics (Generic)
 
@@ -69,9 +67,10 @@ import           Text.Show.Pretty (ppShow)
 import qualified X.Data.Vector as Boxed
 import qualified X.Data.Vector.Generic as Generic
 
+import           Zebra.Table.Data
 import           Zebra.Table.Logical (LogicalSchemaError, LogicalMergeError)
 import qualified Zebra.Table.Logical as Logical
-import           Zebra.Table.Schema (SchemaError(..), Field, Variant, Tag)
+import           Zebra.Table.Schema (SchemaError(..))
 import qualified Zebra.Table.Schema as Schema
 import           Zebra.X.Vector.Cons (Cons)
 import qualified Zebra.X.Vector.Cons as Cons
@@ -84,7 +83,7 @@ data Table =
     Binary !ByteString
   | Array !Column
   | Map !Column !Column
-    deriving (Eq, Ord, Show, Generic, Typeable)
+    deriving (Eq, Ord, Show, Generic)
 
 data Column =
     Unit !Int
@@ -94,7 +93,7 @@ data Column =
   | Struct !(Cons Boxed.Vector (Field Column))
   | Nested !(Storable.Vector Int64) !Table
   | Reversed !Column
-    deriving (Eq, Ord, Show, Generic, Typeable)
+    deriving (Eq, Ord, Show, Generic)
 
 data StripedError =
     StripedLogicalSchemaError !LogicalSchemaError
@@ -105,7 +104,7 @@ data StripedError =
   | StripedAppendColumnMismatch !Schema.Column !Schema.Column
   | StripedAppendVariantMismatch !(Variant Schema.Column) !(Variant Schema.Column)
   | StripedAppendFieldMismatch !(Field Schema.Column) !(Field Schema.Column)
-    deriving (Eq, Ord, Show, Generic, Typeable)
+    deriving (Eq, Show)
 
 renderStripedError :: StripedError -> Text
 renderStripedError = \case
@@ -181,7 +180,7 @@ lengthColumn = \case
   Enum tags _ ->
     Storable.length tags
   Struct fs ->
-    lengthColumn . Schema.field $ Cons.head fs
+    lengthColumn . fieldData $ Cons.head fs
   Nested ns _ ->
     Storable.length ns
   Reversed c ->
@@ -418,7 +417,7 @@ fromEnum ::
   Boxed.Vector (Tag, Logical.Value) ->
   Either StripedError (Cons Boxed.Vector (Variant Column))
 fromEnum variants txs =
-  Schema.forVariant variants $ \tag _ cschema ->
+  forVariant variants $ \tag _ cschema ->
     fromValues cschema $
       Boxed.map (fromVariant cschema tag) txs
 
@@ -432,7 +431,7 @@ fromVariant cschema expectedTag (tag, value) =
 fromField :: Field Schema.Column -> Boxed.Vector Logical.Value -> Either StripedError (Field Column)
 fromField field =
   fmap (field $>) .
-  fromValues (Schema.field field)
+  fromValues (fieldData field)
 
 ------------------------------------------------------------------------
 -- Striped -> Logical
@@ -489,12 +488,12 @@ toValues = \case
       tags =
         Storable.convert tags0
 
-    values <- Cons.transposeCV <$> traverse (toValues . Schema.variant) vs0
+    values <- Cons.transposeCV <$> traverse (toValues . variantData) vs0
 
     Boxed.zipWithM mkEnum tags values
 
   Struct fs ->
-    fmap Logical.Struct . Cons.transposeCV <$> traverse (toValues . Schema.field) fs
+    fmap Logical.Struct . Cons.transposeCV <$> traverse (toValues . fieldData) fs
 
   Nested ns0 t -> do
     fmap Logical.Nested <$> toNested ns0 t
@@ -668,14 +667,14 @@ unsafeAppendColumn x0 x1 =
 
 unsafeAppendVariant :: Variant Column -> Variant Column -> Either StripedError (Variant Column)
 unsafeAppendVariant v0 v1 =
-  if Schema.variantName v0 == Schema.variantName v1 then
-    (v0 $>) <$> unsafeAppendColumn (Schema.variant v0) (Schema.variant v1)
+  if variantName v0 == variantName v1 then
+    (v0 $>) <$> unsafeAppendColumn (variantData v0) (variantData v1)
   else
     Left $ StripedAppendVariantMismatch (fmap schemaColumn v0) (fmap schemaColumn v1)
 
 unsafeAppendField :: Field Column -> Field Column -> Either StripedError (Field Column)
 unsafeAppendField f0 f1 =
-  if Schema.fieldName f0 == Schema.fieldName f1 then
-    (f0 $>) <$> unsafeAppendColumn (Schema.field f0) (Schema.field f1)
+  if fieldName f0 == fieldName f1 then
+    (f0 $>) <$> unsafeAppendColumn (fieldData f0) (fieldData f1)
   else
     Left $ StripedAppendFieldMismatch (fmap schemaColumn f0) (fmap schemaColumn f1)

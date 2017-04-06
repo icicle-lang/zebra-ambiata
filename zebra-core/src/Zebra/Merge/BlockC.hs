@@ -38,8 +38,7 @@ import           Zebra.Foreign.Util
 data MergeError =
     MergeInputEntitiesOutOfOrder (EntityHash,EntityId) (EntityHash,EntityId)
   | MergeForeign ForeignError
-  deriving (Eq, Ord, Show)
-
+  deriving (Eq, Show)
 
 data MergeOptions c m =
   MergeOptions

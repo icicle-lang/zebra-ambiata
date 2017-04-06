@@ -52,7 +52,6 @@ import qualified Data.ByteString as ByteString
 import           Data.Map (Map)
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as Text
-import           Data.Typeable (Typeable)
 import qualified Data.Vector as Boxed
 
 import           GHC.Generics (Generic)
@@ -62,7 +61,7 @@ import           P hiding (some, length)
 
 import           Text.Show.Pretty (ppShow)
 
-import           Zebra.Table.Schema (Tag)
+import           Zebra.Table.Data
 import qualified Zebra.Table.Schema as Schema
 import           Zebra.X.Vector.Cons (Cons)
 import qualified Zebra.X.Vector.Cons as Cons
@@ -90,7 +89,7 @@ data LogicalMergeError =
   | LogicalCannotMergeInt !Int64 !Int64
   | LogicalCannotMergeDouble !Double !Double
   | LogicalCannotMergeEnum !(Tag, Value) !(Tag, Value)
-    deriving (Eq, Ord, Show, Generic, Typeable)
+    deriving (Eq, Show)
 
 data LogicalSchemaError =
     LogicalExpectedBinary !Table
@@ -102,7 +101,7 @@ data LogicalSchemaError =
   | LogicalExpectedStruct !Value
   | LogicalExpectedNested !Value
   | LogicalExpectedReversed !Value
-    deriving (Eq, Ord, Show, Generic, Typeable)
+    deriving (Eq, Show)
 
 renderLogicalMergeError :: LogicalMergeError -> Text
 renderLogicalMergeError = \case
@@ -278,7 +277,7 @@ data UnionStep =
   UnionStep {
       unionComplete :: !(Map Value Value)
     , unionRemaining :: !(Cons Boxed.Vector (Map Value Value))
-    } deriving (Eq, Ord, Show, Generic, Typeable)
+    } deriving (Eq, Ord, Show)
 
 maximumKey :: Map Value Value -> Maybe Value
 maximumKey kvs =
@@ -337,9 +336,9 @@ defaultValue = \case
   Schema.Double ->
     Double 0
   Schema.Enum vs ->
-    Enum 0 . defaultValue . Schema.variant $ Cons.head vs
+    Enum 0 . defaultValue . variantData $ Cons.head vs
   Schema.Struct fs ->
-    Struct $ fmap (defaultValue . Schema.field) fs
+    Struct $ fmap (defaultValue . fieldData) fs
   Schema.Nested s ->
     Nested $ defaultTable s
   Schema.Reversed s ->

@@ -19,7 +19,7 @@ import qualified X.Data.Vector.Storable as Storable
 
 import           Zebra.Serial.Binary.Array
 import           Zebra.Serial.Binary.Data
-import           Zebra.Table.Schema (Tag)
+import           Zebra.Table.Data
 import qualified Zebra.Table.Schema as Schema
 import qualified Zebra.Table.Striped as Striped
 import qualified Zebra.X.Vector.Cons as Cons
@@ -58,10 +58,10 @@ bColumn version = \case
 
   Striped.Enum tags vs ->
     bTagArray tags <>
-    foldMap (bColumn version . Schema.variant) vs
+    foldMap (bColumn version . variantData) vs
 
   Striped.Struct fs ->
-    foldMap (bColumn version . Schema.field) fs
+    foldMap (bColumn version . fieldData) fs
 
   Striped.Nested ns x ->
     bIntArray ns <>

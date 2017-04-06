@@ -38,7 +38,7 @@ data PullerError =
    PullerForeign ForeignError
  | PullerDifferentHeaders FilePath FilePath
  | PullerDecode FileError
- deriving Show
+   deriving (Eq, Show)
 
 newtype PullId =
    PullId { unPullId :: Int }

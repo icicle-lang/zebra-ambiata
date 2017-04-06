@@ -35,8 +35,8 @@ import qualified Data.Vector as Boxed
 import           P
 
 import           Zebra.Serial.Json.Util
+import           Zebra.Table.Data
 import qualified Zebra.Table.Logical as Logical
-import           Zebra.Table.Schema (Field(..), Variant(..), VariantName(..))
 import qualified Zebra.Table.Schema as Schema
 import           Zebra.X.Vector.Cons (Cons)
 import qualified Zebra.X.Vector.Cons as Cons
@@ -194,7 +194,7 @@ ppValue schema value0 =
 
     Schema.Enum variants
       | Logical.Enum tag x <- value0
-      , Just var <- Schema.lookupVariant tag variants
+      , Just var <- lookupVariant tag variants
       ->
         ppEnum <$> traverse (flip ppValue x) var
 

@@ -29,7 +29,7 @@ import           P
 import qualified X.Data.Vector as Boxed
 
 import           Zebra.Serial.Json.Util
-import           Zebra.Table.Schema (Variant(..), VariantName(..), Field(..), FieldName(..))
+import           Zebra.Table.Data
 import qualified Zebra.Table.Schema as Schema
 import           Zebra.X.Vector.Cons (Cons)
 import qualified Zebra.X.Vector.Cons as Cons

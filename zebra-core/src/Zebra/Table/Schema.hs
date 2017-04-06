@@ -1,5 +1,4 @@
 {-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveGeneric #-}
@@ -12,15 +11,9 @@
 module Zebra.Table.Schema (
     Table(..)
   , Column(..)
-  , Field(..)
-  , FieldName(..)
-  , Variant(..)
-  , VariantName(..)
-  , Tag(..)
 
-  , hasVariant
-  , forVariant
-  , lookupVariant
+  , SchemaError(..)
+  , renderSchemaError
 
   , bool
   , false
@@ -28,9 +21,6 @@ module Zebra.Table.Schema (
   , option
   , none
   , some
-
-  , SchemaError(..)
-  , renderSchemaError
 
   , takeBinary
   , takeArray
@@ -42,91 +32,28 @@ module Zebra.Table.Schema (
   , takeNested
   , takeReversed
   , takeOption
-
-  , foreignOfTags
-  , tagsOfForeign
   ) where
 
-import           Data.String (IsString(..))
 import qualified Data.Text as Text
-import           Data.Typeable (Typeable)
 
 import           GHC.Generics (Generic)
-
-import           Foreign.Storable (Storable)
 
 import           P hiding (bool, some)
 
 import           Text.Show.Pretty (ppShow)
 
 import qualified X.Data.Vector as Boxed
-import qualified X.Data.Vector.Storable as Storable
-import           X.Text.Show (gshowsPrec)
 
+import           Zebra.Table.Data
 import           Zebra.X.Vector.Cons (Cons)
 import qualified Zebra.X.Vector.Cons as Cons
 
-
-newtype FieldName =
-  FieldName {
-      unFieldName :: Text
-    } deriving (Eq, Ord, Generic, Typeable)
-
-instance Show FieldName where
-  showsPrec p =
-    showsPrec p . unFieldName
-
-instance IsString FieldName where
-  fromString =
-    FieldName . Text.pack
-
-data Field a =
-  Field {
-      fieldName :: !FieldName
-    , field :: !a
-    } deriving (Eq, Ord, Generic, Typeable, Functor, Foldable, Traversable)
-
-instance Show a => Show (Field a) where
-  showsPrec =
-    gshowsPrec
-
-newtype VariantName =
-  VariantName {
-      unVariantName :: Text
-    } deriving (Eq, Ord, Generic, Typeable)
-
-instance Show VariantName where
-  showsPrec p =
-    showsPrec p . unVariantName
-
-instance IsString VariantName where
-  fromString =
-    VariantName . Text.pack
-
-data Variant a =
-  Variant {
-      variantName :: !VariantName
-    , variant :: !a
-    } deriving (Eq, Ord, Generic, Typeable, Functor, Foldable, Traversable)
-
-instance Show a => Show (Variant a) where
-  showsPrec =
-    gshowsPrec
-
-newtype Tag =
-  Tag {
-      unTag :: Int64
-    } deriving (Eq, Ord, Generic, Typeable, Storable, Num, Enum, Real, Integral)
-
-instance Show Tag where
-  showsPrec =
-    gshowsPrec
 
 data Table =
     Binary
   | Array !Column
   | Map !Column !Column
-    deriving (Eq, Ord, Show, Generic, Typeable)
+    deriving (Eq, Ord, Show, Generic)
 
 data Column =
     Unit
@@ -136,7 +63,7 @@ data Column =
   | Struct !(Cons Boxed.Vector (Field Column))
   | Nested !Table
   | Reversed !Column
-    deriving (Eq, Ord, Show, Generic, Typeable)
+    deriving (Eq, Ord, Show, Generic)
 
 data SchemaError =
     SchemaExpectedBinary !Table
@@ -150,7 +77,7 @@ data SchemaError =
   | SchemaExpectedReversed !Column
   -- FIXME Should non-primitive types really be here? /not sure
   | SchemaExpectedOption !(Cons Boxed.Vector (Variant Column))
-    deriving (Eq, Ord, Show, Generic, Typeable)
+    deriving (Eq, Show)
 
 renderSchemaError :: SchemaError -> Text
 renderSchemaError = \case
@@ -174,27 +101,6 @@ renderSchemaError = \case
     "Expected Reversed, but was: " <> Text.pack (ppShow x)
   SchemaExpectedOption x ->
     "Expected option variants (i.e. none/some), but was: " <> Text.pack (ppShow x)
-
-------------------------------------------------------------------------
-
-hasVariant :: Tag -> Cons Boxed.Vector (Variant a) -> Bool
-hasVariant tag xs =
-  fromIntegral tag < Cons.length xs
-{-# INLINE hasVariant #-}
-
-forVariant ::
-  Monad m =>
-  Cons Boxed.Vector (Variant a) ->
-  (Tag -> VariantName -> a -> m b) ->
-  m (Cons Boxed.Vector (Variant b))
-forVariant xs f =
-  Cons.iforM xs $ \i (Variant name x) ->
-    Variant name <$> f (fromIntegral i) name x
-
-lookupVariant :: Tag -> Cons Boxed.Vector (Variant a) -> Maybe (Variant a)
-lookupVariant tag xs =
-  Cons.index (fromIntegral tag) xs
-{-# INLINE lookupVariant #-}
 
 ------------------------------------------------------------------------
 
@@ -307,15 +213,3 @@ takeOption x0 = do
     _ ->
       Left $ SchemaExpectedOption vs
 {-# INLINE takeOption #-}
-
-------------------------------------------------------------------------
-
-foreignOfTags :: Storable.Vector Tag -> Storable.Vector Int64
-foreignOfTags =
-  Storable.unsafeCast
-{-# INLINE foreignOfTags #-}
-
-tagsOfForeign :: Storable.Vector Int64 -> Storable.Vector Tag
-tagsOfForeign =
-  Storable.unsafeCast
-{-# INLINE tagsOfForeign #-}

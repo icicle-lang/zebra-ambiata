@@ -19,7 +19,7 @@ import           P
 
 import           Zebra.Serial.Json.Schema (SchemaVersion(..), pTableSchemaV0, ppTableSchema)
 import           Zebra.Serial.Json.Util
-import           Zebra.Table.Schema (Field(..))
+import           Zebra.Table.Data
 import qualified Zebra.Table.Schema as Schema
 
 

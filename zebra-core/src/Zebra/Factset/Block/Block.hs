@@ -1,4 +1,3 @@
-{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveGeneric #-}
@@ -25,7 +24,6 @@ import           Control.Monad.ST (runST)
 import           Control.Monad.State.Strict (MonadState(..))
 import           Control.Monad.Trans.State.Strict (State, runState)
 
-import           Data.Typeable (Typeable)
 import qualified Data.Vector.Mutable as MBoxed
 
 import           GHC.Generics (Generic)
@@ -56,7 +54,7 @@ data Block =
       blockEntities :: !(Boxed.Vector BlockEntity)
     , blockIndices :: !(Unboxed.Vector BlockIndex)
     , blockTables :: !(Boxed.Vector Striped.Table)
-    } deriving (Eq, Ord, Show, Generic, Typeable)
+    } deriving (Eq, Ord, Show, Generic)
 
 ------------------------------------------------------------------------
 -- Conversion to/from facts
@@ -70,7 +68,7 @@ data FactError =
   | FactNoValues !AttributeId
   | FactLeftoverIndices !(Unboxed.Vector BlockIndex)
   | FactLeftoverValues !(Boxed.Vector (Boxed.Vector Logical.Value))
-    deriving (Eq, Ord, Show, Generic, Typeable)
+    deriving (Eq, Show)
 
 blockOfFacts :: Boxed.Vector Schema.Column -> Boxed.Vector Fact -> Either FactError Block
 blockOfFacts schemas facts =
@@ -186,7 +184,7 @@ data IndexedEntity =
 data EntityError =
     EntityAttributeNotFound !AttributeId
   | EntityNotEnoughRows
-    deriving (Eq, Ord, Show, Generic, Typeable)
+    deriving (Eq, Show)
 
 entitiesOfBlock :: Block -> Either EntityError (Boxed.Vector Entity)
 entitiesOfBlock (Block entities indices tables) =

@@ -36,7 +36,7 @@ import           X.Control.Monad.Trans.Either (EitherT, runEitherT)
 data TrippingError x y =
     EncodeError x
   | DecodeError y
-    deriving (Eq, Ord, Show)
+    deriving (Eq, Show)
 
 liftE :: IO a -> EitherT Void IO a
 liftE =
@@ -82,7 +82,7 @@ trippingSerial build0 get a =
     build :: a -> Either () Builder
     build =
       pure . build0
-  in 
+  in
     trippingSerialE build get a
 
 trippingSerialE :: (Eq a, Show a, Show x) => (a -> Either x Builder) -> Get a -> a -> Property

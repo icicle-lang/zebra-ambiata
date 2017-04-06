@@ -21,6 +21,7 @@ import qualified Zebra.Table.Schema as Schema
 import           Zebra.Table.Striped (StripedError)
 import qualified Zebra.Table.Striped as Striped
 
+
 data TextStripedEncodeError =
     TextStripedEncodeError !StripedError
   | TextStripedLogicalEncodeError !TextLogicalEncodeError

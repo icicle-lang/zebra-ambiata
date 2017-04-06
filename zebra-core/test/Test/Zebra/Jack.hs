@@ -93,8 +93,8 @@ import           Zebra.Factset.Entity
 import           Zebra.Factset.Fact
 
 import           Zebra.Serial.Binary.Data
+import           Zebra.Table.Data
 import qualified Zebra.Table.Logical as Logical
-import           Zebra.Table.Schema (Variant(..), VariantName(..), Field(..), FieldName(..), Tag)
 import qualified Zebra.Table.Schema as Schema
 import qualified Zebra.Table.Striped as Striped
 import           Zebra.X.Vector.Cons (Cons)
@@ -148,10 +148,10 @@ columnSchemaTables = \case
   Schema.Double ->
     []
   Schema.Enum variants ->
-    concatMap columnSchemaTables . fmap Schema.variant $
+    concatMap columnSchemaTables . fmap variantData $
       Cons.toList variants
   Schema.Struct fields ->
-    concatMap columnSchemaTables . fmap Schema.field $
+    concatMap columnSchemaTables . fmap fieldData $
       Cons.toList fields
   Schema.Nested table ->
     [table]
@@ -167,9 +167,9 @@ columnSchemaColumns = \case
   Schema.Double ->
     []
   Schema.Enum variants ->
-    fmap Schema.variant $ Cons.toList variants
+    fmap variantData $ Cons.toList variants
   Schema.Struct fields ->
-    fmap Schema.field $ Cons.toList fields
+    fmap fieldData $ Cons.toList fields
   Schema.Nested table ->
     tableSchemaColumns table
   Schema.Reversed schema ->
@@ -233,10 +233,10 @@ columnTables = \case
     []
   Striped.Enum _ variants ->
     concatMap columnTables $
-      fmap Schema.variant (Cons.toList variants)
+      fmap variantData (Cons.toList variants)
   Striped.Struct fields ->
     concatMap columnTables $
-      fmap Schema.field (Cons.toList fields)
+      fmap fieldData (Cons.toList fields)
   Striped.Nested _ table ->
     [table]
   Striped.Reversed column ->
@@ -251,9 +251,9 @@ columnColumns = \case
   Striped.Double _ ->
     []
   Striped.Enum _ variants ->
-    fmap Schema.variant $ Cons.toList variants
+    fmap variantData $ Cons.toList variants
   Striped.Struct fields ->
-    fmap Schema.field $ Cons.toList fields
+    fmap fieldData $ Cons.toList fields
   Striped.Nested _ table ->
     tableColumns table
   Striped.Reversed column ->
@@ -394,14 +394,14 @@ jLogicalValue = \case
 
   Schema.Enum variants -> do
     tag <- jTag variants
-    case Schema.lookupVariant tag variants of
+    case lookupVariant tag variants of
       Nothing ->
         Savage.error $ renderTagLookupError tag variants
       Just (Variant _ schema) ->
         Logical.Enum tag <$> jLogicalValue schema
 
   Schema.Struct fields ->
-    Logical.Struct <$> traverse (jLogicalValue . Schema.field) fields
+    Logical.Struct <$> traverse (jLogicalValue . fieldData) fields
 
   Schema.Nested tschema ->
     sized $ \size -> do

@@ -19,7 +19,6 @@ import           Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as Char8
 import qualified Data.Text as Text
 import           Data.Thyme.Format (formatTime)
-import           Data.Typeable (Typeable)
 import qualified Data.Vector as Boxed
 
 import           GHC.Generics (Generic)
@@ -47,22 +46,22 @@ data Fact =
     , factTime :: !Time
     , factFactsetId :: !FactsetId
     , factValue :: !(Maybe' Logical.Value)
-    } deriving (Eq, Ord, Show, Generic, Typeable)
+    } deriving (Eq, Ord, Show, Generic)
 
 data FactConversionError =
     FactStripedError !StripedError
   | FactConversionSchemaError !FactSchemaError
-    deriving (Eq, Ord, Show, Generic, Typeable)
+    deriving (Eq, Show)
 
 data FactRenderError =
     FactJsonEncodeError !JsonLogicalEncodeError
   | FactSchemaNotFoundForAttribute !AttributeId
   | FactRenderSchemaError !FactSchemaError
-    deriving (Eq, Show, Generic, Typeable)
+    deriving (Eq, Show)
 
 data FactSchemaError =
     FactExpectedArrayTable !Schema.Table
-    deriving (Eq, Ord, Show, Generic, Typeable)
+    deriving (Eq, Show)
 
 renderFactConversionError :: FactConversionError -> Text
 renderFactConversionError = \case

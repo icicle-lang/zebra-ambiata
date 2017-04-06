@@ -1,4 +1,3 @@
-{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveGeneric #-}
@@ -37,7 +36,8 @@ import           Zebra.Factset.Block.Block
 import           Zebra.Factset.Block.Entity
 import           Zebra.Factset.Block.Index
 import           Zebra.Factset.Data
-import           Zebra.Table.Schema (SchemaError, Field(..), FieldName(..), Variant(..), Tag(..))
+import           Zebra.Table.Data
+import           Zebra.Table.Schema (SchemaError)
 import qualified Zebra.Table.Schema as Schema
 import qualified Zebra.Table.Striped as Striped
 import           Zebra.X.Vector.Cons (Cons)
@@ -57,7 +57,7 @@ data BlockTableError =
   | BlockExpectedIndexFields !(Cons Boxed.Vector (Field Schema.Column))
   | BlockExpectedAttributes !Schema.Column
   | BlockExpectedOption !Schema.Column
-    deriving (Eq, Ord, Show)
+    deriving (Eq, Show)
 
 renderBlockTableError :: BlockTableError -> Text
 renderBlockTableError = \case
@@ -294,7 +294,7 @@ takeAttributeRowCounts :: Striped.Column -> Either BlockTableError (Boxed.Vector
 takeAttributeRowCounts column = do
   attrs <- takeAttributes column
   fmap (fmap fromDenseRowCounts . Generic.transpose) $
-    traverse (takeAttributeRowCount . field) attrs
+    traverse (takeAttributeRowCount . fieldData) attrs
 
 takeEntities :: Striped.Column -> Striped.Column -> Either BlockTableError (Boxed.Vector BlockEntity)
 takeEntities key0 value0 = do
@@ -361,7 +361,7 @@ takeIndex column = do
 takeIndices :: Striped.Column -> Either BlockTableError (Unboxed.Vector BlockIndex)
 takeIndices column = do
   attrs <- takeAttributes column
-  indices <- traverse (takeIndex . field) attrs
+  indices <- traverse (takeIndex . fieldData) attrs
   pure .
     Unboxed.convert .
     Boxed.concatMap (Boxed.concatMap Boxed.convert) $
@@ -383,7 +383,7 @@ takeTable column0 = do
 takeTables :: Striped.Column -> Either BlockTableError (Boxed.Vector Striped.Table)
 takeTables column = do
   attrs <- takeAttributes column
-  traverse (takeTable . field) attrs
+  traverse (takeTable . fieldData) attrs
 
 blockOfTable :: Striped.Table -> Either BlockTableError Block
 blockOfTable table = do

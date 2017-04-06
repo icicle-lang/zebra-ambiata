@@ -48,8 +48,7 @@ import qualified Data.Vector as Boxed
 
 import           P
 
-import           Zebra.Table.Schema (Field(..), FieldName(..))
-import           Zebra.Table.Schema (Variant(..), VariantName(..))
+import           Zebra.Table.Data
 
 
 data JsonDecodeError =

@@ -1,6 +1,5 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveGeneric #-}
@@ -61,7 +60,6 @@ module Zebra.X.Vector.Cons (
 
 import           Data.List.NonEmpty (NonEmpty)
 import qualified Data.List.NonEmpty as NonEmpty
-import           Data.Typeable (Typeable)
 
 import           GHC.Generics (Generic)
 
@@ -78,7 +76,7 @@ import qualified X.Data.Vector.Generic as Generic
 
 newtype Cons v a =
   Cons (v a)
-  deriving (Eq, Ord, Generic, Typeable, Functor, Foldable, Traversable)
+  deriving (Eq, Ord, Generic, Functor, Foldable, Traversable)
 
 instance (Show a, Generic.Vector v a) => Show (Cons v a) where
   showsPrec _ =
