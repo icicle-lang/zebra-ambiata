@@ -17,7 +17,7 @@ import qualified Data.Text as Text
 
 import           P
 
-import           Zebra.Serial.Json.Schema (SchemaVersion(..), pTableSchemaV0, ppTableSchema)
+import           Zebra.Serial.Json.Schema (SchemaVersion(..), pTableSchemaV1, ppTableSchema)
 import           Zebra.Serial.Json.Util
 import           Zebra.Table.Data
 import qualified Zebra.Table.Schema as Schema
@@ -50,7 +50,7 @@ pVersionedSchema =
     version <- withStructField "version" o pVersion
     case version of
       TextV0 ->
-        withStructField "schema" o pTableSchemaV0
+        withStructField "schema" o pTableSchemaV1
 
 ppVersionedSchema :: TextVersion -> Schema.Table -> Aeson.Value
 ppVersionedSchema version schema =
@@ -64,7 +64,7 @@ ppVersionedSchema version schema =
 schemaVersion :: TextVersion -> SchemaVersion
 schemaVersion = \case
   TextV0 ->
-    SchemaV0
+    SchemaV1
 
 pVersion :: Aeson.Value -> Aeson.Parser TextVersion
 pVersion =

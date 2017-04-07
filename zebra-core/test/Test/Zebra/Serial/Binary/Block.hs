@@ -88,7 +88,7 @@ prop_roundtrip_indices =
 prop_roundtrip_tables :: Property
 prop_roundtrip_tables =
   gamble (Boxed.fromList <$> listOf (jStripedArray 1)) $ \xs ->
-    trippingSerial bTables (getTables $ fmap (unsafeTakeArray . Striped.schema) xs) xs
+    trippingSerialE bTables (getTables $ fmap (unsafeTakeArray . Striped.schema) xs) xs
 
 unsafeTakeArray :: Schema.Table -> Schema.Column
 unsafeTakeArray =

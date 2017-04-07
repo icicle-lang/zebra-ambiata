@@ -39,6 +39,7 @@ import qualified X.Data.Vector.Cons as Cons
 import           Zebra.Foreign.Bindings
 import           Zebra.Foreign.Util
 import           Zebra.Table.Data
+import qualified Zebra.Table.Encoding as Encoding
 import qualified Zebra.Table.Striped as Striped
 import qualified Zebra.X.Vector.Segment as Segment
 
@@ -94,7 +95,8 @@ peekTable c_table = do
   case tag of
     C'ZEBRA_TABLE_BINARY ->
       Striped.Binary
-        <$> peekByteString n_rows (p'zebra_table_variant'_binary'bytes c_of)
+        <$> peekBinaryEncoding (p'zebra_table_variant'_binary'encoding c_of)
+        <*> peekByteString n_rows (p'zebra_table_variant'_binary'bytes c_of)
 
     C'ZEBRA_TABLE_ARRAY ->
       Striped.Array
@@ -124,8 +126,9 @@ pokeTable pool c_table table = do
   pokeIO (p'zebra_table'row_capacity c_table) $ fromIntegral n_rows
 
   case table of
-    Striped.Binary bytes -> do
+    Striped.Binary encoding bytes -> do
       pokeIO c_tag C'ZEBRA_TABLE_BINARY
+      pokeBinaryEncoding (p'zebra_table_variant'_binary'encoding c_of) encoding
       pokeByteString pool (p'zebra_table_variant'_binary'bytes c_of) bytes
 
     Striped.Array values -> do
@@ -142,6 +145,24 @@ pokeTable pool c_table table = do
       pokeIO (p'zebra_table_variant'_map'values c_of) c_values
       pokeColumn pool c_keys keys
       pokeColumn pool c_values values
+
+peekBinaryEncoding :: MonadIO m => Ptr C'zebra_binary_encoding -> EitherT ForeignError m (Maybe Encoding.Binary)
+peekBinaryEncoding ptr = do
+  encoding <- peekIO ptr
+  case encoding of
+    C'ZEBRA_BINARY_NONE ->
+      pure Nothing
+    C'ZEBRA_BINARY_UTF8 ->
+      pure $ Just Encoding.Utf8
+    _ ->
+      left $ ForeignInvalidBinaryEncoding (fromIntegral encoding)
+
+pokeBinaryEncoding :: MonadIO m => Ptr C'zebra_binary_encoding -> Maybe Encoding.Binary -> m ()
+pokeBinaryEncoding ptr = \case
+  Nothing ->
+    pokeIO ptr C'ZEBRA_BINARY_NONE
+  Just Encoding.Utf8 ->
+    pokeIO ptr C'ZEBRA_BINARY_UTF8
 
 peekColumn :: MonadIO m => Int -> Ptr C'zebra_column -> EitherT ForeignError m Striped.Column
 peekColumn n_rows c_column = do

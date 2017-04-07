@@ -193,7 +193,7 @@ void* zebra_ensure_capacity (anemone_mempool_t *pool, void *old, size_t size, in
     int64_t current_capacity = zebra_grow_array_capacity (old_used);
 
     if (old != NULL && required <= current_capacity) return old;
-    
+
     return zebra_grow_array (pool, old, size, old_used, zebra_grow_array_capacity (required) );
 }
 #define ZEBRA_ENSURE_CAPACITY(pool, in, oldcap, newcap) zebra_ensure_capacity (pool, in, sizeof (in[0]), oldcap, newcap )

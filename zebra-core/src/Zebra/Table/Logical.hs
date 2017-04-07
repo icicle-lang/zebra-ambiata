@@ -321,7 +321,7 @@ unionStep kvss =
 
 defaultTable :: Schema.Table -> Table
 defaultTable = \case
-  Schema.Binary ->
+  Schema.Binary _ ->
     Binary ByteString.empty
   Schema.Array _ ->
     Array Boxed.empty

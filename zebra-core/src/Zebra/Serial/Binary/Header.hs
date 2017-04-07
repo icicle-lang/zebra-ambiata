@@ -74,11 +74,11 @@ getHeader = do
 -- @
 bHeaderV3 :: Schema.Table -> Builder
 bHeaderV3 schema =
-  bSizedByteArray (encodeSchema SchemaV0 schema)
+  bSizedByteArray (encodeSchema SchemaV1 schema)
 
 getHeaderV3 :: Get Schema.Table
 getHeaderV3 =
-  parseSchema =<< getSizedByteArray
+  parseSchema SchemaV1 =<< getSizedByteArray
 
 -- | Encode a zebra v2 header from a dictionary.
 --
@@ -118,7 +118,7 @@ getHeaderV2 :: Get (Map AttributeName Schema.Column)
 getHeaderV2 = do
   n <- fromIntegral <$> Get.getWord32le
   ns <- fmap (AttributeName . Text.decodeUtf8) <$> getStrings n
-  ts <- traverse parseSchema =<< getStrings n
+  ts <- traverse (parseSchema SchemaV0) =<< getStrings n
 
   let
     cs =
@@ -129,9 +129,10 @@ getHeaderV2 = do
     Map.fromList . toList $
     Boxed.zip ns cs
 
-parseSchema :: ByteString -> Get Schema.Table
-parseSchema =
-  either (fail . Text.unpack . renderJsonSchemaDecodeError) pure . decodeSchema SchemaV0
+parseSchema :: SchemaVersion -> ByteString -> Get Schema.Table
+parseSchema version =
+  either (fail . Text.unpack . renderJsonSchemaDecodeError) pure .
+  decodeSchema version
 
 -- | The zebra 8-byte magic number, including version.
 --

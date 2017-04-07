@@ -8,18 +8,18 @@
           "fields": [
             {
               "name": "schleem",
-              "column": {
+              "schema": {
                 "enum": {
                   "variants": [
                     {
                       "name": "none",
-                      "column": {
+                      "schema": {
                         "unit": {}
                       }
                     },
                     {
                       "name": "some",
-                      "column": {
+                      "schema": {
                         "int": {}
                       }
                     }
@@ -29,10 +29,10 @@
             },
             {
               "name": "entity_id",
-              "column": {
-                "nested": {
-                  "table": {
-                    "binary": {}
+              "schema": {
+                "binary": {
+                  "encoding": {
+                    "utf8": {}
                   }
                 }
               }
@@ -47,5 +47,5 @@
 === Data ===
 {"entity_id":"abc","schleem":{"none":{}}}
 {"entity_id":"def","schleem":{"some":456}}
-{"entity_id":"schleem","schleem":{"some":789}}
-{"entity_id":"slhn\u000feo","schleem":{"none":{}}}
+{"entity_id":"ghi","schleem":{"some":789}}
+{"entity_id":"jkl","schleem":{"none":{}}}

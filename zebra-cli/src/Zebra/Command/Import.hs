@@ -28,7 +28,6 @@ import           X.Control.Monad.Trans.Either (EitherT, hoistEither, joinEitherT
 import           X.Data.Vector.Stream (Stream(..))
 import qualified X.Data.Vector.Stream as Stream
 
-import           Zebra.Factset.Table
 import           Zebra.Serial.Binary.Block
 import           Zebra.Serial.Binary.Data
 import           Zebra.Serial.Binary.File
@@ -47,7 +46,7 @@ data ImportError =
     ImportFileError !FileError
   | ImportTextSchemaDecodeError !TextSchemaDecodeError
   | ImportTextStripedDecodeError !TextStripedDecodeError
-  | ImportBlockTableError !BlockTableError
+  | ImportBinaryEncodeError !BinaryEncodeError
     deriving (Eq, Show)
 
 renderImportError :: ImportError -> Text
@@ -58,8 +57,8 @@ renderImportError = \case
     renderTextSchemaDecodeError err
   ImportTextStripedDecodeError err ->
     renderTextStripedDecodeError err
-  ImportBlockTableError err ->
-    renderBlockTableError err
+  ImportBinaryEncodeError err ->
+    renderBinaryEncodeError err
 
 lineBoundary :: Monad m => Stream m ByteString -> Stream m ByteString
 lineBoundary (Stream step sinit) =
@@ -125,7 +124,7 @@ zebraImport x = do
       joinEitherT id . firstT ImportFileError .
         hPutStream (maybe "<stdout>" id $ importOutput x) handle .
         fmap (Lazy.toStrict . Builder.toLazyByteString) .
-        Stream.mapM (hoistEither . first ImportBlockTableError . bRootTable header) .
+        Stream.mapM (hoistEither . first ImportBinaryEncodeError . bRootTable header) .
         Stream.mapM (hoistEither . first ImportTextStripedDecodeError . decodeStriped schema) .
         lineBoundary $
         Stream.trans (firstT ImportFileError) bytes

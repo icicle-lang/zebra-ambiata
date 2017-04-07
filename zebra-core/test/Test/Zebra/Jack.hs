@@ -27,7 +27,7 @@ module Test.Zebra.Jack (
   , jFacts
   , jFact
 
-  -- * Zebra.Table.Schema
+  -- * Zebra.Table.Data
   , jField
   , jFieldName
   , jVariant
@@ -37,6 +37,8 @@ module Test.Zebra.Jack (
   , jTableSchema
   , jMapSchema
   , jColumnSchema
+  , tableSchemaV0
+  , columnSchemaV0
 
   -- * Zebra.Table.Striped
   , jSizedStriped
@@ -66,6 +68,8 @@ import qualified Data.ByteString.Char8 as Char8
 import qualified Data.Char as Char
 import qualified Data.List as List
 import qualified Data.Map as Map
+import qualified Data.Text as Text
+import qualified Data.Text.Encoding as Text
 import           Data.Thyme.Calendar (Year, Day, YearMonthDay(..), gregorianValid)
 import qualified Data.Vector as Boxed
 import qualified Data.Vector.Storable as Storable
@@ -96,6 +100,7 @@ import           Zebra.Factset.Entity
 import           Zebra.Factset.Fact
 import           Zebra.Serial.Binary.Data
 import           Zebra.Table.Data
+import qualified Zebra.Table.Encoding as Encoding
 import qualified Zebra.Table.Logical as Logical
 import qualified Zebra.Table.Schema as Schema
 import qualified Zebra.Table.Striped as Striped
@@ -122,7 +127,7 @@ jVariantName =
 
 tableSchemaTables :: Schema.Table -> [Schema.Table]
 tableSchemaTables = \case
-  Schema.Binary ->
+  Schema.Binary _ ->
     []
   Schema.Array x ->
     columnSchemaTables x
@@ -132,7 +137,7 @@ tableSchemaTables = \case
 
 tableSchemaColumns :: Schema.Table -> [Schema.Column]
 tableSchemaColumns = \case
-  Schema.Binary ->
+  Schema.Binary _ ->
     []
   Schema.Array x ->
     [x]
@@ -175,14 +180,48 @@ columnSchemaColumns = \case
   Schema.Reversed schema ->
     [schema]
 
+-- Strip a schema of features which can't be used in SchemaV0.
+tableSchemaV0 :: Schema.Table -> Schema.Table
+tableSchemaV0 = \case
+  Schema.Binary _ ->
+    Schema.Binary Nothing
+  Schema.Array x ->
+    Schema.Array $ columnSchemaV0 x
+  Schema.Map k v ->
+    Schema.Map (columnSchemaV0 k) (columnSchemaV0 v)
+
+columnSchemaV0 :: Schema.Column -> Schema.Column
+columnSchemaV0 = \case
+  Schema.Unit ->
+    Schema.Unit
+  Schema.Int ->
+    Schema.Int
+  Schema.Double ->
+    Schema.Double
+  Schema.Enum variants ->
+    Schema.Enum $ fmap (fmap columnSchemaV0) variants
+  Schema.Struct fields ->
+    Schema.Struct $ fmap (fmap columnSchemaV0) fields
+  Schema.Nested table ->
+    Schema.Nested $ tableSchemaV0 table
+  Schema.Reversed schema ->
+    Schema.Reversed $ columnSchemaV0 schema
+
 jTableSchema :: Jack Schema.Table
 jTableSchema =
   reshrink tableSchemaTables $
   oneOfRec [
-      pure Schema.Binary
+      Schema.Binary <$> jBinaryEncoding
     ] [
       Schema.Array <$> jColumnSchema
     , jMapSchema
+    ]
+
+jBinaryEncoding :: Jack (Maybe Encoding.Binary)
+jBinaryEncoding =
+  elements [
+      Nothing
+    , Just Encoding.Utf8
     ]
 
 jMapSchema :: Jack Schema.Table
@@ -206,7 +245,7 @@ jColumnSchema =
 
 tableTables :: Striped.Table -> [Striped.Table]
 tableTables = \case
-  Striped.Binary _ ->
+  Striped.Binary _ _ ->
     []
   Striped.Array x ->
     columnTables x
@@ -216,7 +255,7 @@ tableTables = \case
 
 tableColumns :: Striped.Table -> [Striped.Column]
 tableColumns = \case
-  Striped.Binary _ ->
+  Striped.Binary _ _ ->
     []
   Striped.Array x ->
     [x]
@@ -277,13 +316,46 @@ jStriped n =
 jByteString :: Int -> Jack ByteString
 jByteString n =
   oneOf [
-      Char8.pack <$> vectorOf n (fmap Char.chr $ chooseInt (Char.ord 'a', Char.ord 'z'))
-    , ByteString.pack <$> vectorOf n boundedEnum
+      Char8.pack
+        <$> vectorOf n (fmap Char.chr $ chooseInt (Char.ord 'a', Char.ord 'z'))
+    , ByteString.pack
+        <$> vectorOf n boundedEnum
     ]
 
+jUtf8 :: Int -> Jack ByteString
+jUtf8 n =
+  fmap (fixupUtf8 n) $
+  oneOf [
+      vectorOf n (fmap Char.chr $ chooseInt (Char.ord 'a', Char.ord 'z'))
+    , vectorOf n (fmap Char.chr $ chooseInt (Char.ord minBound, Char.ord maxBound))
+    ]
+
+fixupUtf8 :: Int -> [Char] -> ByteString
+fixupUtf8 n xs =
+  let
+    bs =
+      Text.encodeUtf8 $ Text.pack xs
+
+    m =
+      ByteString.length bs
+  in
+    if m > n then
+      fixupUtf8 n $ Savage.init xs -- sorry
+    else
+      -- pad with trash to make exactly 'n' bytes
+      bs <> Char8.replicate (n - m) 'x'
+
 jStripedBinary  :: Int -> Jack Striped.Table
-jStripedBinary n =
-  Striped.Binary <$> jByteString n
+jStripedBinary n = do
+  encoding <- jBinaryEncoding
+  case encoding of
+    Nothing ->
+      Striped.Binary encoding <$> jByteString n
+    Just Encoding.Utf8 ->
+      -- FIXME This will work out strangely for tests that have nested binary
+      -- FIXME as we might get nonsense when we slice a utf-8 string, but the
+      -- FIXME tests which generate striped tables don't care at the moment.
+      Striped.Binary encoding <$> jUtf8 n
 
 jStripedArray :: Int -> Jack Striped.Table
 jStripedArray n = do
@@ -366,8 +438,10 @@ jSizedLogical schema =
 jLogical :: Schema.Table -> Int -> Jack Logical.Table
 jLogical tschema n =
   case tschema of
-    Schema.Binary ->
+    Schema.Binary Nothing ->
       Logical.Binary <$> jByteString n
+    Schema.Binary (Just Encoding.Utf8) ->
+      Logical.Binary <$> jUtf8 n
     Schema.Array x ->
       Logical.Array . Boxed.fromList <$> vectorOf n (jLogicalValue x)
     Schema.Map k v ->

@@ -70,6 +70,7 @@ import qualified X.Data.Vector.Cons as Cons
 import qualified X.Data.Vector.Generic as Generic
 
 import           Zebra.Table.Data
+import qualified Zebra.Table.Encoding as Encoding
 import           Zebra.Table.Logical (LogicalSchemaError, LogicalMergeError)
 import qualified Zebra.Table.Logical as Logical
 import           Zebra.Table.Schema (SchemaError(..))
@@ -80,7 +81,7 @@ import qualified Zebra.X.Vector.Storable as Storable
 
 
 data Table =
-    Binary !ByteString
+    Binary !(Maybe Encoding.Binary) !ByteString
   | Array !Column
   | Map !Column !Column
     deriving (Eq, Ord, Show, Generic)
@@ -158,7 +159,7 @@ ppPrefix prefix =
 
 length :: Table -> Int
 length = \case
-  Binary bs ->
+  Binary _ bs ->
     ByteString.length bs
   Array c ->
     lengthColumn c
@@ -188,8 +189,8 @@ lengthColumn = \case
 
 schema :: Table -> Schema.Table
 schema = \case
-  Binary _ ->
-    Schema.Binary
+  Binary encoding _ ->
+    Schema.Binary encoding
   Array x ->
     Schema.Array (schemaColumn x)
   Map k v ->
@@ -216,8 +217,8 @@ schemaColumn = \case
 
 empty :: Schema.Table -> Table
 empty = \case
-  Schema.Binary ->
-    Binary ByteString.empty
+  Schema.Binary encoding ->
+    Binary encoding ByteString.empty
   Schema.Array x ->
     Array (emptyColumn x)
   Schema.Map k v ->
@@ -244,7 +245,7 @@ emptyColumn = \case
 
 takeBinary :: Table -> Either SchemaError ByteString
 takeBinary = \case
-  Binary x ->
+  Binary _ x ->
     Right x
   x ->
     Left $ SchemaExpectedBinary (schema x)
@@ -320,8 +321,8 @@ takeReversed = \case
 fromLogical :: Schema.Table -> Logical.Table -> Either StripedError Table
 fromLogical tschema collection =
   case tschema of
-    Schema.Binary ->
-      Binary
+    Schema.Binary encoding ->
+      Binary encoding
         <$> first StripedLogicalSchemaError (Logical.takeBinary collection)
 
     Schema.Array eschema -> do
@@ -338,11 +339,11 @@ fromLogical tschema collection =
 fromNested :: Schema.Table -> Boxed.Vector Logical.Table -> Either StripedError (Storable.Vector Int64, Table)
 fromNested tschema xss0 =
   case tschema of
-    Schema.Binary -> do
+    Schema.Binary encoding -> do
       bss <- first StripedLogicalSchemaError $ traverse Logical.takeBinary xss0
       pure (
           Storable.convert $ fmap (fromIntegral . ByteString.length) bss
-        , Binary . ByteString.concat $ Boxed.toList bss
+        , Binary encoding . ByteString.concat $ Boxed.toList bss
         )
 
     Schema.Array eschema -> do
@@ -438,7 +439,7 @@ fromField field =
 
 toLogical :: Table -> Either StripedError Logical.Table
 toLogical = \case
-  Binary bs ->
+  Binary _ bs ->
     pure $ Logical.Binary bs
 
   Array c ->
@@ -453,7 +454,7 @@ toLogical = \case
 toNested :: Storable.Vector Int64 -> Table -> Either StripedError (Boxed.Vector Logical.Table)
 toNested ns table =
   case table of
-    Binary bs -> do
+    Binary _ bs -> do
       bss <- first (StripedNestedLengthMismatch $ schema table) $ Segment.reify ns bs
       pure $ fmap Logical.Binary bss
 
@@ -514,8 +515,8 @@ mkEnum tag values =
 
 splitAt :: Int -> Table -> (Table, Table)
 splitAt i = \case
-  Binary bs ->
-    bimap Binary Binary $
+  Binary encoding bs ->
+    bimap (Binary encoding) (Binary encoding) $
       ByteString.splitAt i bs
   Array c ->
     bimap Array Array
@@ -619,8 +620,10 @@ unsafeConcat =
 unsafeAppend :: Table -> Table -> Either StripedError Table
 unsafeAppend x0 x1 =
   case (x0, x1) of
-    (Binary bs0, Binary bs1) ->
-      pure $ Binary (bs0 <> bs1)
+    (Binary encoding0 bs0, Binary encoding1 bs1)
+      | encoding0 == encoding1
+      ->
+        pure $ Binary encoding0 (bs0 <> bs1)
 
     (Array xs0, Array xs1) ->
       Array

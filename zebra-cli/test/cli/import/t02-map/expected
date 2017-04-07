@@ -8,16 +8,16 @@
           "fields": [
             {
               "name": "entity_hash",
-              "column": {
+              "schema": {
                 "int": {}
               }
             },
             {
               "name": "entity_id",
-              "column": {
-                "nested": {
-                  "table": {
-                    "binary": {}
+              "schema": {
+                "binary": {
+                  "encoding": {
+                    "utf8": {}
                   }
                 }
               }
@@ -30,18 +30,14 @@
           "variants": [
             {
               "name": "cash",
-              "column": {
+              "schema": {
                 "double": {}
               }
             },
             {
               "name": "item",
-              "column": {
-                "nested": {
-                  "table": {
-                    "binary": {}
-                  }
-                }
+              "schema": {
+                "binary": {}
               }
             }
           ]
@@ -53,6 +49,6 @@
 
 === Data ===
 {"key":{"entity_hash":10,"entity_id":"barney"},"value":{"cash":27.6}}
-{"key":{"entity_hash":10,"entity_id":"homer"},"value":{"item":"duff"}}
+{"key":{"entity_hash":10,"entity_id":"homer"},"value":{"item":"ZHVmZg=="}}
 {"key":{"entity_hash":20,"entity_id":"marge"},"value":{"cash":45.1}}
-{"key":{"entity_hash":30,"entity_id":"lisa"},"value":{"item":"saxophone"}}
+{"key":{"entity_hash":30,"entity_id":"lisa"},"value":{"item":"c2F4b3Bob25l"}}

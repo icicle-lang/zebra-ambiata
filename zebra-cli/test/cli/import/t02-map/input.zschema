@@ -7,14 +7,16 @@
           "fields": [
             {
               "name": "entity_hash",
-              "column": {
+              "schema": {
                 "int": {}
               }
             },
             {
               "name": "entity_id",
-              "column": {
-                "nested": { "table": { "binary": {} } }
+              "schema": {
+                "binary": {
+                  "encoding": { "utf8": {} }
+                }
               }
             }
           ]
@@ -25,14 +27,14 @@
           "variants": [
             {
               "name": "cash",
-              "column": {
+              "schema": {
                 "double": {}
               }
             },
             {
               "name": "item",
-              "column": {
-                "nested": { "table": { "binary": {} } }
+              "schema": {
+                "binary": {}
               }
             }
           ]

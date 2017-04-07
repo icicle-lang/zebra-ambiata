@@ -26,6 +26,8 @@ import           P
 import           Zebra.Serial.Json.Logical (JsonLogicalEncodeError, renderJsonLogicalEncodeError)
 import           Zebra.Serial.Json.Logical (ppValue, ppPair, pValue, pPair)
 import           Zebra.Serial.Json.Util
+import           Zebra.Table.Encoding (Utf8Error)
+import qualified Zebra.Table.Encoding as Encoding
 import qualified Zebra.Table.Logical as Logical
 import qualified Zebra.Table.Schema as Schema
 
@@ -33,10 +35,12 @@ import qualified Zebra.Table.Schema as Schema
 data TextLogicalEncodeError =
     TextLogicalSchemaMismatch !Schema.Table !Logical.Table
   | TextLogicalEncodeError !JsonLogicalEncodeError
+  | TextLogicalEncodeUtf8 !Utf8Error
     deriving (Eq, Show)
 
 data TextLogicalDecodeError =
     TextLogicalDecodeError !JsonDecodeError
+  | TextLogicalDecodeUtf8 !Utf8Error
     deriving (Eq, Show)
 
 renderTextValueEncodeError :: TextLogicalEncodeError -> Text
@@ -49,10 +53,18 @@ renderTextValueEncodeError = \case
   TextLogicalEncodeError err ->
     renderJsonLogicalEncodeError err
 
+  TextLogicalEncodeUtf8 err ->
+    "Error encoding UTF-8 binary: " <>
+    Encoding.renderUtf8Error err
+
 renderTextValueDecodeError :: TextLogicalDecodeError -> Text
 renderTextValueDecodeError = \case
   TextLogicalDecodeError err ->
     renderJsonDecodeError err
+
+  TextLogicalDecodeUtf8 err ->
+    "Error decoding UTF-8 binary: " <>
+    Encoding.renderUtf8Error err
 
 encodeJsonRows :: [Text] -> Boxed.Vector Aeson.Value -> ByteString
 encodeJsonRows keyOrder =
@@ -61,9 +73,10 @@ encodeJsonRows keyOrder =
 encodeLogical :: Schema.Table -> Logical.Table -> Either TextLogicalEncodeError ByteString
 encodeLogical schema table0 =
   case schema of
-    Schema.Binary
+    Schema.Binary encoding
       | Logical.Binary bs <- table0
-      ->
+      -> do
+        () <- first TextLogicalEncodeUtf8 $ Encoding.validateBinary encoding bs
         pure bs
 
     Schema.Array element
@@ -91,7 +104,8 @@ decodeJsonRows p =
 decodeLogical :: Schema.Table -> ByteString -> Either TextLogicalDecodeError Logical.Table
 decodeLogical schema bs =
   case schema of
-    Schema.Binary ->
+    Schema.Binary encoding -> do
+      () <- first TextLogicalDecodeUtf8 $ Encoding.validateBinary encoding bs
       pure $ Logical.Binary bs
 
     Schema.Array element ->
