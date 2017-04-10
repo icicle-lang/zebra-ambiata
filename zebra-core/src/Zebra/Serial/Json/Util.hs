@@ -17,6 +17,7 @@ module Zebra.Serial.Json.Util (
   , pDouble
   , pEnum
   , withStructField
+  , withOptionalField
   , kmapM
 
   -- * Pretty Printing
@@ -30,7 +31,7 @@ module Zebra.Serial.Json.Util (
   , ppStructField
   ) where
 
-import           Data.Aeson ((.=), (.:))
+import           Data.Aeson ((.=), (.:), (.:?))
 import qualified Data.Aeson as Aeson
 import qualified Data.Aeson.Encode.Pretty as Aeson
 import           Data.Aeson.Internal ((<?>))
@@ -104,33 +105,17 @@ ppText =
   Aeson.toJSON
 
 pBinary :: Aeson.Value -> Aeson.Parser ByteString
-pBinary = \case
-  Aeson.String x ->
-    pure $ Text.encodeUtf8 x
+pBinary =
+  Aeson.withText "base64 encoded binary data" $ \txt ->
+    case Base64.decode $ Text.encodeUtf8 txt of
+      Left err ->
+        fail $ "could not decode base64 encoded binary data: " <> err
+      Right bs ->
+        pure bs
 
-  Aeson.Object o ->
-    withStructField "base64" o . Aeson.withText "base64 encoded binary data" $ \txt ->
-      case Base64.decode $ Text.encodeUtf8 txt of
-        Left err ->
-          fail $ "could not decode base64 encoded binary data: " <> err
-        Right bs ->
-          pure bs
-
-  v ->
-    Aeson.typeMismatch "utf8 text or base64 encoded binary" v
-
--- | Attempt to store a 'ByteString' directly as a JSON string if it happens to
---   be valid UTF-8, otherwise Base64 encode it.
---
 ppBinary :: ByteString -> Aeson.Value
-ppBinary bs =
-  case Text.decodeUtf8' bs of
-    Left _ ->
-      Aeson.object [
-          "base64" .= Text.decodeUtf8 (Base64.encode bs)
-        ]
-    Right x ->
-     ppText x
+ppBinary =
+  ppText . Text.decodeUtf8 . Base64.encode
 
 pUnit :: Aeson.Value -> Aeson.Parser ()
 pUnit =
@@ -200,6 +185,15 @@ withStructField :: FieldName -> Aeson.Object -> (Aeson.Value -> Aeson.Parser a) 
 withStructField name o p = do
   x <- o .: unFieldName name
   p x <?> Aeson.Key (unFieldName name)
+
+withOptionalField :: FieldName -> Aeson.Object -> (Aeson.Value -> Aeson.Parser a) -> Aeson.Parser (Maybe a)
+withOptionalField name o p = do
+  mx <- o .:? unFieldName name
+  case mx of
+    Nothing ->
+      pure Nothing
+    Just x ->
+      Just <$> (p x <?> Aeson.Key (unFieldName name))
 
 ppStruct :: [Field Aeson.Value] -> Aeson.Value
 ppStruct =

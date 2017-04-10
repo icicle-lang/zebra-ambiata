@@ -25,6 +25,7 @@ error_t zebra_agile_clone_table (anemone_mempool_t *pool, const zebra_table_t *t
     
     switch (table->tag) {
         case ZEBRA_TABLE_BINARY: {
+            into->of._binary.encoding = table->of._binary.encoding;
             into->of._binary.bytes = NULL;
             return ZEBRA_SUCCESS;
         }
@@ -139,6 +140,7 @@ error_t zebra_neritic_clone_table (
     out_table->tag = tag;
     switch (tag) {
         case ZEBRA_TABLE_BINARY: {
+            out_table->of._binary.encoding = in_table->of._binary.encoding;
             out_table->of._binary.bytes = in_table->of._binary.bytes;
             return ZEBRA_SUCCESS;
         }
@@ -267,6 +269,7 @@ error_t zebra_deep_clone_table (anemone_mempool_t *pool, const zebra_table_t *in
 
     switch (tag) {
         case ZEBRA_TABLE_BINARY: {
+            out_table->of._binary.encoding = in_table->of._binary.encoding;
             out_table->of._binary.bytes = ZEBRA_CLONE_ARRAY (pool, in_table->of._binary.bytes, row_capacity);
             return ZEBRA_SUCCESS;
         }

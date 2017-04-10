@@ -3,7 +3,7 @@
 module Test.Zebra.Serial.Text.Schema where
 
 import           Disorder.Jack (Property, quickCheckAll)
-import           Disorder.Jack (gamble, tripping)
+import           Disorder.Jack (gamble)
 
 import           P
 
@@ -17,7 +17,7 @@ import           Zebra.Serial.Text.Schema
 prop_roundtrip_schema :: Property
 prop_roundtrip_schema =
   gamble jTableSchema $
-    tripping (encodeSchema TextV0) decodeSchema
+    trippingBoth (pure . encodeSchema TextV0) (decodeSchema)
 
 return []
 tests :: IO Bool

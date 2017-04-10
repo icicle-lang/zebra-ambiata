@@ -129,6 +129,8 @@ error_t zebra_table_pop_rows (
 
     switch (in_table->tag) {
         case ZEBRA_TABLE_BINARY: {
+            out_table->of._binary.encoding = in_table->of._binary.encoding;
+
             char *bytes = in_table->of._binary.bytes;
             out_table->of._binary.bytes = bytes;
             in_table->of._binary.bytes = bytes + n_rows;

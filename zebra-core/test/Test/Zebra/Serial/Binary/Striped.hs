@@ -20,13 +20,13 @@ prop_roundtrip_table :: Property
 prop_roundtrip_table =
   gamble jBinaryVersion $ \version ->
   gamble (jStriped 1) $ \table ->
-    trippingSerial (bTable version) (getTable version 1 $ Striped.schema table) table
+    trippingSerialE (bTable version) (getTable version 1 $ Striped.schema table) table
 
 prop_roundtrip_column :: Property
 prop_roundtrip_column =
   gamble jBinaryVersion $ \version ->
   gamble (jStripedColumn 1) $ \column ->
-    trippingSerial (bColumn version) (getColumn version 1 $ Striped.schemaColumn column) column
+    trippingSerialE (bColumn version) (getColumn version 1 $ Striped.schemaColumn column) column
 
 return []
 tests :: IO Bool

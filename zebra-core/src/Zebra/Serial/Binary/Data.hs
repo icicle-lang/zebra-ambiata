@@ -1,5 +1,6 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE OverloadedStrings #-}
 module Zebra.Serial.Binary.Data (
     Header(..)
   , BinaryVersion(..)
@@ -7,6 +8,12 @@ module Zebra.Serial.Binary.Data (
   , headerOfAttributes
   , attributesOfHeader
   , schemaOfHeader
+
+  , BinaryEncodeError(..)
+  , renderBinaryEncodeError
+
+  , BinaryDecodeError(..)
+  , renderBinaryDecodeError
   ) where
 
 import           Data.Map (Map)
@@ -15,6 +22,8 @@ import           P
 
 import           Zebra.Factset.Data
 import           Zebra.Factset.Table
+import           Zebra.Table.Encoding (Utf8Error)
+import qualified Zebra.Table.Encoding as Encoding
 import qualified Zebra.Table.Schema as Schema
 
 
@@ -29,6 +38,29 @@ data BinaryVersion =
     BinaryV2 -- ^ Schema is stored in header, instead of encoding.
   | BinaryV3 -- ^ Data is stored as tables instead of entity blocks.
     deriving (Eq, Ord, Show)
+
+data BinaryEncodeError =
+    BinaryEncodeUtf8 !Utf8Error
+  | BinaryEncodeBlockTableError !BlockTableError
+    deriving (Eq, Show)
+
+data BinaryDecodeError =
+    BinaryDecodeUtf8 !Utf8Error
+    deriving (Eq, Show)
+
+renderBinaryEncodeError :: BinaryEncodeError -> Text
+renderBinaryEncodeError = \case
+  BinaryEncodeUtf8 err ->
+    "Failed encoding UTF-8 binary: " <>
+    Encoding.renderUtf8Error err
+  BinaryEncodeBlockTableError err ->
+    renderBlockTableError err
+
+renderBinaryDecodeError :: BinaryDecodeError -> Text
+renderBinaryDecodeError = \case
+  BinaryDecodeUtf8 err ->
+    "Failed decoding UTF-8 binary: " <>
+    Encoding.renderUtf8Error err
 
 headerOfAttributes :: BinaryVersion -> Map AttributeName Schema.Column -> Header
 headerOfAttributes version attributes =

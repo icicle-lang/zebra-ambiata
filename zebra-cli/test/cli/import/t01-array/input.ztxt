@@ -1,4 +1,4 @@
 {"schleem":{"none":{}}, "entity_id": "abc"}
 {"schleem":{"some":456}, "entity_id": "def"}
-{"schleem":{"some":789}, "entity_id": {"base64": "c2NobGVlbQ=="}}
-{"schleem":{"none":{}}, "entity_id": {"base64": "c2xobg9lbx=="}}
+{"schleem":{"some":789}, "entity_id": "ghi"}
+{"schleem":{"none":{}}, "entity_id": "jkl"}

@@ -19,6 +19,12 @@
 
 typedef int64_t bool64_t;
 
+// Encodings
+typedef enum zebra_binary_encoding {
+    ZEBRA_BINARY_NONE,
+    ZEBRA_BINARY_UTF8
+} zebra_binary_encoding_t;
+
 // Forward declarations for recursive structures
 struct zebra_column;
 typedef struct zebra_column zebra_column_t;
@@ -35,6 +41,7 @@ typedef enum zebra_table_tag {
 typedef union zebra_table_variant {
     // ZEBRA_TABLE_BINARY
     struct {
+        zebra_binary_encoding_t encoding;
         char* bytes;
     } _binary;
     // ZEBRA_TABLE_ARRAY
@@ -117,7 +124,7 @@ typedef union zebra_column_variant {
         // This requires a little more computation to remove the offset,
         // but allows us to reuse prefix sums from the middle of other arrays
         // without copying them.
-        // 
+        //
         // Example nested array:
         //
         //            [ [ 1 2 3 ]  [ 4 5 ]  [ 6 7 8 ] ]
@@ -133,7 +140,7 @@ typedef union zebra_column_variant {
         //  Lengths[i] = Scans[i+1] - Scans[i]
         //  Starts[i]  = Scans[i]   - Scans[0]
         //  Ends[i]    = Scans[i+1] - Scans[0]
-        // 
+        //
         // The inner table's row count is the total number of elements:
         //  table.row_count = Scans[length] - Scans[0]
         int64_t *indices;

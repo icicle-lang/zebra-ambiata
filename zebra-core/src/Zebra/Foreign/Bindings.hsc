@@ -37,6 +37,10 @@ import Anemone.Foreign.Mempool (Mempool(..))
 #znum ZEBRA_UNPACK_BUFFER_TOO_SMALL
 #znum ZEBRA_UNPACK_BUFFER_TOO_LARGE
 
+-- Zebra.Table.Encoding.Binary
+#integral_t enum zebra_binary_encoding
+#znum ZEBRA_BINARY_NONE
+#znum ZEBRA_BINARY_UTF8
 
 -- Zebra.Table.Striped.Table
 #integral_t enum zebra_table_tag
@@ -46,6 +50,7 @@ import Anemone.Foreign.Mempool (Mempool(..))
 
 #starttype union zebra_table_variant
 -- ZEBRA_TABLE_BINARY
+#field _binary.encoding , <zebra_binary_encoding>
 #field _binary.bytes    , Ptr Word8
 -- ZEBRA_TABLE_ARRAY
 #field _array.values    , Ptr <zebra_column>

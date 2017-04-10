@@ -30,6 +30,7 @@ import           Data.ByteString (ByteString)
 import qualified Data.List as List
 import           Data.Map (Map)
 import qualified Data.Map.Strict as Map
+import qualified Data.Text.Encoding as Text
 import qualified Data.Vector as Boxed
 
 import           P
@@ -39,6 +40,8 @@ import qualified X.Data.Vector.Cons as Cons
 
 import           Zebra.Serial.Json.Util
 import           Zebra.Table.Data
+import           Zebra.Table.Encoding (Utf8Error)
+import qualified Zebra.Table.Encoding as Encoding
 import qualified Zebra.Table.Logical as Logical
 import qualified Zebra.Table.Schema as Schema
 
@@ -46,6 +49,7 @@ import qualified Zebra.Table.Schema as Schema
 data JsonLogicalEncodeError =
     JsonLogicalTableSchemaMismatch !Schema.Table !Logical.Table
   | JsonLogicalValueSchemaMismatch !Schema.Column !Logical.Value
+  | JsonLogicalEncodeUtf8 !Utf8Error
     deriving (Eq, Show)
 
 data JsonLogicalDecodeError =
@@ -63,6 +67,10 @@ renderJsonLogicalEncodeError = \case
     "Error processing logical value, schema did not match:" <>
     Logical.renderField "value" value <>
     Logical.renderField "schema" schema
+
+  JsonLogicalEncodeUtf8 err ->
+    "Error encoding UTF-8 binary: " <>
+    Encoding.renderUtf8Error err
 
 renderJsonLogicalDecodeError :: JsonLogicalDecodeError -> Text
 renderJsonLogicalDecodeError = \case
@@ -88,8 +96,11 @@ decodeLogicalValue schema =
 pTable :: Schema.Table -> Aeson.Value -> Aeson.Parser Logical.Table
 pTable schema =
   case schema of
-    Schema.Binary ->
+    Schema.Binary Nothing ->
       fmap Logical.Binary . pBinary
+
+    Schema.Binary (Just Encoding.Utf8) ->
+      fmap (Logical.Binary . Text.encodeUtf8) . pText
 
     Schema.Array element ->
       fmap Logical.Array .
@@ -102,10 +113,15 @@ pTable schema =
 ppTable :: Schema.Table -> Logical.Table -> Either JsonLogicalEncodeError Aeson.Value
 ppTable schema table0 =
   case schema of
-    Schema.Binary
+    Schema.Binary Nothing
       | Logical.Binary bs <- table0
       ->
         pure $ ppBinary bs
+
+    Schema.Binary (Just Encoding.Utf8)
+      | Logical.Binary bs <- table0
+      -> do
+        fmap ppText . first JsonLogicalEncodeUtf8 $ Encoding.decodeUtf8 bs
 
     Schema.Array element
       | Logical.Array xs <- table0

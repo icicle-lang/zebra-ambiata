@@ -67,7 +67,7 @@ mergeBlocks options files = do
   pool <- liftIO Mempool.create
   merger <- foreignT $ mergeManyInit pool
   let state0 = MergeState Map.empty pool merger Nothing
-  -- TODO bracket/catch and clean up last memory pool on error
+  -- FIXME bracket/catch and clean up last memory pool on error
   -- need to convert state into an IORef for this
   state <- foldM fill state0 files
   state' <- go state
@@ -112,7 +112,7 @@ mergeBlocks options files = do
         entities <- foreignT $ foreignEntitiesOfBlock (stateMempool state) cblock
         foreignT $ mergeManyPush (stateMempool state) (stateMergeMany state) (Boxed.convert entities)
 
-        -- TODO do this better
+        -- FIXME do this better
         case Boxed.uncons $ Boxed.reverse entities of
           Nothing ->
             return state

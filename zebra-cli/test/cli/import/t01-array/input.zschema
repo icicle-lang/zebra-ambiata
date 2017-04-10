@@ -7,16 +7,16 @@
           "fields": [
             {
               "name": "schleem",
-              "column": {
+              "schema": {
                 "enum": {
                   "variants": [
                     {
                       "name": "none",
-                      "column": { "unit": {} }
+                      "schema": { "unit": {} }
                     },
                     {
                       "name": "some",
-                      "column": { "int": {} }
+                      "schema": { "int": {} }
                     }
                   ]
                 }
@@ -24,12 +24,10 @@
             },
             {
               "name": "entity_id",
-              "column": {
-                "nested": {
-                  "table": {
-                    "binary": {}
-                  }
-                }
+              "schema": {
+                 "binary": {
+                   "encoding": { "utf8": {} }
+                 }
               }
             }
           ]

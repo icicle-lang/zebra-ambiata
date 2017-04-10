@@ -47,10 +47,11 @@ import           X.Data.Vector.Cons (Cons)
 import qualified X.Data.Vector.Cons as Cons
 
 import           Zebra.Table.Data
+import qualified Zebra.Table.Encoding as Encoding
 
 
 data Table =
-    Binary
+    Binary !(Maybe Encoding.Binary)
   | Array !Column
   | Map !Column !Column
     deriving (Eq, Ord, Show, Generic)
@@ -130,10 +131,10 @@ option =
 
 ------------------------------------------------------------------------
 
-takeBinary :: Table -> Either SchemaError ()
+takeBinary :: Table -> Either SchemaError (Maybe Encoding.Binary)
 takeBinary = \case
-  Binary ->
-    Right ()
+  Binary encoding ->
+    Right encoding
   x ->
     Left $ SchemaExpectedBinary x
 {-# INLINE takeBinary #-}

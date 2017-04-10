@@ -2,7 +2,11 @@
 {
   "version": "v0",
   "schema": {
-    "binary": {}
+    "binary": {
+      "encoding": {
+        "utf8": {}
+      }
+    }
   }
 }
 

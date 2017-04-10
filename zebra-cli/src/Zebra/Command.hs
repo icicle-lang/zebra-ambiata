@@ -151,7 +151,7 @@ withOutputPusher opts inputfile outputfile runWith = do
   let doPurge block = do
       pool <- liftIO $ IORef.readIORef poolRef
       outblock <- firstTshow $ Foreign.blockOfForeign block
-      builder <- firstT Block.renderBlockTableError . hoistEither $ Binary.bBlock header outblock
+      builder <- firstT Binary.renderBinaryEncodeError . hoistEither $ Binary.bBlock header outblock
       liftIO $ Builder.hPutBuilder outfd builder
       pool' <- liftIO $ Mempool.create
       liftIO $ IORef.writeIORef poolRef pool'

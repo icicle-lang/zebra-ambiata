@@ -39,6 +39,7 @@ import           Zebra.Factset.Block.Entity
 import           Zebra.Factset.Block.Index
 import           Zebra.Factset.Data
 import           Zebra.Table.Data
+import qualified Zebra.Table.Encoding as Encoding
 import           Zebra.Table.Schema (SchemaError)
 import qualified Zebra.Table.Schema as Schema
 import qualified Zebra.Table.Striped as Striped
@@ -93,7 +94,7 @@ entityIdColumn xs =
       fmap (fromIntegral . ByteString.length . unEntityId . entityId) xs
 
     bytes =
-      Striped.Binary .
+      Striped.Binary (Just Encoding.Utf8) .
       ByteString.concat .
       Boxed.toList $
       fmap (unEntityId . entityId) xs
@@ -425,7 +426,7 @@ tableSchemaOfAttributes attrs0 =
     Schema.Map
       (Schema.Struct $ Cons.from2
         (Field "entity_hash" Schema.Int)
-        (Field "entity_id" $ Schema.Nested Schema.Binary))
+        (Field "entity_id" . Schema.Nested . Schema.Binary $ Just Encoding.Utf8))
       attrs
 
 ------------------------------------------------------------------------
@@ -459,7 +460,7 @@ attributesOfTableSchema table = do
   (k, v) <- first BlockTableSchemaError $ Schema.takeMap table
   k_fields <- first BlockTableSchemaError $ Schema.takeStruct k
   case Cons.toList k_fields of
-    [Field "entity_hash" Schema.Int, Field "entity_id" (Schema.Nested Schema.Binary)] -> do
+    [Field "entity_hash" Schema.Int, Field "entity_id" (Schema.Nested (Schema.Binary _))] -> do
       v_fields <- takeFields v
       attrs <- traverse takeAttribute v_fields
       pure . Map.fromList $ Boxed.toList attrs

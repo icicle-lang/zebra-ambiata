@@ -52,6 +52,7 @@ data UnionTableError =
   | UnionLogicalMergeError !LogicalMergeError
   | UnionSchemaMismatch !Schema.Table !Schema.Table
   | UnionSchemaError !SchemaError
+  | UnionBinaryEncodeError !BinaryEncodeError
     deriving (Eq, Show)
 
 data Status =
@@ -253,9 +254,15 @@ mkFileOutput schema path = do
   hout <- liftIO $ IO.openBinaryFile path WriteMode
   liftIO . Builder.hPutBuilder hout . bHeader $ HeaderV3 schema
 
-  pure $ Output
-      (liftIO . Builder.hPutBuilder hout . bRootTableV3)
-      (liftIO $ IO.hClose hout)
+  let
+    write table0 = do
+      table <- hoistEither . first UnionBinaryEncodeError $ bRootTableV3 table0
+      liftIO $ Builder.hPutBuilder hout table
+
+    close =
+      liftIO $ IO.hClose hout
+
+  pure $ Output write close
 
 unionFile :: MonadResource m => Cons Boxed.Vector FilePath -> FilePath -> EitherT UnionTableError m ()
 unionFile inputPaths outputPath = do

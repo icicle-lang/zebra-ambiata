@@ -61,13 +61,14 @@ import qualified Zebra.Table.Schema as Schema
 import qualified Zebra.Table.Striped as Striped
 
 
-bBlock :: Header -> Block -> Either BlockTableError Builder
+bBlock :: Header -> Block -> Either BinaryEncodeError Builder
 bBlock header block =
   case header of
     HeaderV2 _ ->
-      pure $ bBlockV2 block
+      bBlockV2 block
     HeaderV3 table -> do
-      attributes <- Boxed.fromList . Map.keys <$> attributesOfTableSchema table
+      attributes <- first BinaryEncodeBlockTableError $
+        Boxed.fromList . Map.keys <$> attributesOfTableSchema table
       bBlockV3 attributes block
 
 getBlock :: Header -> Get Block
@@ -77,13 +78,13 @@ getBlock = \case
   HeaderV3 x ->
     getBlockV3 x
 
-bRootTable :: Header -> Striped.Table -> Either BlockTableError Builder
+bRootTable :: Header -> Striped.Table -> Either BinaryEncodeError Builder
 bRootTable header table =
   case header of
     HeaderV2 _ ->
       bRootTableV2 table
     HeaderV3 _ -> do
-      pure $ bRootTableV3 table
+      bRootTableV3 table
 
 getRootTable :: Header -> Get Striped.Table
 getRootTable = \case
@@ -94,10 +95,10 @@ getRootTable = \case
 
 -- | Encode a zebra v3 block.
 --
-bBlockV3 :: Boxed.Vector AttributeName -> Block -> Either BlockTableError Builder
+bBlockV3 :: Boxed.Vector AttributeName -> Block -> Either BinaryEncodeError Builder
 bBlockV3 attributes block = do
-  table <- tableOfBlock attributes block
-  pure $ bRootTableV3 table
+  table <- first BinaryEncodeBlockTableError $ tableOfBlock attributes block
+  bRootTableV3 table
 
 getBlockV3 :: Schema.Table -> Get Block
 getBlockV3 schema = do
@@ -108,10 +109,12 @@ getBlockV3 schema = do
     Right x ->
       pure x
 
-bRootTableV3 :: Striped.Table -> Builder
-bRootTableV3 table =
-  Builder.word32LE (fromIntegral $ Striped.length table) <>
-  bTable BinaryV3 table
+bRootTableV3 :: Striped.Table -> Either BinaryEncodeError Builder
+bRootTableV3 table0 = do
+  table <- bTable BinaryV3 table0
+  pure $
+    Builder.word32LE (fromIntegral $ Striped.length table0) <>
+    table
 
 getRootTableV3 :: Schema.Table -> Get Striped.Table
 getRootTableV3 schema = do
@@ -120,11 +123,13 @@ getRootTableV3 schema = do
 
 -- | Encode a zebra v2 block.
 --
-bBlockV2 :: Block -> Builder
-bBlockV2 block =
-  bEntities (blockEntities block) <>
-  bIndices (blockIndices block) <>
-  bTables (blockTables block)
+bBlockV2 :: Block -> Either BinaryEncodeError Builder
+bBlockV2 block = do
+  tables <- bTables (blockTables block)
+  pure $
+    bEntities (blockEntities block) <>
+    bIndices (blockIndices block) <>
+    tables
 
 getBlockV2 :: Map AttributeName Schema.Column -> Get Block
 getBlockV2 schemas = do
@@ -134,9 +139,9 @@ getBlockV2 schemas = do
   pure $
     Block entities indices tables
 
-bRootTableV2 :: Striped.Table -> Either BlockTableError Builder
+bRootTableV2 :: Striped.Table -> Either BinaryEncodeError Builder
 bRootTableV2 =
-  fmap bBlockV2 . blockOfTable
+  bind bBlockV2 . first BinaryEncodeBlockTableError . blockOfTable
 
 getRootTableV2 :: Map AttributeName Schema.Column -> Get Striped.Table
 getRootTableV2 schemas = do
@@ -355,11 +360,11 @@ getIndices = do
 --   /invariant: table_count == count of unique attr_ids/
 --   /invariant: table_id contains all ids referenced by attr_ids/
 --
-bTables :: Boxed.Vector Striped.Table -> Builder
-bTables xs =
+bTables :: Boxed.Vector Striped.Table -> Either BinaryEncodeError Builder
+bTables xs0 = do
   let
     n =
-      Boxed.length xs
+      Boxed.length xs0
 
     tcount =
       fromIntegral n
@@ -370,12 +375,15 @@ bTables xs =
 
     counts =
       Storable.convert $
-      fmap (fromIntegral . Striped.length) xs
-  in
+      fmap (fromIntegral . Striped.length) xs0
+
+  xs <- Boxed.toList <$> traverse (bTable BinaryV2) xs0
+
+  pure $
     Builder.word32LE tcount <>
     bIntArray ids <>
     bIntArray counts <>
-    foldMap (bTable BinaryV2) xs
+    mconcat xs
 
 getTables :: Boxed.Vector Schema.Column -> Get (Boxed.Vector Striped.Table)
 getTables schemas = do
