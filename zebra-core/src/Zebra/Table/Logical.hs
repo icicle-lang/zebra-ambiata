@@ -424,19 +424,22 @@ takeReversed = \case
 false :: Value
 false =
   Enum 0 Unit
+{-# INLINE false #-}
 
 true :: Value
 true =
   Enum 1 Unit
+{-# INLINE true #-}
 
 none :: Value
 none =
   Enum 0 Unit
+{-# INLINE none #-}
 
 some :: Value -> Value
 some =
   Enum 1
-
+{-# INLINE some #-}
 
 ------------------------------------------------------------------------
 -- Ord Value
