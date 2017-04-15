@@ -5,9 +5,11 @@ module Zebra.Serial.Binary.Data (
     Header(..)
   , BinaryVersion(..)
 
+  , headerOfSchema
+  , schemaOfHeader
+
   , headerOfAttributes
   , attributesOfHeader
-  , schemaOfHeader
 
   , BinaryEncodeError(..)
   , renderBinaryEncodeError
@@ -62,6 +64,21 @@ renderBinaryDecodeError = \case
     "Failed decoding UTF-8 binary: " <>
     Encoding.renderUtf8Error err
 
+headerOfSchema :: BinaryVersion -> Schema.Table -> Either BlockTableError Header
+headerOfSchema version schema =
+  case version of
+    BinaryV2 ->
+      HeaderV2 <$> attributesOfTableSchema schema
+    BinaryV3 ->
+      pure $ HeaderV3 schema
+
+schemaOfHeader :: Header -> Schema.Table
+schemaOfHeader = \case
+  HeaderV2 attributes ->
+    tableSchemaOfAttributes attributes
+  HeaderV3 table ->
+    table
+
 headerOfAttributes :: BinaryVersion -> Map AttributeName Schema.Column -> Header
 headerOfAttributes version attributes =
   case version of
@@ -76,10 +93,3 @@ attributesOfHeader = \case
     pure attributes
   HeaderV3 table ->
     attributesOfTableSchema table
-
-schemaOfHeader :: Header -> Schema.Table
-schemaOfHeader = \case
-  HeaderV2 attributes ->
-    tableSchemaOfAttributes attributes
-  HeaderV3 table ->
-    table

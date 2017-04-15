@@ -4,6 +4,7 @@
 module Zebra.Serial.Text.Schema (
     TextVersion(..)
   , encodeSchema
+  , encodeSchemaWith
   , decodeSchema
 
   , TextSchemaDecodeError(..)
@@ -36,8 +37,12 @@ renderTextSchemaDecodeError = \case
   TextSchemaDecodeError err ->
     renderJsonDecodeError err
 
-encodeSchema :: TextVersion -> Schema.Table -> ByteString
-encodeSchema version schema =
+encodeSchema :: Schema.Table -> ByteString
+encodeSchema =
+  encodeSchemaWith TextV0
+
+encodeSchemaWith :: TextVersion -> Schema.Table -> ByteString
+encodeSchemaWith version schema =
   encodeJsonIndented ["version", "key", "name"] (ppVersionedSchema version schema) <> "\n"
 
 decodeSchema :: ByteString -> Either TextSchemaDecodeError Schema.Table

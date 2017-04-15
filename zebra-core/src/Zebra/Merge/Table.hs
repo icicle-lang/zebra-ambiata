@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DoAndIfThenElse #-}
 {-# LANGUAGE LambdaCase #-}
@@ -5,74 +6,47 @@
 module Zebra.Merge.Table (
     UnionTableError(..)
 
-  , unionList
-  , unionFile
+  , unionLogical
+  , unionStriped
   ) where
 
-import           Control.Monad.IO.Class (MonadIO(..))
-import           Control.Monad.Primitive (PrimMonad)
-import           Control.Monad.ST (runST)
-import           Control.Monad.Trans.Resource (MonadResource)
+import           Control.Monad.Morph (hoist, squash)
+import           Control.Monad.Trans.Class (lift)
 
-import qualified Data.ByteString.Builder as Builder
-import           Data.List.NonEmpty (NonEmpty(..))
+import qualified Data.List as List
 import           Data.Map (Map)
 import qualified Data.Map.Strict as Map
 import qualified Data.Vector as Boxed
-import qualified Data.Vector.Mutable as MBoxed
+
+import           GHC.Types (SPEC(..))
 
 import           P
 
-import           System.IO (FilePath, IOMode(..))
-import qualified System.IO as IO
-
-import           X.Control.Monad.Trans.Either (EitherT, runEitherT, hoistEither)
+import           X.Control.Monad.Trans.Either (EitherT, hoistEither, left)
 import           X.Data.Vector.Cons (Cons)
 import qualified X.Data.Vector.Cons as Cons
-import           X.Data.Vector.Ref (Ref)
-import qualified X.Data.Vector.Ref as Ref
-import           X.Data.Vector.Stream (Stream(..), SPEC(..))
-import qualified X.Data.Vector.Stream as Stream
 
-import           Zebra.Serial.Binary.Block
-import           Zebra.Serial.Binary.Data
-import           Zebra.Serial.Binary.File
-import           Zebra.Serial.Binary.Header
+import           Zebra.Stream (Stream, Of)
+import qualified Zebra.Stream as Stream
 import           Zebra.Table.Logical (LogicalSchemaError, LogicalMergeError)
 import qualified Zebra.Table.Logical as Logical
-import           Zebra.Table.Schema (SchemaError)
 import qualified Zebra.Table.Schema as Schema
 import           Zebra.Table.Striped (StripedError)
 import qualified Zebra.Table.Striped as Striped
 
 data UnionTableError =
-    UnionFileError !FileError
+    UnionEmptyInput
   | UnionStripedError !StripedError
   | UnionLogicalSchemaError !LogicalSchemaError
   | UnionLogicalMergeError !LogicalMergeError
   | UnionSchemaMismatch !Schema.Table !Schema.Table
-  | UnionSchemaError !SchemaError
-  | UnionBinaryEncodeError !BinaryEncodeError
     deriving (Eq, Show)
-
-data Status =
-    Active
-  | Complete
-    deriving (Eq)
 
 data Input m =
   Input {
-      inputSchema :: !Schema.Table
-    , inputStatus :: !Status
-    , inputData :: !(Map Logical.Value Logical.Value)
-    , inputRead :: EitherT UnionTableError m (Maybe Striped.Table)
+      inputData :: !(Map Logical.Value Logical.Value)
+    , inputStream :: !(Maybe (Stream (Of Logical.Table) m ()))
     }
-
-data Output m a =
-  Output {
-      outputWrite :: Striped.Table -> EitherT UnionTableError m ()
-    , outputClose :: EitherT UnionTableError m a
-    } deriving (Functor)
 
 data Step m =
   Step {
@@ -83,78 +57,101 @@ data Step m =
 ------------------------------------------------------------------------
 -- General
 
-boxed :: m (Ref MBoxed.MVector s a) -> m (Ref MBoxed.MVector s a)
-boxed =
-  id
-
-takeSchema :: Cons Boxed.Vector (Input m) -> Either UnionTableError Schema.Table
+takeSchema :: Cons Boxed.Vector Schema.Table -> Either UnionTableError Schema.Table
 takeSchema inputs =
   let
     (schema0, schemas) =
-      Cons.uncons $ fmap inputSchema inputs
+      Cons.uncons inputs
   in
     case Boxed.find (/= schema0) schemas of
       Nothing ->
         pure schema0
       Just wrong ->
         Left $ UnionSchemaMismatch schema0 wrong
+{-# INLINABLE takeSchema #-}
+
+peekHead :: Monad m => Stream (Of x) m r -> EitherT UnionTableError m (x, Stream (Of x) m r)
+peekHead input = do
+  e <- lift $ Stream.next input
+  case e of
+    Left _r ->
+      left UnionEmptyInput
+    Right (hd, tl) ->
+      pure (hd, Stream.cons hd tl)
+{-# INLINABLE peekHead #-}
 
 hasData :: Input m -> Bool
 hasData =
   not . Map.null . inputData
+{-# INLINABLE hasData #-}
 
-replaceData :: Input m -> Map Logical.Value Logical.Value -> Input m
-replaceData input values =
+replaceData :: Map Logical.Value Logical.Value -> Input m -> Input m
+replaceData values input =
   input {
       inputData = values
     }
+{-# INLINABLE replaceData #-}
 
-isComplete :: Input m -> Bool
-isComplete =
-  (== Complete) . inputStatus
-
-completeInput :: Input m -> Input m
-completeInput input =
+replaceStream :: Stream (Of Logical.Table) m () ->  Input m -> Input m
+replaceStream stream input =
   input {
-      inputStatus = Complete
-    , inputData = Map.empty
+      inputStream = Just stream
     }
+{-# INLINABLE replaceStream #-}
+
+isClosed :: Input m -> Bool
+isClosed =
+  isNothing . inputStream
+{-# INLINABLE isClosed #-}
+
+closeStream :: Input m -> Input m
+closeStream input =
+  input {
+      inputStream = Nothing
+    }
+{-# INLINABLE closeStream #-}
 
 updateInput :: Monad m => Input m -> EitherT UnionTableError m (Input m)
-updateInput input = do
-  case inputStatus input of
-    Complete ->
+updateInput input =
+  case inputStream input of
+    Nothing ->
       pure input
-    Active ->
+    Just stream ->
       if hasData input then
         pure input
-      else
-        inputRead input >>= \case
-          Nothing ->
-            pure $ completeInput input
+      else do
+        e <- lift $ Stream.next stream
+        case e of
+          Left () ->
+            pure $
+              closeStream input
 
-          Just striped -> do
-            logical <- firstT UnionStripedError . hoistEither $ Striped.toLogical striped
-            values <- firstT UnionLogicalSchemaError . hoistEither $ Logical.takeMap logical
-            pure $ replaceData input values
+          Right (hd, tl) -> do
+            values <- firstT UnionLogicalSchemaError . hoistEither $ Logical.takeMap hd
+            pure . replaceStream tl $ replaceData values input
+{-# INLINABLE updateInput #-}
 
-writeOutput :: Monad m => Output m a -> Striped.Table -> EitherT UnionTableError m ()
-writeOutput output table =
+yieldChunked :: Monad m => Map Logical.Value Logical.Value -> Stream (Of Logical.Table) m ()
+yieldChunked kvs0 =
   let
-    n =
-      Striped.length table
+    !n =
+      Map.size kvs0
   in
     if n == 0 then
       pure ()
     else if n < 4096 then
-      outputWrite output table
+      Stream.yield $ Logical.Map kvs0
     else do
       let
-        (table0, table1) =
-          Striped.splitAt 4096 table
+        -- FIXME use Data.Map.Strict.splitAt when we're able to upgrade to containers >= 0.5.8
+        (kvs1, kvs2) =
+          bimap Map.fromDistinctAscList Map.fromDistinctAscList .
+            List.splitAt 4096 $
+            Map.toAscList kvs0
 
-      outputWrite output table0
-      writeOutput output table1
+      Stream.yield $ Logical.Map kvs1
+      yieldChunked kvs2
+{-# INLINABLE yieldChunked #-}
 
 unionStep :: Monad m => Cons Boxed.Vector (Input m) -> EitherT UnionTableError m (Step m)
 unionStep inputs = do
@@ -162,112 +159,50 @@ unionStep inputs = do
   pure $
     Step
       (Logical.unionComplete step)
-      (Cons.zipWith replaceData inputs (Logical.unionRemaining step))
+      (Cons.zipWith replaceData (Logical.unionRemaining step) inputs)
+{-# INLINABLE unionStep #-}
 
-unionLoop :: Monad m => Schema.Table -> Cons Boxed.Vector (Input m) -> Output m a -> EitherT UnionTableError m a
-unionLoop schema inputs0 output = do
-  inputs1 <- traverse updateInput inputs0
-  if Cons.all isComplete inputs1 then do
-    outputClose output
-  else do
-    Step values inputs <- unionStep inputs1
+unionInput ::
+     Monad m
+  => Cons Boxed.Vector (Input m)
+  -> Stream (Of Logical.Table) (EitherT UnionTableError m) ()
+unionInput inputs = do
+  let
+    loop !_ inputs0 = do
+      inputs1 <- lift $ traverse updateInput inputs0
+      if Cons.all isClosed inputs1 then do
+        pure ()
+      else do
+        Step values inputs2 <- lift $ unionStep inputs1
+        yieldChunked values
+        loop SPEC inputs2
 
-    table <- firstT UnionStripedError . hoistEither $ Striped.fromLogical schema (Logical.Map values)
-    writeOutput output table
+  loop SPEC inputs
+{-# INLINABLE unionInput #-}
 
-    unionLoop schema inputs output
+unionLogical ::
+     Monad m
+  => Schema.Table
+  -> Cons Boxed.Vector (Stream (Of Logical.Table) m ())
+  -> Stream (Of Logical.Table) (EitherT UnionTableError m) ()
+unionLogical schema inputs = do
+  Stream.whenEmpty (Logical.empty schema) $
+    unionInput $ fmap (Input Map.empty . Just) inputs
+{-# INLINABLE unionLogical #-}
 
-------------------------------------------------------------------------
--- List
-
-mkListInput :: PrimMonad m => NonEmpty Striped.Table -> EitherT UnionTableError m (Input m)
-mkListInput = \case
-  x :| xs -> do
-    ref <- boxed $ Ref.newRef (x : xs)
-    pure . Input (Striped.schema x) Active Map.empty $ do
-      ys0 <- Ref.readRef ref
-      case ys0 of
-        [] ->
-          pure Nothing
-        y : ys -> do
-          Ref.writeRef ref ys
-          pure $ Just y
-
-mkListOutput :: PrimMonad m => EitherT UnionTableError m (Output m [Striped.Table])
-mkListOutput = do
-  ref <- boxed $ Ref.newRef []
+unionStriped ::
+     Monad m
+  => Cons Boxed.Vector (Stream (Of Striped.Table) m ())
+  -> Stream (Of Striped.Table) (EitherT UnionTableError m) ()
+unionStriped inputs0 = do
+  (heads, inputs1) <- fmap Cons.unzip . lift $ traverse peekHead inputs0
+  schema <- lift . hoistEither . takeSchema $ fmap Striped.schema heads
 
   let
-    append x =
-      Ref.modifyRef ref (<> [x])
+    fromStriped =
+      Stream.mapM (hoistEither . first UnionStripedError . Striped.toLogical) . hoist lift
 
-    close =
-      Ref.readRef ref
-
-  pure $ Output append close
-
-unionList :: Cons Boxed.Vector (NonEmpty Striped.Table) -> Either UnionTableError (NonEmpty Striped.Table)
-unionList inputLists =
-  runST $ runEitherT $ do
-    inputs <- traverse mkListInput inputLists
-    schema <- hoistEither $ takeSchema inputs
-    output <- mkListOutput
-    result <- unionLoop schema inputs output
-    case result of
-      [] ->
-        pure $ Striped.empty schema :| []
-      x : xs ->
-        pure $ x :| xs
-
-------------------------------------------------------------------------
--- File
-
-mkStreamReader :: MonadIO m => Stream (EitherT x m) b -> EitherT x m (EitherT x m (Maybe b))
-mkStreamReader (Stream step sinit) = do
-  ref <- liftIO . boxed $ Ref.newRef sinit
-
-  let
-    loop _ = do
-      s0 <- liftIO $ Ref.readRef ref
-      step s0 >>= \case
-        Stream.Yield v s -> do
-          liftIO $ Ref.writeRef ref s
-          pure (Just v)
-        Stream.Skip s -> do
-          liftIO $ Ref.writeRef ref s
-          loop SPEC
-        Stream.Done -> do
-          pure Nothing
-
-  pure $ loop SPEC
-
-mkFileInput :: MonadResource m => FilePath -> EitherT UnionTableError m (Input m)
-mkFileInput path = do
-  (schema, stream) <- firstT UnionFileError $ readTables path
-  reader <- firstT UnionFileError $ mkStreamReader stream
-  pure . Input schema Active Map.empty $
-    firstT UnionFileError reader
-
--- FIXME MonadResource
-mkFileOutput :: MonadIO m => Schema.Table -> FilePath -> EitherT UnionTableError m (Output m ())
-mkFileOutput schema path = do
-  hout <- liftIO $ IO.openBinaryFile path WriteMode
-  liftIO . Builder.hPutBuilder hout . bHeader $ HeaderV3 schema
-
-  let
-    write table0 = do
-      table <- hoistEither . first UnionBinaryEncodeError $ bRootTableV3 table0
-      liftIO $ Builder.hPutBuilder hout table
-
-    close =
-      liftIO $ IO.hClose hout
-
-  pure $ Output write close
-
-unionFile :: MonadResource m => Cons Boxed.Vector FilePath -> FilePath -> EitherT UnionTableError m ()
-unionFile inputPaths outputPath = do
-  inputs <- traverse mkFileInput inputPaths
-  schema <- hoistEither $ takeSchema inputs
-  output <- mkFileOutput schema outputPath
-
-  unionLoop schema inputs output
+  hoist squash .
+    Stream.mapM (hoistEither . first UnionStripedError . Striped.fromLogical schema) $
+    unionLogical schema (fmap fromStriped inputs1)
+{-# INLINABLE unionStriped #-}

@@ -1,161 +1,101 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE OverloadedStrings #-}
 module Zebra.Serial.Binary.Striped (
-    bTable
-  , bColumn
-  , getTable
-  , getColumn
+    encodeStriped
+  , encodeStripedWith
+  , decodeStriped
+
+  , BinaryStripedEncodeError(..)
+  , renderBinaryStripedEncodeError
+
+  , BinaryStripedDecodeError(..)
+  , renderBinaryStripedDecodeError
   ) where
 
-import           Data.Binary.Get (Get)
-import qualified Data.Binary.Get as Get
-import           Data.ByteString (ByteString)
-import           Data.ByteString.Builder (Builder)
-import qualified Data.ByteString.Builder as Build
-import           Data.Coerce (coerce)
-import qualified Data.Text as Text
+import           Control.Monad.Morph (hoist)
+import           Control.Monad.Trans.Class (lift)
 
 import           P
 
-import qualified X.Data.Vector.Cons as Cons
-import qualified X.Data.Vector.Storable as Storable
+import           X.Control.Monad.Trans.Either (EitherT, left, hoistEither)
 
-import           Zebra.Serial.Binary.Array
+import           Zebra.ByteStream (ByteStream)
+import qualified Zebra.ByteStream as ByteStream
+import           Zebra.Factset.Table
+import           Zebra.Serial.Binary.Block
 import           Zebra.Serial.Binary.Data
-import           Zebra.Table.Data
-import qualified Zebra.Table.Encoding as Encoding
-import qualified Zebra.Table.Schema as Schema
+import           Zebra.Serial.Binary.Header
+import           Zebra.Stream (Stream, Of(..))
+import qualified Zebra.Stream as Stream
+import           Zebra.Stream.Get (GetError, renderGetError)
+import qualified Zebra.Stream.Get as Stream
 import qualified Zebra.Table.Striped as Striped
 
 
--- | Encode a zebra table as bytes.
---
-bTable :: BinaryVersion -> Striped.Table -> Either BinaryEncodeError Builder
-bTable version = \case
-  Striped.Binary encoding bs -> do
-    () <- first BinaryEncodeUtf8 $ Encoding.validateBinary encoding bs
-    case version of
-      BinaryV2 ->
-        pure $ bSizedByteArray bs
-      BinaryV3 ->
-        pure $ bByteArray bs
+data BinaryStripedEncodeError =
+    BinaryStripedEncodeEmpty
+  | BinaryStripedEncodeBlockTableError !BlockTableError
+  | BinaryStripedEncodeError !BinaryEncodeError
+    deriving (Eq, Show)
 
-  Striped.Array c ->
-    bColumn version c
+data BinaryStripedDecodeError =
+    BinaryStripedDecodeHeaderError !GetError
+  | BinaryStripedDecodeBlockError !GetError
+    deriving (Eq, Show)
 
-  Striped.Map k v ->
-    (<>)
-      <$> bColumn version k
-      <*> bColumn version v
+renderBinaryStripedEncodeError :: BinaryStripedEncodeError -> Text
+renderBinaryStripedEncodeError = \case
+  BinaryStripedEncodeEmpty ->
+    "Cannot encode a zebra file with no schema"
+  BinaryStripedEncodeBlockTableError err ->
+    renderBlockTableError err
+  BinaryStripedEncodeError err ->
+    renderBinaryEncodeError err
 
--- | Encode a zebra column as bytes.
---
-bColumn :: BinaryVersion -> Striped.Column -> Either BinaryEncodeError Builder
-bColumn version = \case
-  Striped.Unit _ ->
-    pure $ mempty
+renderBinaryStripedDecodeError :: BinaryStripedDecodeError -> Text
+renderBinaryStripedDecodeError = \case
+  BinaryStripedDecodeHeaderError err ->
+    "Error decoding header: " <> renderGetError err
+  BinaryStripedDecodeBlockError err ->
+    "Error decoding block: " <> renderGetError err
 
-  Striped.Int xs ->
-    pure $ bIntArray xs
+encodeStriped ::
+     Monad m
+  => Stream (Of Striped.Table) m r
+  -> ByteStream (EitherT BinaryStripedEncodeError m) r
+encodeStriped =
+  encodeStripedWith BinaryV3
+{-# INLINABLE encodeStriped #-}
 
-  Striped.Double xs ->
-    pure $ bDoubleArray xs
+encodeStripedWith ::
+     Monad m
+  => BinaryVersion
+  -> Stream (Of Striped.Table) m r
+  -> ByteStream (EitherT BinaryStripedEncodeError m) r
+encodeStripedWith version input = do
+  e <- lift . lift $ Stream.next input
+  case e of
+    Left _r ->
+      lift $ left BinaryStripedEncodeEmpty
 
-  Striped.Enum tags vs0 -> do
-    vs <- traverse (bColumn version . variantData) vs0
-    pure $
-      bTagArray tags <>
-      mconcat (Cons.toList vs)
+    Right (hd, tl) -> do
+      header <- lift . hoistEither . first BinaryStripedEncodeBlockTableError $
+        headerOfSchema version (Striped.schema hd)
 
-  Striped.Struct fs ->
-    mconcat . Cons.toList <$> traverse (bColumn version . fieldData) fs
+      ByteStream.fromBuilders . Stream.cons (bHeader header) .
+        Stream.mapM (hoistEither . first BinaryStripedEncodeError . bBlockTable header) $
+        hoist lift (Stream.cons hd tl)
+{-# INLINABLE encodeStripedWith #-}
 
-  Striped.Nested ns x ->
-    ((bIntArray ns <> Build.word32LE (fromIntegral $ Striped.length x)) <>)
-      <$> bTable version x
+decodeStriped ::
+     Monad m
+  => ByteStream m r
+  -> Stream (Of Striped.Table) (EitherT BinaryStripedDecodeError m) r
+decodeStriped bss0 = do
+  (header, bss1) <- lift . firstT BinaryStripedDecodeHeaderError $
+    Stream.runGet getHeader bss0
 
-  Striped.Reversed x ->
-    bColumn version x
-
--- | Decode a zebra table using a row count and a schema.
---
-getTable :: BinaryVersion -> Int -> Schema.Table -> Get Striped.Table
-getTable version n = \case
-  Schema.Binary encoding -> do
-    bs <-
-      validateBinary encoding =<<
-      case version of
-        BinaryV2 -> do
-          getSizedByteArray
-
-        BinaryV3 ->
-          getByteArray n
-
-    pure $ Striped.Binary encoding bs
-
-  Schema.Array e ->
-    Striped.Array
-      <$> getColumn version n e
-
-  Schema.Map k v ->
-    Striped.Map
-      <$> getColumn version n k
-      <*> getColumn version n v
-
-validateBinary :: Maybe Encoding.Binary -> ByteString -> Get ByteString
-validateBinary encoding bs =
-  case Encoding.validateBinary encoding bs of
-    Left err ->
-      fail . Text.unpack $
-        renderBinaryDecodeError (BinaryDecodeUtf8 err)
-    Right () ->
-      pure bs
-
--- | Decode a zebra column using a row count and a schema.
---
-getColumn :: BinaryVersion -> Int -> Schema.Column -> Get Striped.Column
-getColumn version n = \case
-  Schema.Unit ->
-    pure $ Striped.Unit n
-
-  Schema.Int ->
-    Striped.Int
-      <$> getIntArray n
-
-  Schema.Double ->
-    Striped.Double
-      <$> getDoubleArray n
-
-  Schema.Enum vs ->
-    Striped.Enum
-      <$> getTagArray n
-      <*> Cons.mapM (traverse $ getColumn version n) vs
-
-  Schema.Struct fs ->
-    Striped.Struct
-      <$> Cons.mapM (traverse $ getColumn version n) fs
-
-  Schema.Nested t ->
-    Striped.Nested
-      <$> getIntArray n
-      <*> (flip (getTable version) t . fromIntegral =<< Get.getWord32le)
-
-  Schema.Reversed c ->
-    Striped.Reversed
-      <$> getColumn version n c
-
-bTagArray :: Storable.Vector Tag -> Builder
-bTagArray =
-  bIntArray . coerce
-
-getTagArray :: Int -> Get (Storable.Vector Tag)
-getTagArray n =
-  coerce <$> getIntArray n
-
-bDoubleArray :: Storable.Vector Double -> Builder
-bDoubleArray =
-  bIntArray . coerce
-
-getDoubleArray :: Int -> Get (Storable.Vector Double)
-getDoubleArray n =
-  coerce <$> getIntArray n
+  hoist (firstT BinaryStripedDecodeBlockError) $
+    Stream.runGetAll (getBlockTable header) bss1
+{-# INLINABLE decodeStriped #-}

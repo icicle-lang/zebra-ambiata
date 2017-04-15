@@ -1,4 +1,5 @@
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
@@ -11,24 +12,30 @@ module Zebra.Command.Export (
   , renderExportError
   ) where
 
+import           Control.Monad.Catch (MonadCatch(..))
 import           Control.Monad.IO.Class (MonadIO(..))
-import           Control.Monad.Trans.Resource (MonadResource)
+import           Control.Monad.Morph (hoist)
+import           Control.Monad.Trans.Class (lift)
+import           Control.Monad.Trans.Resource (MonadResource, ResourceT)
 
+import           Data.ByteString (ByteString)
 import qualified Data.ByteString as ByteString
 import           Data.List.NonEmpty (NonEmpty)
+import qualified Data.Text as Text
 
 import           P
 
-import           System.IO (FilePath, IOMode(..), Handle, stdout)
+import           System.IO (IO, FilePath, stdout)
+import           System.IO.Error (IOError)
 
-import           X.Control.Monad.Trans.Either (EitherT, hoistEither, joinEitherT)
-import           X.Data.Vector.Stream (Stream)
-import qualified X.Data.Vector.Stream as Stream
+import           X.Control.Monad.Trans.Either (EitherT, tryEitherT, firstJoin)
 
-import           Zebra.Serial.Binary.File
-import           Zebra.Serial.Text
-import qualified Zebra.Table.Schema as Schema
-import qualified Zebra.Table.Striped as Striped
+import           Zebra.ByteStream (ByteStream)
+import qualified Zebra.ByteStream as ByteStream
+import           Zebra.Serial.Binary (BinaryLogicalDecodeError)
+import qualified Zebra.Serial.Binary as Binary
+import           Zebra.Serial.Text (TextLogicalEncodeError)
+import qualified Zebra.Serial.Text as Text
 
 
 data Export =
@@ -45,52 +52,71 @@ data ExportOutput =
     deriving (Eq, Ord, Show)
 
 data ExportError =
-    ExportFileError !FileError
-  | ExportTextStripedEncodeError !TextStripedEncodeError
+    ExportIOError !IOError
+  | ExportBinaryLogicalDecodeError !BinaryLogicalDecodeError
+  | ExportTextLogicalEncodeError !TextLogicalEncodeError
     deriving (Eq, Show)
 
 renderExportError :: ExportError -> Text
 renderExportError = \case
-  ExportFileError err ->
-    renderFileError err
-  ExportTextStripedEncodeError err ->
-    renderTextStripedEncodeError err
+  ExportIOError err ->
+    Text.pack (show err)
+  ExportBinaryLogicalDecodeError err ->
+    Binary.renderBinaryLogicalDecodeError err
+  ExportTextLogicalEncodeError err ->
+    Text.renderTextLogicalEncodeError err
 
-zebraExport :: MonadResource m => Export -> EitherT ExportError m ()
+chunkSize :: Int
+chunkSize =
+  1024 * 1024
+
+zebraExport :: forall m. (MonadResource m, MonadCatch m) => Export -> EitherT ExportError m ()
 zebraExport export = do
-  (schema, tables) <- firstT ExportFileError $ readTables (exportInput export)
+  (schema, tables0) <-
+    firstJoin ExportBinaryLogicalDecodeError .
+      Binary.decodeLogical .
+    hoist (firstT ExportIOError) $
+      ByteStream.readFileN chunkSize (exportInput export)
 
-  for_ (exportOutputs export) $ \case
-    ExportTextStdout ->
-      writeText "<stdout>" stdout tables
+  let
+    bschema :: ByteString
+    bschema =
+      Text.encodeSchema schema
 
-    ExportText path -> do
-      (close, handle) <- firstT ExportFileError $ openFile path WriteMode
-      writeText path handle tables
-      firstT ExportFileError close
+    tables1 :: ByteStream (EitherT ExportError m) ()
+    tables1 =
+      hoist (firstJoin ExportTextLogicalEncodeError) .
+        Text.encodeLogical schema .
+      hoist (firstJoin ExportBinaryLogicalDecodeError) $
+        tables0
 
-    ExportSchemaStdout ->
-      writeSchema "<stdout>" stdout schema
+    loop ::
+         [ExportOutput]
+      -> ByteStream (EitherT ExportError m) r
+      -> ByteStream (EitherT ExportError m) r
+    loop xs0 tables =
+      case xs0 of
+        [] ->
+          tables
 
-    ExportSchema path -> do
-      (close, handle) <- firstT ExportFileError $ openFile path WriteMode
-      writeSchema path handle schema
-      firstT ExportFileError close
+        ExportTextStdout : xs ->
+          loop xs . hoist (firstJoin ExportIOError) . ByteStream.injectEitherT $
+            ByteStream.hPut stdout (ByteStream.copy tables)
 
-writeText ::
-     MonadResource m
-  => FilePath
-  -> Handle
-  -> Stream (EitherT FileError m) Striped.Table
-  -> EitherT ExportError m ()
-writeText path handle tables =
-  joinEitherT id .
-    firstT ExportFileError .
-    hPutStream path handle .
-    Stream.mapM (hoistEither . first ExportTextStripedEncodeError . encodeStriped) $
-    Stream.trans (firstT ExportFileError) tables
+        ExportText path : xs -> do
+          loop xs . hoist (firstJoin ExportIOError) . ByteStream.injectEitherT $
+            ByteStream.writeFile path (ByteStream.copy tables)
 
-writeSchema :: MonadIO m => FilePath -> Handle -> Schema.Table -> EitherT ExportError m ()
-writeSchema path handle schema =
-  tryIO (ExportFileError . FileWriteError path) $
-    ByteString.hPut handle (encodeSchema TextV0 schema)
+        ExportSchemaStdout : xs -> do
+          lift . tryEitherT ExportIOError . liftIO $
+            ByteString.hPut stdout bschema
+          loop xs tables
+
+        ExportSchema path : xs -> do
+          lift . tryEitherT ExportIOError . liftIO $
+            ByteString.writeFile path bschema
+          loop xs tables
+
+  ByteStream.effects $
+    loop (toList (exportOutputs export)) tables1
+{-# SPECIALIZE zebraExport :: Export -> EitherT ExportError (ResourceT IO) () #-}
