@@ -103,13 +103,13 @@ import           Zebra.Factset.Data
 import           Zebra.Factset.Entity
 import           Zebra.Factset.Fact
 import           Zebra.Serial.Binary.Data
-import           Zebra.Stream (Stream, Of)
-import qualified Zebra.Stream as Stream
 import           Zebra.Table.Data
 import qualified Zebra.Table.Encoding as Encoding
 import qualified Zebra.Table.Logical as Logical
 import qualified Zebra.Table.Schema as Schema
 import qualified Zebra.Table.Striped as Striped
+import           Zebra.X.Stream (Stream, Of)
+import qualified Zebra.X.Stream as Stream
 
 ------------------------------------------------------------------------
 

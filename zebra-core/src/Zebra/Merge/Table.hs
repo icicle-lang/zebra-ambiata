@@ -26,13 +26,13 @@ import           X.Control.Monad.Trans.Either (EitherT, hoistEither, left)
 import           X.Data.Vector.Cons (Cons)
 import qualified X.Data.Vector.Cons as Cons
 
-import           Zebra.Stream (Stream, Of)
-import qualified Zebra.Stream as Stream
 import           Zebra.Table.Logical (LogicalSchemaError, LogicalMergeError)
 import qualified Zebra.Table.Logical as Logical
 import qualified Zebra.Table.Schema as Schema
 import           Zebra.Table.Striped (StripedError)
 import qualified Zebra.Table.Striped as Striped
+import           Zebra.X.Stream (Stream, Of)
+import qualified Zebra.X.Stream as Stream
 
 data UnionTableError =
     UnionEmptyInput

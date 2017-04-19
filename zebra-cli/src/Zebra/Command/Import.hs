@@ -28,12 +28,12 @@ import           System.IO.Error (IOError)
 
 import           X.Control.Monad.Trans.Either (EitherT, hoistEither, firstJoin)
 
-import           Zebra.ByteStream (ByteStream)
-import qualified Zebra.ByteStream as ByteStream
 import           Zebra.Serial.Binary (BinaryStripedEncodeError)
 import qualified Zebra.Serial.Binary as Binary
 import           Zebra.Serial.Text (TextSchemaDecodeError, TextStripedDecodeError)
 import qualified Zebra.Serial.Text as Text
+import           Zebra.X.ByteStream (ByteStream)
+import qualified Zebra.X.ByteStream as ByteStream
 
 
 data Import =
@@ -60,10 +60,6 @@ renderImportError = \case
     Text.renderTextStripedDecodeError err
   ImportBinaryStripedEncodeError err ->
     Binary.renderBinaryStripedEncodeError err
-
-chunkSize :: Int
-chunkSize =
-  1024 * 1024
 
 checkStdout :: MonadIO m => m (Maybe Handle)
 checkStdout = do
@@ -111,5 +107,5 @@ zebraImport x = do
     hoist (firstJoin ImportTextStripedDecodeError) .
       Text.decodeStriped schema .
     hoist (firstT ImportIOError) $
-      ByteStream.readFileN chunkSize (importInput x)
+      ByteStream.readFile (importInput x)
 {-# SPECIALIZE zebraImport :: Import -> EitherT ImportError (ResourceT IO) () #-}

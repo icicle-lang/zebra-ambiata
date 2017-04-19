@@ -2,7 +2,7 @@
 {-# LANGUAGE DoAndIfThenElse #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
-module Zebra.Stream.Get (
+module Zebra.X.Stream.Get (
     runGet
   , runGetAll
 
@@ -24,10 +24,10 @@ import           P
 
 import           X.Control.Monad.Trans.Either (EitherT, left)
 
-import           Zebra.ByteStream (ByteStream)
-import qualified Zebra.ByteStream as ByteStream
-import           Zebra.Stream (Stream, Of)
-import qualified Zebra.Stream as Stream
+import           Zebra.X.ByteStream (ByteStream)
+import qualified Zebra.X.ByteStream as ByteStream
+import           Zebra.X.Stream (Stream, Of)
+import qualified Zebra.X.Stream as Stream
 
 
 data GetError =

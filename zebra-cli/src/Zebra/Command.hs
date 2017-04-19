@@ -43,7 +43,6 @@ import qualified X.Data.Vector.Storable as Storable
 import qualified X.Data.Vector.Stream as VStream
 import qualified X.Data.Vector.Unboxed as Unboxed
 
-import qualified Zebra.ByteStream as ByteStream
 import qualified Zebra.Factset.Block as Block
 import qualified Zebra.Factset.Data as Core
 import qualified Zebra.Factset.Entity as Entity
@@ -60,9 +59,10 @@ import qualified Zebra.Serial.Binary.Block as Binary
 import qualified Zebra.Serial.Binary.Data as Binary
 import qualified Zebra.Serial.Binary.File as Binary
 import qualified Zebra.Serial.Binary.Header as Binary
-import           Zebra.Stream (Stream, Of)
 import qualified Zebra.Table.Schema as Schema
 import qualified Zebra.Table.Striped as Striped
+import qualified Zebra.X.ByteStream as ByteStream
+import           Zebra.X.Stream (Stream, Of)
 
 
 data CatOptions =
@@ -117,7 +117,7 @@ readStriped path =
   hoist (firstJoin (Text.pack . ppShow)) .
     Binary.decodeStriped .
   hoist (firstT (Text.pack . ppShow)) $
-    ByteStream.readFileN (1024 * 1024) path
+    ByteStream.readFile path
 
 zebraUnion :: (MonadResource m, MonadCatch m) => NonEmpty FilePath -> FilePath -> EitherT Text m ()
 zebraUnion inputs0 output =

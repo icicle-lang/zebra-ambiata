@@ -2,7 +2,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-module Zebra.ByteStream.Char8 (
+module Zebra.X.ByteStream.Char8 (
     ByteStream
 
   , rechunkLineEnd
@@ -16,7 +16,7 @@ import           Data.ByteString.Streaming.Internal (ByteString(..))
 
 import           P
 
-import           Zebra.ByteStream (ByteStream)
+import           Zebra.X.ByteStream (ByteStream)
 
 
 -- | Ensures that every chunk in the stream ends on a @'\n'@ line feed character.

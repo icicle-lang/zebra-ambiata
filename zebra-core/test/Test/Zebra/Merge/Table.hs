@@ -25,11 +25,11 @@ import qualified X.Data.Vector.Cons as Cons
 
 import           Zebra.Merge.Table (UnionTableError(..))
 import qualified Zebra.Merge.Table as Merge
-import           Zebra.Stream (Of(..))
-import qualified Zebra.Stream as Stream
 import qualified Zebra.Table.Schema as Schema
 import           Zebra.Table.Striped (StripedError(..))
 import qualified Zebra.Table.Striped as Striped
+import           Zebra.X.Stream (Of(..))
+import qualified Zebra.X.Stream as Stream
 
 jFileTable :: Schema.Table -> Jack Striped.Table
 jFileTable schema = do

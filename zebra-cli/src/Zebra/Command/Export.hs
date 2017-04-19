@@ -30,12 +30,12 @@ import           System.IO.Error (IOError)
 
 import           X.Control.Monad.Trans.Either (EitherT, tryEitherT, firstJoin)
 
-import           Zebra.ByteStream (ByteStream)
-import qualified Zebra.ByteStream as ByteStream
 import           Zebra.Serial.Binary (BinaryLogicalDecodeError)
 import qualified Zebra.Serial.Binary as Binary
 import           Zebra.Serial.Text (TextLogicalEncodeError)
 import qualified Zebra.Serial.Text as Text
+import           Zebra.X.ByteStream (ByteStream)
+import qualified Zebra.X.ByteStream as ByteStream
 
 
 data Export =
@@ -66,17 +66,13 @@ renderExportError = \case
   ExportTextLogicalEncodeError err ->
     Text.renderTextLogicalEncodeError err
 
-chunkSize :: Int
-chunkSize =
-  1024 * 1024
-
 zebraExport :: forall m. (MonadResource m, MonadCatch m) => Export -> EitherT ExportError m ()
 zebraExport export = do
   (schema, tables0) <-
     firstJoin ExportBinaryLogicalDecodeError .
       Binary.decodeLogical .
     hoist (firstT ExportIOError) $
-      ByteStream.readFileN chunkSize (exportInput export)
+      ByteStream.readFile (exportInput export)
 
   let
     bschema :: ByteString

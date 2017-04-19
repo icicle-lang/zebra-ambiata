@@ -2,12 +2,16 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE RankNTypes #-}
-module Zebra.ByteStream (
+module Zebra.X.ByteStream (
     ByteStream
 
+  , defaultChunkSize
+
+  , readFile
   , readFileN
   , writeFile
 
+  , hGetContents
   , hGetContentsN
   , hPut
 
@@ -34,7 +38,7 @@ import           Control.Monad.Trans.Resource (MonadResource)
 import           Data.ByteString.Builder (Builder)
 import qualified Data.ByteString.Builder as Builder
 import qualified Data.ByteString.Streaming as ByteStream
-import           Data.ByteString.Streaming hiding (writeFile, hGetContentsN, hPut)
+import           Data.ByteString.Streaming hiding (writeFile, readFile, hGetContents, hGetContentsN, hPut)
 import           Data.ByteString.Streaming.Internal (ByteString(..))
 import           Data.ByteString.Streaming.Internal (bracketByteString, consChunk)
 
@@ -47,8 +51,8 @@ import           System.IO.Error (IOError)
 import           X.Control.Monad.Trans.Either (EitherT)
 import qualified X.Control.Monad.Trans.Either as EitherT
 
-import           Zebra.Stream (Stream, Of(..))
-import qualified Zebra.Stream as Stream
+import           Zebra.X.Stream (Stream, Of(..))
+import qualified Zebra.X.Stream as Stream
 
 
 -- | Rename the streaming 'ByteString' because otherwise it's too hard to work
@@ -56,6 +60,16 @@ import qualified Zebra.Stream as Stream
 --
 type ByteStream =
   ByteString
+
+defaultChunkSize :: Int
+defaultChunkSize =
+  1024 * 1024
+{-# INLINABLE defaultChunkSize #-}
+
+readFile :: (MonadResource m, MonadCatch m) => FilePath -> ByteString (EitherT IOError m) ()
+readFile =
+  readFileN defaultChunkSize
+{-# INLINABLE readFile #-}
 
 readFileN :: (MonadResource m, MonadCatch m) => Int -> FilePath -> ByteString (EitherT IOError m) ()
 readFileN chunkSize path =
@@ -70,6 +84,11 @@ writeFile path bss = do
   EitherT.tryEitherT id . liftIO $ IO.hClose h
   pure r
 {-# INLINABLE writeFile #-}
+
+hGetContents :: (MonadIO m, MonadCatch m) => Handle -> ByteString (EitherT IOError m) ()
+hGetContents =
+  hGetContentsN defaultChunkSize
+{-# INLINABLE hGetContents #-}
 
 hGetContentsN :: (MonadIO m, MonadCatch m) => Int -> Handle -> ByteString (EitherT IOError m) ()
 hGetContentsN chunkSize handle =

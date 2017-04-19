@@ -11,9 +11,9 @@ import           System.IO (IO)
 
 import           Test.Zebra.Jack
 
-import qualified Zebra.ByteStream as ByteStream
 import           Zebra.Serial.Binary.Logical
-import qualified Zebra.Stream as Stream
+import qualified Zebra.X.ByteStream as ByteStream
+import qualified Zebra.X.Stream as Stream
 
 
 data BinaryError =
