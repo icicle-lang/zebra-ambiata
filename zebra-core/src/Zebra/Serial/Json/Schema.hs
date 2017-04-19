@@ -57,6 +57,7 @@ renderJsonSchemaDecodeError = \case
 encodeSchema :: SchemaVersion -> Schema.Table -> ByteString
 encodeSchema version =
   encodeJson ["key", "name"] . ppTableSchema version
+{-# INLINABLE encodeSchema #-}
 
 decodeSchema :: SchemaVersion -> ByteString -> Either JsonSchemaDecodeError Schema.Table
 decodeSchema = \case
@@ -64,6 +65,7 @@ decodeSchema = \case
     first JsonSchemaDecodeError . decodeJson pTableSchemaV0
   SchemaV1 ->
     first JsonSchemaDecodeError . decodeJson pTableSchemaV1
+{-# INLINABLE decodeSchema #-}
 
 ppTableSchema :: SchemaVersion -> Schema.Table -> Aeson.Value
 ppTableSchema = \case
@@ -71,6 +73,7 @@ ppTableSchema = \case
     ppTableSchemaV0
   SchemaV1 ->
     ppTableSchemaV1
+{-# INLINABLE ppTableSchema #-}
 
 ------------------------------------------------------------------------
 -- v0
@@ -91,6 +94,7 @@ pTableSchemaV0 =
           <*> withStructField "value" o pColumnSchemaV0
     _ ->
       Nothing
+{-# INLINABLE pTableSchemaV0 #-}
 
 ppTableSchemaV0 :: Schema.Table -> Aeson.Value
 ppTableSchemaV0 = \case
@@ -102,6 +106,7 @@ ppTableSchemaV0 = \case
   Schema.Map k v ->
     ppEnum . Variant "map" $
       Aeson.object ["key" .= ppColumnSchemaV0 k, "value" .= ppColumnSchemaV0 v]
+{-# INLINABLE ppTableSchemaV0 #-}
 
 pColumnSchemaV0 :: Aeson.Value -> Aeson.Parser Schema.Column
 pColumnSchemaV0 =
@@ -126,6 +131,7 @@ pColumnSchemaV0 =
         Schema.Reversed <$> withStructField "column" o pColumnSchemaV0
     _ ->
       Nothing
+{-# INLINABLE pColumnSchemaV0 #-}
 
 ppColumnSchemaV0 :: Schema.Column -> Aeson.Value
 ppColumnSchemaV0 = \case
@@ -147,6 +153,7 @@ ppColumnSchemaV0 = \case
   Schema.Reversed s ->
     ppEnum . Variant "reversed" $
       Aeson.object ["column" .= ppColumnSchemaV0 s]
+{-# INLINABLE ppColumnSchemaV0 #-}
 
 pSchemaEnumVariantsV0 :: Aeson.Value -> Aeson.Parser (Cons Boxed.Vector (Variant Schema.Column))
 pSchemaEnumVariantsV0 =
@@ -157,6 +164,7 @@ pSchemaEnumVariantsV0 =
         fail "enums must have at least one variant"
       Just (v0, vs) ->
         pure $ Cons.from v0 vs
+{-# INLINABLE pSchemaEnumVariantsV0 #-}
 
 pSchemaVariantV0 :: Aeson.Value -> Aeson.Parser (Variant Schema.Column)
 pSchemaVariantV0 =
@@ -164,6 +172,7 @@ pSchemaVariantV0 =
     Variant
       <$> withStructField "name" o (fmap VariantName . pText)
       <*> withStructField "column" o pColumnSchemaV0
+{-# INLINABLE pSchemaVariantV0 #-}
 
 pSchemaStructFieldsV0 :: Aeson.Value -> Aeson.Parser (Cons Boxed.Vector (Field Schema.Column))
 pSchemaStructFieldsV0 =
@@ -174,6 +183,7 @@ pSchemaStructFieldsV0 =
         fail "structs must have at least one field"
       Just (f0, fs) ->
         pure $ Cons.from f0 fs
+{-# INLINABLE pSchemaStructFieldsV0 #-}
 
 pSchemaFieldV0 :: Aeson.Value -> Aeson.Parser (Field Schema.Column)
 pSchemaFieldV0 =
@@ -181,6 +191,7 @@ pSchemaFieldV0 =
     Field
       <$> withStructField "name" o (fmap FieldName . pText)
       <*> withStructField "column" o pColumnSchemaV0
+{-# INLINABLE pSchemaFieldV0 #-}
 
 ppSchemaVariantV0 :: Variant Schema.Column -> Aeson.Value
 ppSchemaVariantV0 (Variant (VariantName name) schema) =
@@ -190,6 +201,7 @@ ppSchemaVariantV0 (Variant (VariantName name) schema) =
     , Field "column" $
         ppColumnSchemaV0 schema
     ]
+{-# INLINABLE ppSchemaVariantV0 #-}
 
 ppSchemaFieldV0 :: Field Schema.Column -> Aeson.Value
 ppSchemaFieldV0 (Field (FieldName name) schema) =
@@ -199,6 +211,7 @@ ppSchemaFieldV0 (Field (FieldName name) schema) =
     , Field "column" $
         ppColumnSchemaV0 schema
     ]
+{-# INLINABLE ppSchemaFieldV0 #-}
 
 ------------------------------------------------------------------------
 -- v1
@@ -206,6 +219,7 @@ ppSchemaFieldV0 (Field (FieldName name) schema) =
 pTableSchemaV1 :: Aeson.Value -> Aeson.Parser Schema.Table
 pTableSchemaV1 =
   pEnum pTableVariantV1
+{-# INLINABLE pTableSchemaV1 #-}
 
 pTableVariantV1 :: VariantName -> Maybe (Aeson.Value -> Aeson.Parser Schema.Table)
 pTableVariantV1 = \case
@@ -224,6 +238,7 @@ pTableVariantV1 = \case
         <*> withStructField "value" o pColumnSchemaV1
   _ ->
     Nothing
+{-# INLINABLE pTableVariantV1 #-}
 
 ppTableSchemaV1 :: Schema.Table -> Aeson.Value
 ppTableSchemaV1 = \case
@@ -240,6 +255,7 @@ ppTableSchemaV1 = \case
   Schema.Map k v ->
     ppEnum . Variant "map" $
       Aeson.object ["key" .= ppColumnSchemaV1 k, "value" .= ppColumnSchemaV1 v]
+{-# INLINABLE ppTableSchemaV1 #-}
 
 pBinaryEncodingV1 :: Aeson.Value -> Aeson.Parser Encoding.Binary
 pBinaryEncodingV1 =
@@ -248,11 +264,13 @@ pBinaryEncodingV1 =
       pure . const $ pure Encoding.Utf8
     _ ->
       Nothing
+{-# INLINABLE pBinaryEncodingV1 #-}
 
 ppBinaryEncodingV1 :: Encoding.Binary -> Aeson.Value
 ppBinaryEncodingV1 = \case
   Encoding.Utf8 ->
     ppEnum $ Variant "utf8" ppUnit
+{-# INLINABLE ppBinaryEncodingV1 #-}
 
 pColumnSchemaV1 :: Aeson.Value -> Aeson.Parser Schema.Column
 pColumnSchemaV1 =
@@ -274,6 +292,7 @@ pColumnSchemaV1 =
         fmap Schema.Reversed . pColumnSchemaV1
     nested ->
       fmap2 Schema.Nested <$> pTableVariantV1 nested
+{-# INLINABLE pColumnSchemaV1 #-}
 
 ppColumnSchemaV1 :: Schema.Column -> Aeson.Value
 ppColumnSchemaV1 = \case
@@ -294,6 +313,7 @@ ppColumnSchemaV1 = \case
   Schema.Reversed s ->
     ppEnum . Variant "reversed" $
       ppColumnSchemaV1 s
+{-# INLINABLE ppColumnSchemaV1 #-}
 
 pSchemaEnumVariantsV1 :: Aeson.Value -> Aeson.Parser (Cons Boxed.Vector (Variant Schema.Column))
 pSchemaEnumVariantsV1 =
@@ -304,6 +324,7 @@ pSchemaEnumVariantsV1 =
         fail "enums must have at least one variant"
       Just (v0, vs) ->
         pure $ Cons.from v0 vs
+{-# INLINABLE pSchemaEnumVariantsV1 #-}
 
 pSchemaVariantV1 :: Aeson.Value -> Aeson.Parser (Variant Schema.Column)
 pSchemaVariantV1 =
@@ -311,6 +332,7 @@ pSchemaVariantV1 =
     Variant
       <$> withStructField "name" o (fmap VariantName . pText)
       <*> withStructField "schema" o pColumnSchemaV1
+{-# INLINABLE pSchemaVariantV1 #-}
 
 pSchemaStructFieldsV1 :: Aeson.Value -> Aeson.Parser (Cons Boxed.Vector (Field Schema.Column))
 pSchemaStructFieldsV1 =
@@ -321,6 +343,7 @@ pSchemaStructFieldsV1 =
         fail "structs must have at least one field"
       Just (f0, fs) ->
         pure $ Cons.from f0 fs
+{-# INLINABLE pSchemaStructFieldsV1 #-}
 
 pSchemaFieldV1 :: Aeson.Value -> Aeson.Parser (Field Schema.Column)
 pSchemaFieldV1 =
@@ -328,6 +351,7 @@ pSchemaFieldV1 =
     Field
       <$> withStructField "name" o (fmap FieldName . pText)
       <*> withStructField "schema" o pColumnSchemaV1
+{-# INLINABLE pSchemaFieldV1 #-}
 
 ppSchemaVariantV1 :: Variant Schema.Column -> Aeson.Value
 ppSchemaVariantV1 (Variant (VariantName name) schema) =
@@ -337,6 +361,7 @@ ppSchemaVariantV1 (Variant (VariantName name) schema) =
     , Field "schema" $
         ppColumnSchemaV1 schema
     ]
+{-# INLINABLE ppSchemaVariantV1 #-}
 
 ppSchemaFieldV1 :: Field Schema.Column -> Aeson.Value
 ppSchemaFieldV1 (Field (FieldName name) schema) =
@@ -346,3 +371,4 @@ ppSchemaFieldV1 (Field (FieldName name) schema) =
     , Field "schema" $
         ppColumnSchemaV1 schema
     ]
+{-# INLINABLE ppSchemaFieldV1 #-}

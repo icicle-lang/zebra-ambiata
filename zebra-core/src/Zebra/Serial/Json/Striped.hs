@@ -49,8 +49,10 @@ encodeStriped :: Striped.Table -> Either JsonStripedEncodeError ByteString
 encodeStriped striped = do
   logical <- first JsonStripedEncodeError $ Striped.toLogical striped
   first JsonStripedLogicalEncodeError $ encodeLogical (Striped.schema striped) logical
+{-# INLINABLE encodeStriped #-}
 
 decodeStriped :: Schema.Table -> ByteString -> Either JsonStripedDecodeError Striped.Table
 decodeStriped schema bs = do
   logical <- first JsonStripedLogicalDecodeError $ decodeLogical schema bs
   first JsonStripedDecodeError $ Striped.fromLogical schema logical
+{-# INLINABLE decodeStriped #-}

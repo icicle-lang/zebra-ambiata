@@ -161,7 +161,7 @@ decodeTables input = do
   (header, rest) <- decodeGetOne getHeader input
   pure (
       schemaOfHeader header
-    , decodeGetAll (getRootTable header) rest
+    , decodeGetAll (getBlockTable header) rest
     )
 
 ------------------------------------------------------------------------

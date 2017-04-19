@@ -169,6 +169,7 @@ length = \case
     -- FIXME function that checks a table has matching
     -- FIXME lengths instead perhaps?
     min (lengthColumn k) (lengthColumn v)
+{-# INLINABLE length #-}
 
 lengthColumn :: Column -> Int
 lengthColumn = \case
@@ -186,6 +187,7 @@ lengthColumn = \case
     Storable.length ns
   Reversed c ->
     lengthColumn c
+{-# INLINABLE lengthColumn #-}
 
 schema :: Table -> Schema.Table
 schema = \case
@@ -195,6 +197,7 @@ schema = \case
     Schema.Array (schemaColumn x)
   Map k v ->
     Schema.Map (schemaColumn k) (schemaColumn v)
+{-# INLINABLE schema #-}
 
 schemaColumn :: Column -> Schema.Column
 schemaColumn = \case
@@ -212,6 +215,7 @@ schemaColumn = \case
     Schema.Nested (schema t)
   Reversed c ->
     Schema.Reversed (schemaColumn c)
+{-# INLINABLE schemaColumn #-}
 
 ------------------------------------------------------------------------
 
@@ -223,6 +227,7 @@ empty = \case
     Array (emptyColumn x)
   Schema.Map k v ->
     Map (emptyColumn k) (emptyColumn v)
+{-# INLINABLE empty #-}
 
 emptyColumn :: Schema.Column -> Column
 emptyColumn = \case
@@ -240,6 +245,7 @@ emptyColumn = \case
     Nested Storable.empty (empty t)
   Schema.Reversed c ->
     Reversed (emptyColumn c)
+{-# INLINABLE emptyColumn #-}
 
 ------------------------------------------------------------------------
 
@@ -335,6 +341,7 @@ fromLogical tschema collection =
       Map
         <$> fromValues kschema (Boxed.fromList $ Map.keys kvs)
         <*> fromValues vschema (Boxed.fromList $ Map.elems kvs)
+{-# INLINABLE fromLogical #-}
 
 fromNested :: Schema.Table -> Boxed.Vector Logical.Table -> Either StripedError (Storable.Vector Int64, Table)
 fromNested tschema xss0 =
@@ -368,6 +375,7 @@ fromNested tschema xss0 =
           Storable.convert $ fmap (fromIntegral . Map.size) kvss
         , Map ks vs
         )
+{-# INLINABLE fromNested #-}
 
 fromValues :: Schema.Column -> Boxed.Vector Logical.Value -> Either StripedError Column
 fromValues cschema values =
@@ -412,6 +420,7 @@ fromValues cschema values =
           xss <- traverse (first StripedLogicalSchemaError . Logical.takeReversed) values
           Reversed
             <$> fromValues rschema xss
+{-# INLINABLE fromValues #-}
 
 fromEnum ::
      Cons Boxed.Vector (Variant Schema.Column)
@@ -421,6 +430,7 @@ fromEnum variants txs =
   forVariant variants $ \tag _ cschema ->
     fromValues cschema $
       Boxed.map (fromVariant cschema tag) txs
+{-# INLINABLE fromEnum #-}
 
 fromVariant :: Schema.Column -> Tag -> (Tag, Logical.Value) -> Logical.Value
 fromVariant cschema expectedTag (tag, value) =
@@ -428,11 +438,13 @@ fromVariant cschema expectedTag (tag, value) =
     value
   else
     Logical.defaultValue cschema
+{-# INLINABLE fromVariant #-}
 
 fromField :: Field Schema.Column -> Boxed.Vector Logical.Value -> Either StripedError (Field Column)
 fromField field =
   fmap (field $>) .
   fromValues (fieldData field)
+{-# INLINABLE fromField #-}
 
 ------------------------------------------------------------------------
 -- Striped -> Logical
@@ -450,6 +462,7 @@ toLogical = \case
     vs <- toValues v
     pure . Logical.Map . fromSorted $
       Boxed.zip ks vs
+{-# INLINABLE toLogical #-}
 
 toNested :: Storable.Vector Int64 -> Table -> Either StripedError (Boxed.Vector Logical.Table)
 toNested ns table =
@@ -467,11 +480,13 @@ toNested ns table =
       kvs <- Generic.zip <$> toValues k <*> toValues v
       kvss <- first (StripedNestedLengthMismatch $ schema table) $ Segment.reify ns kvs
       pure $ fmap (Logical.Map . fromSorted) kvss
+{-# INLINABLE toNested #-}
 
 fromSorted :: Boxed.Vector (Logical.Value, Logical.Value) -> Map Logical.Value Logical.Value
 fromSorted =
   -- FIXME Check order and error if not sorted
   Map.fromDistinctAscList . Boxed.toList
+{-# INLINABLE fromSorted #-}
 
 toValues :: Column -> Either StripedError (Boxed.Vector Logical.Value)
 toValues = \case
@@ -501,6 +516,7 @@ toValues = \case
 
   Reversed c ->
     fmap Logical.Reversed <$> toValues c
+{-# INLINABLE toValues #-}
 
 mkEnum :: Tag -> Cons Boxed.Vector Logical.Value -> Either StripedError Logical.Value
 mkEnum tag values =
@@ -509,6 +525,7 @@ mkEnum tag values =
       Left $ StripedNoValueForEnumTag tag values
     Just x ->
       pure $ Logical.Enum tag x
+{-# INLINABLE mkEnum #-}
 
 ------------------------------------------------------------------------
 -- Splitting
@@ -525,6 +542,7 @@ splitAt i = \case
     biliftA2 Map Map
       (splitAtColumn i k)
       (splitAtColumn i v)
+{-# INLINABLE splitAt #-}
 
 splitAtColumn :: Int -> Column -> (Column, Column)
 splitAtColumn i = \case
@@ -585,6 +603,7 @@ splitAtColumn i = \case
   Reversed column ->
     bimap Reversed Reversed
       (splitAtColumn i column)
+{-# INLINABLE splitAtColumn #-}
 
 ------------------------------------------------------------------------
 -- Merge
@@ -595,6 +614,7 @@ merges xss = do
   vss <- Cons.mapM toLogical xss
   vs <- first StripedLogicalMergeError $ Cons.fold1M' Logical.merge vss
   fromLogical (schema $ Cons.head xss) vs
+{-# INLINABLE merges #-}
 
 -- | /O(no)/
 merge :: Table -> Table -> Either StripedError Table
@@ -603,6 +623,7 @@ merge x0 x1 = do
   c1 <- toLogical x1
   c2 <- first StripedLogicalMergeError $ Logical.merge c0 c1
   fromLogical (schema x0) c2
+{-# INLINABLE merge #-}
 
 ------------------------------------------------------------------------
 -- Concat/Append
@@ -615,6 +636,7 @@ merge x0 x1 = do
 unsafeConcat :: Cons Boxed.Vector Table -> Either StripedError Table
 unsafeConcat =
   Cons.fold1M' unsafeAppend
+{-# INLINABLE unsafeConcat #-}
 
 -- | /O(n)/
 unsafeAppend :: Table -> Table -> Either StripedError Table
@@ -636,6 +658,7 @@ unsafeAppend x0 x1 =
 
     _ ->
       Left $ StripedAppendTableMismatch (schema x0) (schema x1)
+{-# INLINABLE unsafeAppend #-}
 
 unsafeAppendColumn :: Column -> Column -> Either StripedError Column
 unsafeAppendColumn x0 x1 =
@@ -667,6 +690,7 @@ unsafeAppendColumn x0 x1 =
 
     _ ->
       Left $ StripedAppendColumnMismatch (schemaColumn x0) (schemaColumn x1)
+{-# INLINABLE unsafeAppendColumn #-}
 
 unsafeAppendVariant :: Variant Column -> Variant Column -> Either StripedError (Variant Column)
 unsafeAppendVariant v0 v1 =
@@ -674,6 +698,7 @@ unsafeAppendVariant v0 v1 =
     (v0 $>) <$> unsafeAppendColumn (variantData v0) (variantData v1)
   else
     Left $ StripedAppendVariantMismatch (fmap schemaColumn v0) (fmap schemaColumn v1)
+{-# INLINABLE unsafeAppendVariant #-}
 
 unsafeAppendField :: Field Column -> Field Column -> Either StripedError (Field Column)
 unsafeAppendField f0 f1 =
@@ -681,3 +706,4 @@ unsafeAppendField f0 f1 =
     (f0 $>) <$> unsafeAppendColumn (fieldData f0) (fieldData f1)
   else
     Left $ StripedAppendFieldMismatch (fmap schemaColumn f0) (fmap schemaColumn f1)
+{-# INLINABLE unsafeAppendField #-}

@@ -55,6 +55,7 @@ bHeader = \case
   HeaderV3 x ->
     bVersion BinaryV3 <>
     bHeaderV3 x
+{-# INLINABLE bHeader #-}
 
 getHeader :: Get Header
 getHeader = do
@@ -64,6 +65,7 @@ getHeader = do
       HeaderV2 <$> getHeaderV2
     BinaryV3 ->
       HeaderV3 <$> getHeaderV3
+{-# INLINABLE getHeader #-}
 
 -- | Encode a zebra v3 header from a dictionary.
 --
@@ -75,10 +77,12 @@ getHeader = do
 bHeaderV3 :: Schema.Table -> Builder
 bHeaderV3 schema =
   bSizedByteArray (encodeSchema SchemaV1 schema)
+{-# INLINABLE bHeaderV3 #-}
 
 getHeaderV3 :: Get Schema.Table
 getHeaderV3 =
   parseSchema SchemaV1 =<< getSizedByteArray
+{-# INLINABLE getHeaderV3 #-}
 
 -- | Encode a zebra v2 header from a dictionary.
 --
@@ -113,6 +117,7 @@ bHeaderV2 features =
     n_attrs <>
     names <>
     schema
+{-# INLINABLE bHeaderV2 #-}
 
 getHeaderV2 :: Get (Map AttributeName Schema.Column)
 getHeaderV2 = do
@@ -128,11 +133,13 @@ getHeaderV2 = do
   pure .
     Map.fromList . toList $
     Boxed.zip ns cs
+{-# INLINABLE getHeaderV2 #-}
 
 parseSchema :: SchemaVersion -> ByteString -> Get Schema.Table
 parseSchema version =
   either (fail . Text.unpack . renderJsonSchemaDecodeError) pure .
   decodeSchema version
+{-# INLINABLE parseSchema #-}
 
 -- | The zebra 8-byte magic number, including version.
 --
@@ -145,6 +152,7 @@ bVersion = \case
     Builder.byteString MagicV2
   BinaryV3 ->
     Builder.byteString MagicV3
+{-# INLINABLE bVersion #-}
 
 getVersion :: Get BinaryVersion
 getVersion = do
@@ -160,6 +168,7 @@ getVersion = do
       pure BinaryV3
     _ ->
       fail $ "Invalid/unknown file signature: " <> show bs
+{-# INLINABLE getVersion #-}
 
 #if __GLASGOW_HASKELL__ >= 800
 pattern MagicV0 :: ByteString

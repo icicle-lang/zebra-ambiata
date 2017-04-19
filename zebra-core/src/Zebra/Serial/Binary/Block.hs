@@ -6,21 +6,21 @@ module Zebra.Serial.Binary.Block (
     bBlock
   , getBlock
 
-  , bRootTable
-  , getRootTable
+  , bBlockTable
+  , getBlockTable
 
   -- * Internal
   , bBlockV3
   , getBlockV3
 
-  , bRootTableV3
-  , getRootTableV3
+  , bBlockTableV3
+  , getBlockTableV3
 
   , bBlockV2
   , getBlockV2
 
-  , bRootTableV2
-  , getRootTableV2
+  , bBlockTableV2
+  , getBlockTableV2
 
   , bEntities
   , getEntities
@@ -56,7 +56,7 @@ import           Zebra.Factset.Data
 import           Zebra.Factset.Table
 import           Zebra.Serial.Binary.Array
 import           Zebra.Serial.Binary.Data
-import           Zebra.Serial.Binary.Striped
+import           Zebra.Serial.Binary.Table
 import qualified Zebra.Table.Schema as Schema
 import qualified Zebra.Table.Striped as Striped
 
@@ -70,6 +70,7 @@ bBlock header block =
       attributes <- first BinaryEncodeBlockTableError $
         Boxed.fromList . Map.keys <$> attributesOfTableSchema table
       bBlockV3 attributes block
+{-# INLINABLE bBlock #-}
 
 getBlock :: Header -> Get Block
 getBlock = \case
@@ -77,49 +78,56 @@ getBlock = \case
     getBlockV2 x
   HeaderV3 x ->
     getBlockV3 x
+{-# INLINABLE getBlock #-}
 
-bRootTable :: Header -> Striped.Table -> Either BinaryEncodeError Builder
-bRootTable header table =
+bBlockTable :: Header -> Striped.Table -> Either BinaryEncodeError Builder
+bBlockTable header table =
   case header of
     HeaderV2 _ ->
-      bRootTableV2 table
+      bBlockTableV2 table
     HeaderV3 _ -> do
-      bRootTableV3 table
+      bBlockTableV3 table
+{-# INLINABLE bBlockTable #-}
 
-getRootTable :: Header -> Get Striped.Table
-getRootTable = \case
+getBlockTable :: Header -> Get Striped.Table
+getBlockTable = \case
   HeaderV2 x ->
-    getRootTableV2 x
+    getBlockTableV2 x
   HeaderV3 x ->
-    getRootTableV3 x
+    getBlockTableV3 x
+{-# INLINABLE getBlockTable #-}
 
 -- | Encode a zebra v3 block.
 --
 bBlockV3 :: Boxed.Vector AttributeName -> Block -> Either BinaryEncodeError Builder
 bBlockV3 attributes block = do
   table <- first BinaryEncodeBlockTableError $ tableOfBlock attributes block
-  bRootTableV3 table
+  bBlockTableV3 table
+{-# INLINABLE bBlockV3 #-}
 
 getBlockV3 :: Schema.Table -> Get Block
 getBlockV3 schema = do
-  table <- getRootTableV3 schema
+  table <- getBlockTableV3 schema
   case blockOfTable table of
     Left err ->
       fail . Text.unpack $ renderBlockTableError err
     Right x ->
       pure x
+{-# INLINABLE getBlockV3 #-}
 
-bRootTableV3 :: Striped.Table -> Either BinaryEncodeError Builder
-bRootTableV3 table0 = do
+bBlockTableV3 :: Striped.Table -> Either BinaryEncodeError Builder
+bBlockTableV3 table0 = do
   table <- bTable BinaryV3 table0
   pure $
     Builder.word32LE (fromIntegral $ Striped.length table0) <>
     table
+{-# INLINABLE bBlockTableV3 #-}
 
-getRootTableV3 :: Schema.Table -> Get Striped.Table
-getRootTableV3 schema = do
+getBlockTableV3 :: Schema.Table -> Get Striped.Table
+getBlockTableV3 schema = do
   n <- fromIntegral <$> Get.getWord32le
   getTable BinaryV3 n schema
+{-# INLINABLE getBlockTableV3 #-}
 
 -- | Encode a zebra v2 block.
 --
@@ -130,6 +138,7 @@ bBlockV2 block = do
     bEntities (blockEntities block) <>
     bIndices (blockIndices block) <>
     tables
+{-# INLINABLE bBlockV2 #-}
 
 getBlockV2 :: Map AttributeName Schema.Column -> Get Block
 getBlockV2 schemas = do
@@ -138,19 +147,22 @@ getBlockV2 schemas = do
   tables <- getTables . Boxed.fromList $ Map.elems schemas
   pure $
     Block entities indices tables
+{-# INLINABLE getBlockV2 #-}
 
-bRootTableV2 :: Striped.Table -> Either BinaryEncodeError Builder
-bRootTableV2 =
+bBlockTableV2 :: Striped.Table -> Either BinaryEncodeError Builder
+bBlockTableV2 =
   bind bBlockV2 . first BinaryEncodeBlockTableError . blockOfTable
+{-# INLINABLE bBlockTableV2 #-}
 
-getRootTableV2 :: Map AttributeName Schema.Column -> Get Striped.Table
-getRootTableV2 schemas = do
+getBlockTableV2 :: Map AttributeName Schema.Column -> Get Striped.Table
+getBlockTableV2 schemas = do
   block <- getBlockV2 schemas
   case tableOfBlock (Boxed.fromList $ Map.keys schemas) block of
     Left err ->
       fail . Text.unpack $ renderBlockTableError err
     Right x ->
       pure x
+{-# INLINABLE getBlockTableV2 #-}
 
 -- | Encode the entities for a zebra block.
 --
@@ -203,6 +215,7 @@ bEntities xs =
     bStrings ids <>
     bIntArray acounts <>
     bAttributes attributes
+{-# INLINABLE bEntities #-}
 
 getEntities :: Get (Boxed.Vector BlockEntity)
 getEntities = do
@@ -213,6 +226,7 @@ getEntities = do
   attributes <- Generic.unsafeSplits id <$> getAttributes <*> pure acounts
   pure $
     Boxed.zipWith3 BlockEntity hashes ids attributes
+{-# INLINABLE getEntities #-}
 
 -- | Encode the attributes for a zebra block.
 --
@@ -255,6 +269,7 @@ bAttributes xs =
     Builder.word32LE acount <>
     bIntArray ids <>
     bIntArray counts
+{-# INLINABLE bAttributes #-}
 
 getAttributes :: Get (Unboxed.Vector BlockAttribute)
 getAttributes = do
@@ -263,6 +278,7 @@ getAttributes = do
   counts <- Unboxed.map fromIntegral . Unboxed.convert <$> getIntArray acount
   pure $
     Unboxed.zipWith BlockAttribute ids counts
+{-# INLINABLE getAttributes #-}
 
 -- | Encode the table index for a zebra block.
 --
@@ -311,6 +327,7 @@ bIndices xs =
     bIntArray times <>
     bIntArray factsetIds <>
     bIntArray tombstones
+{-# INLINABLE bIndices #-}
 
 getIndices :: Get (Unboxed.Vector BlockIndex)
 getIndices = do
@@ -333,6 +350,7 @@ getIndices = do
       Unboxed.convert itombstones
 
   pure $ Unboxed.zipWith3 BlockIndex times factsetIds tombstones
+{-# INLINABLE getIndices #-}
 
 -- | Encode the table data for a zebra block.
 --
@@ -384,6 +402,7 @@ bTables xs0 = do
     bIntArray ids <>
     bIntArray counts <>
     mconcat xs
+{-# INLINABLE bTables #-}
 
 getTables :: Boxed.Vector Schema.Column -> Get (Boxed.Vector Striped.Table)
 getTables schemas = do
@@ -400,3 +419,4 @@ getTables schemas = do
           getTable BinaryV2 n (Schema.Array schema)
 
   Boxed.zipWithM get ids counts
+{-# INLINABLE getTables #-}

@@ -2,6 +2,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 module Test.Zebra.Merge.Table where
 
+import           Data.Functor.Identity (runIdentity)
 import           Data.List.NonEmpty (NonEmpty)
 import qualified Data.List.NonEmpty as NonEmpty
 import           Data.String (String)
@@ -18,18 +19,21 @@ import           Test.Zebra.Jack
 
 import           Text.Show.Pretty (ppShow)
 
+import           X.Control.Monad.Trans.Either (runEitherT)
 import           X.Data.Vector.Cons (Cons)
 import qualified X.Data.Vector.Cons as Cons
 
 import           Zebra.Merge.Table (UnionTableError(..))
-import qualified Zebra.Merge.Table as Striped
-import           Zebra.Table.Schema (Schema.Table)
-import           Zebra.Table.Striped (Table, TableError(..))
+import qualified Zebra.Merge.Table as Merge
+import           Zebra.Stream (Of(..))
+import qualified Zebra.Stream as Stream
+import qualified Zebra.Table.Schema as Schema
+import           Zebra.Table.Striped (StripedError(..))
 import qualified Zebra.Table.Striped as Striped
 
 jFileTable :: Schema.Table -> Jack Striped.Table
 jFileTable schema = do
-  Right x <- Striped.fromCollection schema <$> jSizedCollection schema
+  Right x <- Striped.fromLogical schema <$> jSizedLogical schema
   pure x
 
 jFile :: Schema.Table -> Jack (NonEmpty Striped.Table)
@@ -38,8 +42,8 @@ jFile schema = do
 
 unionSimple :: Cons Boxed.Vector (NonEmpty Striped.Table) -> Either String (Maybe Striped.Table)
 unionSimple xss0 =
-  case Striped.unions =<< traverse Striped.unions (fmap Cons.fromNonEmpty xss0) of
-    Left (TableValueUnionError _) ->
+  case Striped.merges =<< traverse Striped.merges (fmap Cons.fromNonEmpty xss0) of
+    Left (StripedLogicalMergeError _) ->
       pure Nothing
     Left err ->
       Left $ ppShow err
@@ -48,19 +52,23 @@ unionSimple xss0 =
 
 unionList :: Cons Boxed.Vector (NonEmpty Striped.Table) -> Either String (Maybe Striped.Table)
 unionList xss0 =
-  case Striped.unionList xss0 of
-    Left (UnionValueUnionError _) ->
+  case runIdentity . runEitherT . Stream.toList . Merge.unionStriped $ fmap Stream.each xss0 of
+    Left (UnionLogicalMergeError _) ->
       pure Nothing
     Left err ->
       Left $ ppShow err
-    Right xs ->
-      case Striped.unions (Cons.fromNonEmpty xs) of
-        Left (TableValueUnionError _) ->
-          pure Nothing
-        Left err ->
-          Left $ ppShow err
-        Right x ->
-          pure $ pure x
+    Right (xs0 :> ()) ->
+      case Cons.fromList xs0 of
+        Nothing ->
+          Left "Union returned empty stream"
+        Just xs ->
+          case Striped.merges xs of
+            Left (StripedLogicalMergeError _) ->
+              pure Nothing
+            Left err ->
+              Left $ ppShow err
+            Right x ->
+              pure $ pure x
 
 prop_union_files :: Property
 prop_union_files =
@@ -70,9 +78,9 @@ prop_union_files =
     x <- first ppShow $ unionSimple files
     y <- first ppShow $ unionList files
     pure $
-      fmap normalizeTable x
+      fmap normalizeStriped x
       ===
-      fmap normalizeTable y
+      fmap normalizeStriped y
 
 return []
 tests :: IO Bool

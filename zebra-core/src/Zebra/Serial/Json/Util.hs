@@ -64,15 +64,18 @@ renderJsonDecodeError = \case
 encodeJson :: [Text] -> Aeson.Value -> ByteString
 encodeJson keyOrder =
   Lazy.toStrict . Aeson.encodePretty' (standardConfig keyOrder)
+{-# INLINABLE encodeJson #-}
 
 encodeJsonIndented :: [Text] -> Aeson.Value -> ByteString
 encodeJsonIndented keyOrder =
   Lazy.toStrict . Aeson.encodePretty' (indentConfig keyOrder)
+{-# INLINABLE encodeJsonIndented #-}
 
 decodeJson :: (Aeson.Value -> Aeson.Parser a) -> ByteString -> Either JsonDecodeError a
 decodeJson p =
   first (uncurry JsonDecodeError . second Text.pack) .
     Aeson.eitherDecodeStrictWith Aeson.value' (Aeson.iparse p)
+{-# INLINABLE decodeJson #-}
 
 standardConfig :: [Text] -> Aeson.Config
 standardConfig keyOrder =
@@ -84,6 +87,7 @@ standardConfig keyOrder =
     , Aeson.confNumFormat =
         Aeson.Generic
     }
+{-# INLINABLE standardConfig #-}
 
 indentConfig :: [Text] -> Aeson.Config
 indentConfig keyOrder =
@@ -95,14 +99,17 @@ indentConfig keyOrder =
     , Aeson.confNumFormat =
         Aeson.Generic
     }
+{-# INLINABLE indentConfig #-}
 
 pText :: Aeson.Value -> Aeson.Parser Text
 pText =
   Aeson.parseJSON
+{-# INLINABLE pText #-}
 
 ppText :: Text -> Aeson.Value
 ppText =
   Aeson.toJSON
+{-# INLINABLE ppText #-}
 
 pBinary :: Aeson.Value -> Aeson.Parser ByteString
 pBinary =
@@ -112,10 +119,12 @@ pBinary =
         fail $ "could not decode base64 encoded binary data: " <> err
       Right bs ->
         pure bs
+{-# INLINABLE pBinary #-}
 
 ppBinary :: ByteString -> Aeson.Value
 ppBinary =
   ppText . Text.decodeUtf8 . Base64.encode
+{-# INLINABLE ppBinary #-}
 
 pUnit :: Aeson.Value -> Aeson.Parser ()
 pUnit =
@@ -126,22 +135,27 @@ pUnit =
       fail $
         "expected an object containing unit (i.e. {})," <>
         "\nbut found an object with one or more members"
+{-# INLINABLE pUnit #-}
 
 ppUnit :: Aeson.Value
 ppUnit =
   Aeson.Object HashMap.empty
+{-# INLINABLE ppUnit #-}
 
 pInt :: Aeson.Value -> Aeson.Parser Int64
 pInt =
   Aeson.parseJSON
+{-# INLINABLE pInt #-}
 
 ppInt :: Int64 -> Aeson.Value
 ppInt =
   Aeson.toJSON
+{-# INLINABLE ppInt #-}
 
 pDouble :: Aeson.Value -> Aeson.Parser Double
 pDouble =
   Aeson.parseJSON
+{-# INLINABLE pDouble #-}
 
 ppDouble :: Double -> Aeson.Value
 ppDouble =
@@ -154,6 +168,7 @@ ppDouble =
   -- possibly represent.
   --
   Aeson.toJSON
+{-# INLINABLE ppDouble #-}
 
 pEnum :: (VariantName -> Maybe (Aeson.Value -> Aeson.Parser a)) -> Aeson.Value -> Aeson.Parser a
 pEnum mkParser =
@@ -174,17 +189,20 @@ pEnum mkParser =
           "expected an object containing an enum (i.e. a single member)," <>
           "\nbut found an object with more than one member:" <>
           "\n  " <> List.intercalate ", " (fmap (Text.unpack . fst) kvs)
+{-# INLINABLE pEnum #-}
 
 ppEnum :: Variant Aeson.Value -> Aeson.Value
 ppEnum (Variant (VariantName name) value) =
   Aeson.object [
       name .= value
     ]
+{-# INLINABLE ppEnum #-}
 
 withStructField :: FieldName -> Aeson.Object -> (Aeson.Value -> Aeson.Parser a) -> Aeson.Parser a
 withStructField name o p = do
   x <- o .: unFieldName name
   p x <?> Aeson.Key (unFieldName name)
+{-# INLINABLE withStructField #-}
 
 withOptionalField :: FieldName -> Aeson.Object -> (Aeson.Value -> Aeson.Parser a) -> Aeson.Parser (Maybe a)
 withOptionalField name o p = do
@@ -194,16 +212,20 @@ withOptionalField name o p = do
       pure Nothing
     Just x ->
       Just <$> (p x <?> Aeson.Key (unFieldName name))
+{-# INLINABLE withOptionalField #-}
 
 ppStruct :: [Field Aeson.Value] -> Aeson.Value
 ppStruct =
   Aeson.object . fmap ppStructField
+{-# INLINABLE ppStruct #-}
 
 ppStructField :: Field Aeson.Value -> Aeson.Pair
 ppStructField (Field (FieldName name) value) =
   name .= value
+{-# INLINABLE ppStructField #-}
 
 kmapM :: (Aeson.Value -> Aeson.Parser a) -> Boxed.Vector Aeson.Value -> Aeson.Parser (Boxed.Vector a)
 kmapM f =
   Boxed.imapM $ \i x ->
     f x <?> Aeson.Index i
+{-# INLINABLE kmapM #-}

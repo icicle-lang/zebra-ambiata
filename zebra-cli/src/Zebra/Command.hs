@@ -12,8 +12,10 @@ module Zebra.Command (
 
 import qualified Anemone.Foreign.Mempool as Mempool
 
+import           Control.Monad.Catch (MonadCatch(..))
 import           Control.Monad.IO.Class (MonadIO(..))
-import           Control.Monad.Trans.Resource (MonadResource)
+import           Control.Monad.Morph (hoist)
+import           Control.Monad.Trans.Resource (MonadResource, ResourceT)
 import qualified Control.Monad.Trans.Resource as Resource
 
 import qualified Data.ByteString.Builder as Builder
@@ -34,13 +36,14 @@ import qualified System.IO as IO
 
 import           Text.Show.Pretty (ppShow)
 
-import           X.Control.Monad.Trans.Either (EitherT, joinEitherT, hoistEither)
+import           X.Control.Monad.Trans.Either (EitherT, hoistEither, firstJoin)
 import qualified X.Data.Vector as Boxed
 import qualified X.Data.Vector.Cons as Cons
 import qualified X.Data.Vector.Storable as Storable
-import qualified X.Data.Vector.Stream as Stream
+import qualified X.Data.Vector.Stream as VStream
 import qualified X.Data.Vector.Unboxed as Unboxed
 
+import qualified Zebra.ByteStream as ByteStream
 import qualified Zebra.Factset.Block as Block
 import qualified Zebra.Factset.Data as Core
 import qualified Zebra.Factset.Entity as Entity
@@ -53,8 +56,13 @@ import qualified Zebra.Merge.Puller.File as Merge
 import qualified Zebra.Merge.Table as Merge
 import           Zebra.Serial.Binary (BinaryVersion(..))
 import qualified Zebra.Serial.Binary as Binary
+import qualified Zebra.Serial.Binary.Block as Binary
+import qualified Zebra.Serial.Binary.Data as Binary
 import qualified Zebra.Serial.Binary.File as Binary
+import qualified Zebra.Serial.Binary.Header as Binary
+import           Zebra.Stream (Stream, Of)
 import qualified Zebra.Table.Schema as Schema
+import qualified Zebra.Table.Striped as Striped
 
 
 data CatOptions =
@@ -102,12 +110,28 @@ zebraMerge ins outputPath opts = do
         Merge.MergeOptions (firstT Binary.renderFileError . puller) pusher $
           truncate (mergeGcGigabytes opts * 1024 * 1024 * 1024)
     in
-      joinEitherT id . firstTshow $ Merge.mergeBlocks runOpts pullids
+      firstJoin (Text.pack . ppShow) $ Merge.mergeBlocks runOpts pullids
 
-zebraUnion :: MonadResource m => NonEmpty FilePath -> FilePath -> EitherT Text m ()
-zebraUnion inputs output =
-  firstT (Text.pack . ppShow) $
-    Merge.unionFile (Cons.fromNonEmpty inputs) output
+readStriped :: (MonadResource m, MonadCatch m) => FilePath -> Stream (Of Striped.Table) (EitherT Text m) ()
+readStriped path =
+  hoist (firstJoin (Text.pack . ppShow)) .
+    Binary.decodeStriped .
+  hoist (firstT (Text.pack . ppShow)) $
+    ByteStream.readFileN (1024 * 1024) path
+
+zebraUnion :: (MonadResource m, MonadCatch m) => NonEmpty FilePath -> FilePath -> EitherT Text m ()
+zebraUnion inputs0 output =
+  let
+    inputs =
+      fmap readStriped (Cons.fromNonEmpty inputs0)
+  in
+    firstJoin (Text.pack . ppShow) .
+      ByteStream.writeFile output .
+    hoist (firstJoin (Text.pack . ppShow)) .
+      Binary.encodeStriped .
+    hoist (firstJoin (Text.pack . ppShow)) $
+      Merge.unionStriped inputs
+{-# SPECIALIZE zebraUnion :: NonEmpty FilePath -> FilePath -> EitherT Text (ResourceT IO) () #-}
 
 withPrintPusher ::
      MonadResource m
@@ -176,7 +200,7 @@ withOutputPusher opts inputfile outputfile runWith = do
   Resource.release poolKey
   firstTshow closeOutfd
 
-catFacts :: MonadIO m => [Schema.Column] -> Stream.Stream (EitherT Binary.FileError m) Block.Block -> EitherT Text m ()
+catFacts :: MonadIO m => [Schema.Column] -> VStream.Stream (EitherT Binary.FileError m) Block.Block -> EitherT Text m ()
 catFacts schemas0 blocks =
   let
     schemas =
@@ -194,11 +218,11 @@ catFacts schemas0 blocks =
       Boxed.mapM_ (liftIO . putFact) facts
 
     blocks' =
-      Stream.trans (firstT Binary.renderFileError) blocks
+      VStream.trans (firstT Binary.renderFileError) blocks
   in
-    Stream.mapM_ go blocks'
+    VStream.mapM_ go blocks'
 
-catBlocks :: MonadIO m => CatOptions -> Stream.Stream (EitherT Binary.FileError m) Block.Block -> EitherT Text m ()
+catBlocks :: MonadIO m => CatOptions -> VStream.Stream (EitherT Binary.FileError m) Block.Block -> EitherT Text m ()
 catBlocks opts blocks = do
   let int0 = 0 :: Int
   totalBlocks <- liftIO $ IORef.newIORef int0
@@ -224,8 +248,8 @@ catBlocks opts blocks = do
           IO.putStrLn ("  Entities: " <> show numEnts)
           IO.putStrLn ("  Facts:    " <> show numIxs)
 
-  let blocks' = Stream.trans (firstT Binary.renderFileError) blocks
-  Stream.mapM_ go blocks'
+  let blocks' = VStream.trans (firstT Binary.renderFileError) blocks
+  VStream.mapM_ go blocks'
 
   numBlocks <- liftIO $ IORef.readIORef totalBlocks
   numEnts <- liftIO $ IORef.readIORef totalEnts

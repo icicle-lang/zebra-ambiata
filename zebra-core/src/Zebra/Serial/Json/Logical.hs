@@ -80,18 +80,22 @@ renderJsonLogicalDecodeError = \case
 encodeLogical :: Schema.Table -> Logical.Table -> Either JsonLogicalEncodeError ByteString
 encodeLogical schema value =
   encodeJson ["key"] <$> ppTable schema value
+{-# INLINABLE encodeLogical #-}
 
 encodeLogicalValue :: Schema.Column -> Logical.Value -> Either JsonLogicalEncodeError ByteString
 encodeLogicalValue schema value =
   encodeJson ["key"] <$> ppValue schema value
+{-# INLINABLE encodeLogicalValue #-}
 
 decodeLogical :: Schema.Table -> ByteString -> Either JsonLogicalDecodeError Logical.Table
 decodeLogical schema =
   first JsonLogicalDecodeError . decodeJson (pTable schema)
+{-# INLINABLE decodeLogical #-}
 
 decodeLogicalValue :: Schema.Column -> ByteString -> Either JsonLogicalDecodeError Logical.Value
 decodeLogicalValue schema =
   first JsonLogicalDecodeError . decodeJson (pValue schema)
+{-# INLINABLE decodeLogicalValue #-}
 
 pTable :: Schema.Table -> Aeson.Value -> Aeson.Parser Logical.Table
 pTable schema =
@@ -109,6 +113,7 @@ pTable schema =
     Schema.Map kschema vschema ->
       fmap (Logical.Map . Map.fromList . Boxed.toList) .
       Aeson.withArray "array containing key/value pairs" (kmapM $ pPair kschema vschema)
+{-# INLINABLE pTable #-}
 
 ppTable :: Schema.Table -> Logical.Table -> Either JsonLogicalEncodeError Aeson.Value
 ppTable schema table0 =
@@ -138,6 +143,7 @@ ppTable schema table0 =
 
     _ ->
       Left $ JsonLogicalTableSchemaMismatch schema table0
+{-# INLINABLE ppTable #-}
 
 pPair :: Schema.Column -> Schema.Column -> Aeson.Value -> Aeson.Parser (Logical.Value, Logical.Value)
 pPair kschema vschema =
@@ -145,6 +151,7 @@ pPair kschema vschema =
     (,)
       <$> withStructField "key" o (pValue kschema)
       <*> withStructField "value" o (pValue vschema)
+{-# INLINABLE pPair #-}
 
 ppPair :: Aeson.Value -> Aeson.Value -> Aeson.Value
 ppPair key value =
@@ -152,6 +159,7 @@ ppPair key value =
       Field "key" key
     , Field "value" value
     ]
+{-# INLINABLE ppPair #-}
 
 pValue :: Schema.Column -> Aeson.Value -> Aeson.Parser Logical.Value
 pValue schema =
@@ -182,6 +190,7 @@ pValue schema =
 
     Schema.Reversed sreversed ->
       fmap Logical.Reversed . pValue sreversed
+{-# INLINABLE pValue #-}
 
 mkVariantMap :: Cons Boxed.Vector (Variant Schema.Column) -> Map VariantName (Aeson.Value -> Aeson.Parser Logical.Value)
 mkVariantMap =
@@ -190,6 +199,7 @@ mkVariantMap =
       (name, fmap (Logical.Enum tag) . pValue schema)
   in
     Map.fromList . fmap fromVariant . List.zip [0..] . Cons.toList
+{-# INLINABLE mkVariantMap #-}
 
 ppValue :: Schema.Column -> Logical.Value -> Either JsonLogicalEncodeError Aeson.Value
 ppValue schema value0 =
@@ -234,3 +244,4 @@ ppValue schema value0 =
 
     _ ->
       Left $ JsonLogicalValueSchemaMismatch schema value0
+{-# INLINABLE ppValue #-}

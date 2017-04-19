@@ -3,7 +3,10 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Zebra.Serial.Text.Striped (
     encodeStriped
+  , encodeStripedBlock
+
   , decodeStriped
+  , decodeStripedBlock
 
   , TextStripedEncodeError(..)
   , renderTextStripedEncodeError
@@ -12,11 +15,20 @@ module Zebra.Serial.Text.Striped (
   , renderTextStripedDecodeError
   ) where
 
+import           Control.Monad.Morph (hoist)
+import           Control.Monad.Trans.Class (lift)
+
 import           Data.ByteString (ByteString)
 
 import           P
 
+import           X.Control.Monad.Trans.Either (EitherT, hoistEither, firstJoin)
+
+import           Zebra.ByteStream (ByteStream)
+import qualified Zebra.ByteStream as ByteStream
 import           Zebra.Serial.Text.Logical
+import           Zebra.Stream (Stream, Of(..))
+import qualified Zebra.Stream as Stream
 import qualified Zebra.Table.Schema as Schema
 import           Zebra.Table.Striped (StripedError)
 import qualified Zebra.Table.Striped as Striped
@@ -37,21 +49,51 @@ renderTextStripedEncodeError = \case
   TextStripedEncodeError err ->
     Striped.renderStripedError err
   TextStripedLogicalEncodeError err ->
-    renderTextValueEncodeError err
+    renderTextLogicalEncodeError err
 
 renderTextStripedDecodeError :: TextStripedDecodeError -> Text
 renderTextStripedDecodeError = \case
   TextStripedDecodeError err ->
     Striped.renderStripedError err
   TextStripedLogicalDecodeError err ->
-    renderTextValueDecodeError err
+    renderTextLogicalDecodeError err
 
-encodeStriped :: Striped.Table -> Either TextStripedEncodeError ByteString
-encodeStriped striped = do
+encodeStriped ::
+     Monad m
+  => Stream (Of Striped.Table) m ()
+  -> ByteStream (EitherT TextStripedEncodeError m) ()
+encodeStriped input = do
+  m <- lift . lift $ Stream.uncons input
+  case m of
+    Nothing ->
+      ByteStream.empty
+
+    Just (hd, tl) ->
+      hoist (firstJoin TextStripedLogicalEncodeError) .
+      encodeLogical (Striped.schema hd) .
+      Stream.mapM (hoistEither . first TextStripedEncodeError . Striped.toLogical) $
+      hoist lift (Stream.cons hd tl)
+{-# INLINABLE encodeStriped #-}
+
+encodeStripedBlock :: Striped.Table -> Either TextStripedEncodeError ByteString
+encodeStripedBlock striped = do
   logical <- first TextStripedEncodeError $ Striped.toLogical striped
-  first TextStripedLogicalEncodeError $ encodeLogical (Striped.schema striped) logical
+  first TextStripedLogicalEncodeError $ encodeLogicalBlock (Striped.schema striped) logical
+{-# INLINABLE encodeStripedBlock #-}
 
-decodeStriped :: Schema.Table -> ByteString -> Either TextStripedDecodeError Striped.Table
-decodeStriped schema bs = do
-  logical <- first TextStripedLogicalDecodeError $ decodeLogical schema bs
+decodeStriped ::
+     Monad m
+  => Schema.Table
+  -> ByteStream m ()
+  -> Stream (Of Striped.Table) (EitherT TextStripedDecodeError m) ()
+decodeStriped schema =
+  Stream.mapM (hoistEither . first TextStripedDecodeError . Striped.fromLogical schema) .
+  hoist (firstT TextStripedLogicalDecodeError) .
+  decodeLogical schema
+{-# INLINABLE decodeStriped #-}
+
+decodeStripedBlock :: Schema.Table -> ByteString -> Either TextStripedDecodeError Striped.Table
+decodeStripedBlock schema bs = do
+  logical <- first TextStripedLogicalDecodeError $ decodeLogicalBlock schema bs
   first TextStripedDecodeError $ Striped.fromLogical schema logical
+{-# INLINABLE decodeStripedBlock #-}

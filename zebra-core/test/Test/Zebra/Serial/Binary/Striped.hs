@@ -2,33 +2,43 @@
 {-# LANGUAGE TemplateHaskell #-}
 module Test.Zebra.Serial.Binary.Striped where
 
-import           Disorder.Jack (Property)
-import           Disorder.Jack (quickCheckAll, gamble)
+import           Disorder.Jack (Property, forAllProperties, quickCheckWithResult, maxSuccess, stdArgs)
+import           Disorder.Jack (gamble, listOfN)
 
 import           P
 
 import           System.IO (IO)
 
 import           Test.Zebra.Jack
-import           Test.Zebra.Util
 
+import qualified Zebra.ByteStream as ByteStream
 import           Zebra.Serial.Binary.Striped
 import qualified Zebra.Table.Striped as Striped
 
 
-prop_roundtrip_table :: Property
-prop_roundtrip_table =
-  gamble jBinaryVersion $ \version ->
-  gamble (jStriped 1) $ \table ->
-    trippingSerialE (bTable version) (getTable version 1 $ Striped.schema table) table
+data BinaryError =
+    BinaryEncode !BinaryStripedEncodeError
+  | BinaryDecode !BinaryStripedDecodeError
+    deriving (Eq, Show)
 
-prop_roundtrip_column :: Property
-prop_roundtrip_column =
-  gamble jBinaryVersion $ \version ->
-  gamble (jStripedColumn 1) $ \column ->
-    trippingSerialE (bColumn version) (getColumn version 1 $ Striped.schemaColumn column) column
+prop_roundtrip_file :: Property
+prop_roundtrip_file =
+  gamble jTableSchema $ \schema ->
+  gamble (listOfN 1 10 $ jSizedLogical1 schema) $ \logical ->
+    let
+      takeStriped x =
+        let
+          Right striped =
+            Striped.fromLogical schema x
+        in
+          striped
+    in
+      trippingBoth
+        (first BinaryEncode . withList (ByteStream.toChunks . encodeStriped))
+        (first BinaryDecode . withList (decodeStriped . ByteStream.fromChunks))
+        (fmap takeStriped logical)
 
 return []
 tests :: IO Bool
 tests =
-  $quickCheckAll
+  $forAllProperties $ quickCheckWithResult (stdArgs {maxSuccess = 1000})

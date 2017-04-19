@@ -21,6 +21,8 @@ library
                     , binary                          >= 0.7.2      && < 0.9
                     , bytestring                      == 0.10.*
                     , containers                      == 0.5.*
+                    , exceptions                      == 0.8.*
+                    , mmorph                          == 1.0.*
                     , pretty-show                     == 1.6.*
                     , resourcet                       == 1.1.*
                     , semigroups                      == 0.18.*

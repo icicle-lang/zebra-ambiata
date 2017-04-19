@@ -56,6 +56,7 @@ bStrings bss =
   in
     lengths <>
     bytes
+{-# INLINABLE bStrings #-}
 
 getStrings :: Int -> Get (Boxed.Vector ByteString)
 getStrings n = do
@@ -64,6 +65,7 @@ getStrings n = do
   pure .
     unsafeSplits id bytes $
     Storable.map fromIntegral lengths
+{-# INLINABLE getStrings #-}
 
 -- | Encode a vector of bytes.
 --
@@ -84,6 +86,7 @@ bByteArray uncompressed =
   in
     Builder.word32LE (fromIntegral $ B.length compressed) <>
     Builder.byteString compressed
+{-# INLINABLE bByteArray #-}
 
 getByteArray :: Int -> Get ByteString
 getByteArray n_expected = do
@@ -107,6 +110,7 @@ getByteArray n_expected = do
             "decoded snappy was the wrong size: " <>
             "expected <" <> show n_expected <>
             ">, but was <" <> show n_actual <> ">"
+{-# INLINABLE getByteArray #-}
 
 -- | Encode a vector of bytes.
 --
@@ -128,11 +132,13 @@ bSizedByteArray uncompressed =
   in
     Builder.word32LE (fromIntegral n) <>
     bByteArray uncompressed
+{-# INLINABLE bSizedByteArray #-}
 
 getSizedByteArray :: Get ByteString
 getSizedByteArray = do
   n_uncompressed <- fromIntegral <$> Get.getWord32le
   getByteArray n_uncompressed
+{-# INLINABLE getSizedByteArray #-}
 
 -- | Encodes a vector of words.
 --
@@ -165,6 +171,7 @@ bIntArray xs =
       ensure = 4 + 8 + len + len * 8
       prim = Prim.boudedPrim ensure Foreign.packArray
   in Prim.primBounded prim xs
+{-# INLINABLE bIntArray #-}
 
 getIntArray :: Int -> Get (Storable.Vector Int64)
 getIntArray elems = do
@@ -174,6 +181,7 @@ getIntArray elems = do
   case Foreign.unpackArray bytes elems offset of
     Left err -> fail $ "Could not unpack 64-encoded words: " <> show err
     Right xs -> pure xs
+{-# INLINABLE getIntArray #-}
 
 -- | Commutative, overflow proof integer average/midpoint:
 --

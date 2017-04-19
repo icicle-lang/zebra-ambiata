@@ -17,7 +17,7 @@ import           Zebra.Serial.Text.Schema
 prop_roundtrip_schema :: Property
 prop_roundtrip_schema =
   gamble jTableSchema $
-    trippingBoth (pure . encodeSchema TextV0) (decodeSchema)
+    trippingBoth (pure . encodeSchemaWith TextV0) (decodeSchema)
 
 return []
 tests :: IO Bool

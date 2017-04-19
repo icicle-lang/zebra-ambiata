@@ -16,6 +16,10 @@ module Zebra.Table.Logical (
   , renderLogicalSchemaError
 
   , length
+  , empty
+
+  , defaultTable
+  , defaultValue
 
   , merge
   , mergeValue
@@ -24,9 +28,6 @@ module Zebra.Table.Logical (
 
   , UnionStep(..)
   , unionStep
-
-  , defaultTable
-  , defaultValue
 
   , takeBinary
   , takeArray
@@ -57,7 +58,7 @@ import qualified Data.Vector as Boxed
 import           GHC.Generics (Generic)
 import           GHC.Prim ((>#), tagToEnum#, dataToTag#)
 
-import           P hiding (some, length)
+import           P hiding (empty, some, length)
 
 import           Text.Show.Pretty (ppShow)
 
@@ -198,6 +199,7 @@ length = \case
     Boxed.length xs
   Map kvs ->
     Map.size kvs
+{-# INLINABLE length #-}
 
 ------------------------------------------------------------------------
 
@@ -215,11 +217,13 @@ merge x0 x1 =
 
     _ ->
       Left $ LogicalCannotMergeMismatchedCollections x0 x1
+{-# INLINABLE merge #-}
 
 mergeMap :: Map Value Value -> Map Value Value -> Either LogicalMergeError (Map Value Value)
 mergeMap xs0 xs1 =
   sequenceA $
     Map.mergeWithKey (\_ x y -> Just (mergeValue x y)) (fmap pure) (fmap pure) xs0 xs1
+{-# INLINABLE mergeMap #-}
 
 mergeMaps :: Boxed.Vector (Map Value Value) -> Either LogicalMergeError (Map Value Value)
 mergeMaps kvss =
@@ -244,6 +248,7 @@ mergeMaps kvss =
       kvs1 <- mergeMaps kvss1
 
       mergeMap kvs0 kvs1
+{-# INLINABLE mergeMaps #-}
 
 mergeValue :: Value -> Value -> Either LogicalMergeError Value
 mergeValue x0 x1 =
@@ -271,6 +276,7 @@ mergeValue x0 x1 =
 
     _ ->
       Left $ LogicalCannotMergeMismatchedValues x0 x1
+{-# INLINABLE mergeValue #-}
 
 ------------------------------------------------------------------------
 
@@ -286,6 +292,7 @@ maximumKey kvs =
     Nothing
   else
     pure . fst $ Map.findMax kvs
+{-# INLINABLE maximumKey #-}
 
 unionStep :: Cons Boxed.Vector (Map Value Value) -> Either LogicalMergeError UnionStep
 unionStep kvss =
@@ -316,17 +323,24 @@ unionStep kvss =
       leave <- mergeMaps $ Cons.toVector leaves
 
       pure $ UnionStep leave remains
+{-# INLINABLE unionStep #-}
 
 ------------------------------------------------------------------------
 
-defaultTable :: Schema.Table -> Table
-defaultTable = \case
+empty :: Schema.Table -> Table
+empty = \case
   Schema.Binary _ ->
     Binary ByteString.empty
   Schema.Array _ ->
     Array Boxed.empty
   Schema.Map _ _ ->
     Map Map.empty
+{-# INLINABLE empty #-}
+
+defaultTable :: Schema.Table -> Table
+defaultTable =
+  empty
+{-# INLINABLE defaultTable #-}
 
 defaultValue :: Schema.Column -> Value
 defaultValue = \case
@@ -344,6 +358,7 @@ defaultValue = \case
     Nested $ defaultTable s
   Schema.Reversed s ->
     Reversed $ defaultValue s
+{-# INLINABLE defaultValue #-}
 
 ------------------------------------------------------------------------
 
@@ -487,6 +502,7 @@ instance Ord Value where
         compare y x -- Deliberately flipped x/y, that's what 'Reversed' does.
       y ->
         compareTag (Reversed x) y
+  {-# INLINABLE compare #-}
 
 compareTag :: a -> a -> Ordering
 compareTag x y =
@@ -494,3 +510,4 @@ compareTag x y =
     GT
   else
     LT
+{-# INLINE compareTag #-}

@@ -48,6 +48,7 @@ module Test.Zebra.Jack (
 
   -- * Zebra.Table.Logical
   , jSizedLogical
+  , jSizedLogical1
   , jLogical
   , jLogicalValue
 
@@ -60,12 +61,14 @@ module Test.Zebra.Jack (
 
   -- * x-disorder-jack
   , trippingBoth
+  , withList
   ) where
 
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString as ByteString
 import qualified Data.ByteString.Char8 as Char8
 import qualified Data.Char as Char
+import           Data.Functor.Identity (Identity(..))
 import qualified Data.List as List
 import qualified Data.Map as Map
 import qualified Data.Text as Text
@@ -91,6 +94,7 @@ import           Test.QuickCheck.Instances ()
 import           Text.Printf (printf)
 import           Text.Show.Pretty (ppShow)
 
+import           X.Control.Monad.Trans.Either (EitherT, runEitherT)
 import           X.Data.Vector.Cons (Cons)
 import qualified X.Data.Vector.Cons as Cons
 
@@ -99,6 +103,8 @@ import           Zebra.Factset.Data
 import           Zebra.Factset.Entity
 import           Zebra.Factset.Fact
 import           Zebra.Serial.Binary.Data
+import           Zebra.Stream (Stream, Of)
+import qualified Zebra.Stream as Stream
 import           Zebra.Table.Data
 import qualified Zebra.Table.Encoding as Encoding
 import qualified Zebra.Table.Logical as Logical
@@ -435,6 +441,11 @@ jSizedLogical schema =
   sized $ \size ->
     jLogical schema =<< chooseInt (0, size `div` 5)
 
+jSizedLogical1 :: Schema.Table -> Jack Logical.Table
+jSizedLogical1 schema =
+  sized $ \size ->
+    jLogical schema =<< chooseInt (1, max 1 (size `div` 5))
+
 jLogical :: Schema.Table -> Int -> Jack Logical.Table
 jLogical tschema n =
   case tschema of
@@ -685,3 +696,7 @@ trippingBoth to from x =
     counterexample (ppShow intermediate) .
     counterexample "" $
       property (original === roundtrip)
+
+withList :: (Stream (Of a) Identity () -> Stream (Of b) (EitherT x Identity) ()) -> [a] -> Either x [b]
+withList f =
+  runIdentity . runEitherT . Stream.toList_ . f . Stream.each
