@@ -61,10 +61,6 @@ renderImportError = \case
   ImportBinaryStripedEncodeError err ->
     Binary.renderBinaryStripedEncodeError err
 
-chunkSize :: Int
-chunkSize =
-  1024 * 1024
-
 checkStdout :: MonadIO m => m (Maybe Handle)
 checkStdout = do
   tty <- liftIO $ hIsTerminalDevice stdout
@@ -111,5 +107,5 @@ zebraImport x = do
     hoist (firstJoin ImportTextStripedDecodeError) .
       Text.decodeStriped schema .
     hoist (firstT ImportIOError) $
-      ByteStream.readFileN chunkSize (importInput x)
+      ByteStream.readFile (importInput x)
 {-# SPECIALIZE zebraImport :: Import -> EitherT ImportError (ResourceT IO) () #-}

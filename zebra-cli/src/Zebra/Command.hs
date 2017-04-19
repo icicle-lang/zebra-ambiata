@@ -117,7 +117,7 @@ readStriped path =
   hoist (firstJoin (Text.pack . ppShow)) .
     Binary.decodeStriped .
   hoist (firstT (Text.pack . ppShow)) $
-    ByteStream.readFileN (1024 * 1024) path
+    ByteStream.readFile path
 
 zebraUnion :: (MonadResource m, MonadCatch m) => NonEmpty FilePath -> FilePath -> EitherT Text m ()
 zebraUnion inputs0 output =

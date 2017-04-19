@@ -66,17 +66,13 @@ renderExportError = \case
   ExportTextLogicalEncodeError err ->
     Text.renderTextLogicalEncodeError err
 
-chunkSize :: Int
-chunkSize =
-  1024 * 1024
-
 zebraExport :: forall m. (MonadResource m, MonadCatch m) => Export -> EitherT ExportError m ()
 zebraExport export = do
   (schema, tables0) <-
     firstJoin ExportBinaryLogicalDecodeError .
       Binary.decodeLogical .
     hoist (firstT ExportIOError) $
-      ByteStream.readFileN chunkSize (exportInput export)
+      ByteStream.readFile (exportInput export)
 
   let
     bschema :: ByteString
