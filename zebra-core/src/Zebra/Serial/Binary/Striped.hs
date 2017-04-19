@@ -20,17 +20,17 @@ import           P
 
 import           X.Control.Monad.Trans.Either (EitherT, left, hoistEither)
 
-import           Zebra.ByteStream (ByteStream)
-import qualified Zebra.ByteStream as ByteStream
 import           Zebra.Factset.Table
 import           Zebra.Serial.Binary.Block
 import           Zebra.Serial.Binary.Data
 import           Zebra.Serial.Binary.Header
-import           Zebra.Stream (Stream, Of(..))
-import qualified Zebra.Stream as Stream
-import           Zebra.Stream.Get (GetError, renderGetError)
-import qualified Zebra.Stream.Get as Stream
 import qualified Zebra.Table.Striped as Striped
+import           Zebra.X.ByteStream (ByteStream)
+import qualified Zebra.X.ByteStream as ByteStream
+import           Zebra.X.Stream (Stream, Of(..))
+import qualified Zebra.X.Stream as Stream
+import           Zebra.X.Stream.Get (GetError, renderGetError)
+import qualified Zebra.X.Stream.Get as Stream
 
 
 data BinaryStripedEncodeError =

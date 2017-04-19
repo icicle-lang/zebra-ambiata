@@ -56,9 +56,6 @@ library
                     src
 
   exposed-modules:
-                    Zebra.ByteStream
-                    Zebra.ByteStream.Char8
-
                     Zebra.Factset.Block
                     Zebra.Factset.Block.Block
                     Zebra.Factset.Block.Entity
@@ -105,15 +102,16 @@ library
                     Zebra.Serial.Text.Schema
                     Zebra.Serial.Text.Striped
 
-                    Zebra.Stream
-                    Zebra.Stream.Get
-
                     Zebra.Table.Data
                     Zebra.Table.Encoding
                     Zebra.Table.Logical
                     Zebra.Table.Schema
                     Zebra.Table.Striped
 
+                    Zebra.X.ByteStream
+                    Zebra.X.ByteStream.Char8
+                    Zebra.X.Stream
+                    Zebra.X.Stream.Get
                     Zebra.X.Vector.Generic
                     Zebra.X.Vector.Segment
                     Zebra.X.Vector.Storable

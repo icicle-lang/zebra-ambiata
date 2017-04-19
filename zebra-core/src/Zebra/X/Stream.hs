@@ -1,5 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
-module Zebra.Stream (
+module Zebra.X.Stream (
     unfoldOf
   , whenEmpty
 

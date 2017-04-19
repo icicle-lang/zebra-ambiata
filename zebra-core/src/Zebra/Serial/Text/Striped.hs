@@ -24,14 +24,14 @@ import           P
 
 import           X.Control.Monad.Trans.Either (EitherT, hoistEither, firstJoin)
 
-import           Zebra.ByteStream (ByteStream)
-import qualified Zebra.ByteStream as ByteStream
 import           Zebra.Serial.Text.Logical
-import           Zebra.Stream (Stream, Of(..))
-import qualified Zebra.Stream as Stream
 import qualified Zebra.Table.Schema as Schema
 import           Zebra.Table.Striped (StripedError)
 import qualified Zebra.Table.Striped as Striped
+import           Zebra.X.ByteStream (ByteStream)
+import qualified Zebra.X.ByteStream as ByteStream
+import           Zebra.X.Stream (Stream, Of(..))
+import qualified Zebra.X.Stream as Stream
 
 
 data TextStripedEncodeError =

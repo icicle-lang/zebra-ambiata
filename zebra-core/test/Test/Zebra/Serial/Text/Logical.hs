@@ -12,7 +12,7 @@ import           System.IO (IO)
 import           Test.Zebra.Jack
 
 import           Zebra.Serial.Text.Logical
-import qualified Zebra.ByteStream as ByteStream
+import qualified Zebra.X.ByteStream as ByteStream
 
 
 data TextError =

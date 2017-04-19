@@ -37,18 +37,18 @@ import           P
 
 import           X.Control.Monad.Trans.Either (EitherT, hoistEither)
 
-import           Zebra.ByteStream (ByteStream)
-import qualified Zebra.ByteStream as ByteStream
-import qualified Zebra.ByteStream.Char8 as CharStream
 import           Zebra.Serial.Json.Logical (JsonLogicalEncodeError, renderJsonLogicalEncodeError)
 import           Zebra.Serial.Json.Logical (ppValue, ppPair, pValue, pPair)
 import           Zebra.Serial.Json.Util
-import           Zebra.Stream (Stream, Of(..))
-import qualified Zebra.Stream as Stream
 import           Zebra.Table.Encoding (Utf8Error)
 import qualified Zebra.Table.Encoding as Encoding
 import qualified Zebra.Table.Logical as Logical
 import qualified Zebra.Table.Schema as Schema
+import           Zebra.X.ByteStream (ByteStream)
+import qualified Zebra.X.ByteStream as ByteStream
+import qualified Zebra.X.ByteStream.Char8 as CharStream
+import           Zebra.X.Stream (Stream, Of(..))
+import qualified Zebra.X.Stream as Stream
 
 
 data TextLogicalEncodeError =

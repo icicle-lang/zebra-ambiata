@@ -28,12 +28,12 @@ import           System.IO.Error (IOError)
 
 import           X.Control.Monad.Trans.Either (EitherT, hoistEither, firstJoin)
 
-import           Zebra.ByteStream (ByteStream)
-import qualified Zebra.ByteStream as ByteStream
 import           Zebra.Serial.Binary (BinaryStripedEncodeError)
 import qualified Zebra.Serial.Binary as Binary
 import           Zebra.Serial.Text (TextSchemaDecodeError, TextStripedDecodeError)
 import qualified Zebra.Serial.Text as Text
+import           Zebra.X.ByteStream (ByteStream)
+import qualified Zebra.X.ByteStream as ByteStream
 
 
 data Import =

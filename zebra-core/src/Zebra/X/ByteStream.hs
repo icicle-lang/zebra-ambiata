@@ -2,7 +2,7 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE PatternSynonyms #-}
 {-# LANGUAGE RankNTypes #-}
-module Zebra.ByteStream (
+module Zebra.X.ByteStream (
     ByteStream
 
   , defaultChunkSize
@@ -51,8 +51,8 @@ import           System.IO.Error (IOError)
 import           X.Control.Monad.Trans.Either (EitherT)
 import qualified X.Control.Monad.Trans.Either as EitherT
 
-import           Zebra.Stream (Stream, Of(..))
-import qualified Zebra.Stream as Stream
+import           Zebra.X.Stream (Stream, Of(..))
+import qualified Zebra.X.Stream as Stream
 
 
 -- | Rename the streaming 'ByteString' because otherwise it's too hard to work

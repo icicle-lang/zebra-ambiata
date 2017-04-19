@@ -21,15 +21,15 @@ import           P
 
 import           X.Control.Monad.Trans.Either (EitherT, left, hoistEither, firstJoin)
 
-import           Zebra.ByteStream (ByteStream)
 import           Zebra.Serial.Binary.Data
 import           Zebra.Serial.Binary.Striped
-import           Zebra.Stream (Stream, Of(..))
-import qualified Zebra.Stream as Stream
 import qualified Zebra.Table.Logical as Logical
 import qualified Zebra.Table.Schema as Schema
 import           Zebra.Table.Striped (StripedError)
 import qualified Zebra.Table.Striped as Striped
+import           Zebra.X.ByteStream (ByteStream)
+import           Zebra.X.Stream (Stream, Of(..))
+import qualified Zebra.X.Stream as Stream
 
 
 data BinaryLogicalEncodeError =
