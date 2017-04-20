@@ -62,8 +62,8 @@ renderBinaryLogicalDecodeError = \case
 encodeLogical ::
      Monad m
   => Schema.Table
-  -> Stream (Of Logical.Table) m ()
-  -> ByteStream (EitherT BinaryLogicalEncodeError m) ()
+  -> Stream (Of Logical.Table) m r
+  -> ByteStream (EitherT BinaryLogicalEncodeError m) r
 encodeLogical =
   encodeLogicalWith BinaryV3
 {-# INLINABLE encodeLogical #-}
@@ -72,8 +72,8 @@ encodeLogicalWith ::
      Monad m
   => BinaryVersion
   -> Schema.Table
-  -> Stream (Of Logical.Table) m ()
-  -> ByteStream (EitherT BinaryLogicalEncodeError m) ()
+  -> Stream (Of Logical.Table) m r
+  -> ByteStream (EitherT BinaryLogicalEncodeError m) r
 encodeLogicalWith version schema input =
   hoist (firstJoin BinaryLogicalStripedEncodeError) .
   encodeStripedWith version $

@@ -121,8 +121,8 @@ encodeLogicalBlock schema table0 =
 encodeLogical ::
      Monad m
   => Schema.Table
-  -> Stream (Of Logical.Table) m ()
-  -> ByteStream (EitherT TextLogicalEncodeError m) ()
+  -> Stream (Of Logical.Table) m r
+  -> ByteStream (EitherT TextLogicalEncodeError m) r
 encodeLogical schema =
   ByteStream.fromChunks .
   Stream.mapM (hoistEither . encodeLogicalBlock schema) .
@@ -171,8 +171,8 @@ alignChunks schema =
 decodeLogical ::
      Monad m
   => Schema.Table
-  -> ByteStream m ()
-  -> Stream (Of Logical.Table) (EitherT TextLogicalDecodeError m) ()
+  -> ByteStream m r
+  -> Stream (Of Logical.Table) (EitherT TextLogicalDecodeError m) r
 decodeLogical schema =
   Stream.mapM (hoistEither . decodeLogicalBlock schema) .
   hoist lift .
