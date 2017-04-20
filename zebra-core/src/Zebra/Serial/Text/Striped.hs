@@ -29,7 +29,6 @@ import qualified Zebra.Table.Schema as Schema
 import           Zebra.Table.Striped (StripedError)
 import qualified Zebra.Table.Striped as Striped
 import           Zebra.X.ByteStream (ByteStream)
-import qualified Zebra.X.ByteStream as ByteStream
 import           Zebra.X.Stream (Stream, Of(..))
 import qualified Zebra.X.Stream as Stream
 
@@ -60,15 +59,15 @@ renderTextStripedDecodeError = \case
 
 encodeStriped ::
      Monad m
-  => Stream (Of Striped.Table) m ()
-  -> ByteStream (EitherT TextStripedEncodeError m) ()
+  => Stream (Of Striped.Table) m r
+  -> ByteStream (EitherT TextStripedEncodeError m) r
 encodeStriped input = do
-  m <- lift . lift $ Stream.uncons input
-  case m of
-    Nothing ->
-      ByteStream.empty
+  e <- lift . lift $ Stream.next input
+  case e of
+    Left r ->
+      pure r
 
-    Just (hd, tl) ->
+    Right (hd, tl) ->
       hoist (firstJoin TextStripedLogicalEncodeError) .
       encodeLogical (Striped.schema hd) .
       Stream.mapM (hoistEither . first TextStripedEncodeError . Striped.toLogical) $
@@ -84,8 +83,8 @@ encodeStripedBlock striped = do
 decodeStriped ::
      Monad m
   => Schema.Table
-  -> ByteStream m ()
-  -> Stream (Of Striped.Table) (EitherT TextStripedDecodeError m) ()
+  -> ByteStream m r
+  -> Stream (Of Striped.Table) (EitherT TextStripedDecodeError m) r
 decodeStriped schema =
   Stream.mapM (hoistEither . first TextStripedDecodeError . Striped.fromLogical schema) .
   hoist (firstT TextStripedLogicalDecodeError) .
