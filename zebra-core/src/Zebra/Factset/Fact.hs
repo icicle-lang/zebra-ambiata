@@ -32,6 +32,7 @@ import           Text.Show.Pretty (ppShow)
 
 import           Zebra.Factset.Data
 import           Zebra.Serial.Json
+import           Zebra.Table.Data
 import qualified Zebra.Table.Logical as Logical
 import qualified Zebra.Table.Schema as Schema
 import           Zebra.Table.Striped (StripedError)
@@ -98,7 +99,7 @@ toValueTable schemas facts =
         Boxed.map (fromMaybe' defaultValue . factValue) $
         Boxed.filter matchId facts
 
-    first FactStripedError . Striped.fromLogical (Schema.Array schema) $ Logical.Array values
+    first FactStripedError . Striped.fromLogical (Schema.Array DenyDefault schema) $ Logical.Array values
 
 render :: Boxed.Vector Schema.Column -> Fact -> Either FactRenderError ByteString
 render schemas fact = do

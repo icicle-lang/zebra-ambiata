@@ -32,7 +32,7 @@ import qualified Zebra.Table.Striped as Striped
 --
 bTable :: BinaryVersion -> Striped.Table -> Either BinaryEncodeError Builder
 bTable version = \case
-  Striped.Binary encoding bs -> do
+  Striped.Binary _def encoding bs -> do
     () <- first BinaryEncodeUtf8 $ Encoding.validateBinary encoding bs
     case version of
       BinaryV2 ->
@@ -40,10 +40,10 @@ bTable version = \case
       BinaryV3 ->
         pure $ bByteArray bs
 
-  Striped.Array c ->
-    bColumn version c
+  Striped.Array _def x ->
+    bColumn version x
 
-  Striped.Map k v ->
+  Striped.Map _def k v ->
     (<>)
       <$> bColumn version k
       <*> bColumn version v
@@ -56,19 +56,19 @@ bColumn version = \case
   Striped.Unit _ ->
     pure $ mempty
 
-  Striped.Int xs ->
+  Striped.Int _def xs ->
     pure $ bIntArray xs
 
-  Striped.Double xs ->
+  Striped.Double _def xs ->
     pure $ bDoubleArray xs
 
-  Striped.Enum tags vs0 -> do
+  Striped.Enum _def tags vs0 -> do
     vs <- traverse (bColumn version . variantData) vs0
     pure $
       bTagArray tags <>
       mconcat (Cons.toList vs)
 
-  Striped.Struct fs ->
+  Striped.Struct _def fs ->
     mconcat . Cons.toList <$> traverse (bColumn version . fieldData) fs
 
   Striped.Nested ns x ->
@@ -83,7 +83,7 @@ bColumn version = \case
 --
 getTable :: BinaryVersion -> Int -> Schema.Table -> Get Striped.Table
 getTable version n = \case
-  Schema.Binary encoding -> do
+  Schema.Binary def encoding -> do
     bs <-
       validateBinary encoding =<<
       case version of
@@ -93,14 +93,14 @@ getTable version n = \case
         BinaryV3 ->
           getByteArray n
 
-    pure $ Striped.Binary encoding bs
+    pure $ Striped.Binary def encoding bs
 
-  Schema.Array e ->
-    Striped.Array
-      <$> getColumn version n e
+  Schema.Array def x ->
+    Striped.Array def
+      <$> getColumn version n x
 
-  Schema.Map k v ->
-    Striped.Map
+  Schema.Map def k v ->
+    Striped.Map def
       <$> getColumn version n k
       <*> getColumn version n v
 {-# INLINABLE getTable #-}
@@ -122,21 +122,21 @@ getColumn version n = \case
   Schema.Unit ->
     pure $ Striped.Unit n
 
-  Schema.Int ->
-    Striped.Int
+  Schema.Int def ->
+    Striped.Int def
       <$> getIntArray n
 
-  Schema.Double ->
-    Striped.Double
+  Schema.Double def ->
+    Striped.Double def
       <$> getDoubleArray n
 
-  Schema.Enum vs ->
-    Striped.Enum
+  Schema.Enum def vs ->
+    Striped.Enum def
       <$> getTagArray n
       <*> Cons.mapM (traverse $ getColumn version n) vs
 
-  Schema.Struct fs ->
-    Striped.Struct
+  Schema.Struct def fs ->
+    Striped.Struct def
       <$> Cons.mapM (traverse $ getColumn version n) fs
 
   Schema.Nested t ->

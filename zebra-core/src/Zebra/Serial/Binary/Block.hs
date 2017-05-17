@@ -57,6 +57,7 @@ import           Zebra.Factset.Table
 import           Zebra.Serial.Binary.Array
 import           Zebra.Serial.Binary.Data
 import           Zebra.Serial.Binary.Table
+import           Zebra.Table.Data
 import qualified Zebra.Table.Schema as Schema
 import qualified Zebra.Table.Striped as Striped
 
@@ -416,7 +417,7 @@ getTables schemas = do
         Nothing ->
           fail $ "Cannot read table, unknown attribute-id: " <> show aid
         Just schema ->
-          getTable BinaryV2 n (Schema.Array schema)
+          getTable BinaryV2 n (Schema.Array DenyDefault schema)
 
   Boxed.zipWithM get ids counts
 {-# INLINABLE getTables #-}

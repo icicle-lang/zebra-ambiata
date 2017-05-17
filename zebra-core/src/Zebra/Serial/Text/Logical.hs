@@ -93,19 +93,19 @@ encodeJsonRows keyOrder =
 encodeLogicalBlock :: Schema.Table -> Logical.Table -> Either TextLogicalEncodeError ByteString
 encodeLogicalBlock schema table0 =
   case schema of
-    Schema.Binary encoding
+    Schema.Binary _ encoding
       | Logical.Binary bs <- table0
       -> do
         () <- first TextLogicalEncodeUtf8 $ Encoding.validateBinary encoding bs
         pure bs
 
-    Schema.Array element
+    Schema.Array _ element
       | Logical.Array xs <- table0
       ->
         first TextLogicalEncodeError $
           encodeJsonRows ["key"] <$> traverse (ppValue element) xs
 
-    Schema.Map kschema vschema
+    Schema.Map _ kschema vschema
       | Logical.Map kvs <- table0
       ->
         first TextLogicalEncodeError $ do
@@ -137,26 +137,26 @@ decodeJsonRows p =
 decodeLogicalBlock :: Schema.Table -> ByteString -> Either TextLogicalDecodeError Logical.Table
 decodeLogicalBlock schema bs =
   case schema of
-    Schema.Binary encoding -> do
+    Schema.Binary _ encoding -> do
       () <- first TextLogicalDecodeUtf8 $ Encoding.validateBinary encoding bs
       pure $ Logical.Binary bs
 
-    Schema.Array element ->
+    Schema.Array _ element ->
       first TextLogicalDecodeError $
         Logical.Array <$> decodeJsonRows (pValue element) bs
 
-    Schema.Map kschema vschema ->
+    Schema.Map _ kschema vschema ->
       first TextLogicalDecodeError $
         Logical.Map . Map.fromList . Boxed.toList <$> decodeJsonRows (pPair kschema vschema) bs
 {-# INLINABLE decodeLogicalBlock #-}
 
 needsAlignment :: Schema.Table -> Bool
 needsAlignment = \case
-  Schema.Binary _ ->
+  Schema.Binary _ _ ->
     False
-  Schema.Array _ ->
+  Schema.Array _ _ ->
     True
-  Schema.Map _ _ ->
+  Schema.Map _ _ _ ->
     True
 {-# INLINABLE needsAlignment #-}
 

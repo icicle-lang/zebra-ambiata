@@ -29,6 +29,7 @@ import           Zebra.Factset.Block
 import           Zebra.Factset.Data
 import           Zebra.Serial.Binary.Block
 import           Zebra.Serial.Binary.Data
+import           Zebra.Table.Data
 import qualified Zebra.Table.Schema as Schema
 import qualified Zebra.Table.Striped as Striped
 
@@ -87,12 +88,12 @@ prop_roundtrip_indices =
 
 prop_roundtrip_tables :: Property
 prop_roundtrip_tables =
-  gamble (Boxed.fromList <$> listOf (jStripedArray 1)) $ \xs ->
-    trippingSerialE bTables (getTables $ fmap (unsafeTakeArray . Striped.schema) xs) xs
+  gamble (Boxed.fromList <$> listOf (jStripedColumn 1)) $ \xs ->
+    trippingSerialE bTables (getTables $ fmap Striped.schemaColumn xs) (fmap (Striped.Array DenyDefault) xs)
 
 unsafeTakeArray :: Schema.Table -> Schema.Column
 unsafeTakeArray =
-  either (Savage.error . ppShow) id . Schema.takeArray
+  either (Savage.error . ppShow) snd . Schema.takeArray
 
 return []
 tests :: IO Bool

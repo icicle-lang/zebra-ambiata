@@ -329,11 +329,11 @@ unionStep kvss =
 
 empty :: Schema.Table -> Table
 empty = \case
-  Schema.Binary _ ->
+  Schema.Binary _ _ ->
     Binary ByteString.empty
-  Schema.Array _ ->
+  Schema.Array _ _ ->
     Array Boxed.empty
-  Schema.Map _ _ ->
+  Schema.Map _ _ _ ->
     Map Map.empty
 {-# INLINABLE empty #-}
 
@@ -346,13 +346,13 @@ defaultValue :: Schema.Column -> Value
 defaultValue = \case
   Schema.Unit ->
     Unit
-  Schema.Int ->
+  Schema.Int _ ->
     Int 0
-  Schema.Double ->
+  Schema.Double _ ->
     Double 0
-  Schema.Enum vs ->
+  Schema.Enum _ vs ->
     Enum 0 . defaultValue . variantData $ Cons.head vs
-  Schema.Struct fs ->
+  Schema.Struct _ fs ->
     Struct $ fmap (defaultValue . fieldData) fs
   Schema.Nested s ->
     Nested $ defaultTable s

@@ -37,6 +37,11 @@ import Anemone.Foreign.Mempool (Mempool(..))
 #znum ZEBRA_UNPACK_BUFFER_TOO_SMALL
 #znum ZEBRA_UNPACK_BUFFER_TOO_LARGE
 
+-- Zebra.Table.Data.Default
+#integral_t enum zebra_default
+#znum ZEBRA_DEFAULT_DENY
+#znum ZEBRA_DEFAULT_ALLOW
+
 -- Zebra.Table.Encoding.Binary
 #integral_t enum zebra_binary_encoding
 #znum ZEBRA_BINARY_NONE
@@ -50,11 +55,14 @@ import Anemone.Foreign.Mempool (Mempool(..))
 
 #starttype union zebra_table_variant
 -- ZEBRA_TABLE_BINARY
+#field _binary.default_ , <zebra_default>
 #field _binary.encoding , <zebra_binary_encoding>
 #field _binary.bytes    , Ptr Word8
 -- ZEBRA_TABLE_ARRAY
+#field _array.default_  , <zebra_default>
 #field _array.values    , Ptr <zebra_column>
 -- ZEBRA_TABLE_MAP
+#field _map.default_    , <zebra_default>
 #field _map.keys        , Ptr <zebra_column>
 #field _map.values      , Ptr <zebra_column>
 #stoptype
@@ -91,13 +99,17 @@ import Anemone.Foreign.Mempool (Mempool(..))
 #starttype union zebra_column_variant
 -- ZEBRA_COLUMN_UNIT (empty)
 -- ZEBRA_COLUMN_INT
+#field _int.default_    , <zebra_default>
 #field _int.values      , Ptr Int64
 -- ZEBRA_COLUMN_DOUBLE
+#field _double.default_ , <zebra_default>
 #field _double.values   , Ptr Double
 -- ZEBRA_COLUMN_ENUM
+#field _enum.default_   , <zebra_default>
 #field _enum.tags       , Ptr Int64
 #field _enum.columns    , <zebra_named_columns>
 -- ZEBRA_COLUMN_STRUCT
+#field _struct.default_ , <zebra_default>
 #field _struct.columns  , <zebra_named_columns>
 -- ZEBRA_COLUMN_NESTED
 #field _nested.indices  , Ptr Int64

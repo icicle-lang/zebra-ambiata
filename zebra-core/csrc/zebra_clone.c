@@ -22,20 +22,23 @@ error_t zebra_agile_clone_table (anemone_mempool_t *pool, const zebra_table_t *t
     into->row_count = 0;
     into->row_capacity = 0;
     into->tag = table->tag;
-    
+
     switch (table->tag) {
         case ZEBRA_TABLE_BINARY: {
+            into->of._binary.default_ = table->of._binary.default_;
             into->of._binary.encoding = table->of._binary.encoding;
             into->of._binary.bytes = NULL;
             return ZEBRA_SUCCESS;
         }
 
         case ZEBRA_TABLE_ARRAY: {
+            into->of._array.default_ = table->of._array.default_;
             into->of._array.values = anemone_mempool_alloc (pool, sizeof (zebra_column_t) );
             return zebra_agile_clone_column (pool, table->of._array.values, into->of._array.values);
         }
 
         case ZEBRA_TABLE_MAP: {
+            into->of._map.default_ = table->of._map.default_;
             into->of._map.keys = anemone_mempool_alloc (pool, sizeof (zebra_column_t) );
             into->of._map.values = anemone_mempool_alloc (pool, sizeof (zebra_column_t) );
 
@@ -89,18 +92,22 @@ error_t zebra_agile_clone_column (
             return ZEBRA_SUCCESS;
 
         case ZEBRA_COLUMN_INT:
+            out_data->_int.default_ = in_data->_int.default_;
             out_data->_int.values = NULL;
             return ZEBRA_SUCCESS;
 
         case ZEBRA_COLUMN_DOUBLE:
+            out_data->_double.default_ = in_data->_double.default_;
             out_data->_double.values = NULL;
             return ZEBRA_SUCCESS;
 
         case ZEBRA_COLUMN_ENUM:
+            out_data->_enum.default_ = in_data->_enum.default_;
             out_data->_enum.tags = NULL;
             return zebra_agile_clone_named_column (pool, &in_data->_enum.columns, &out_data->_enum.columns);
 
         case ZEBRA_COLUMN_STRUCT:
+            out_data->_struct.default_ = in_data->_struct.default_;
             return zebra_agile_clone_named_column (pool, &in_data->_struct.columns, &out_data->_struct.columns);
 
         case ZEBRA_COLUMN_NESTED:
@@ -140,23 +147,26 @@ error_t zebra_neritic_clone_table (
     out_table->tag = tag;
     switch (tag) {
         case ZEBRA_TABLE_BINARY: {
+            out_table->of._binary.default_ = in_table->of._binary.default_;
             out_table->of._binary.encoding = in_table->of._binary.encoding;
             out_table->of._binary.bytes = in_table->of._binary.bytes;
             return ZEBRA_SUCCESS;
         }
 
         case ZEBRA_TABLE_ARRAY: {
+            out_table->of._array.default_ = in_table->of._array.default_;
             out_table->of._array.values = anemone_mempool_alloc (pool, sizeof (zebra_column_t) );
-            return zebra_neritic_clone_column (pool, in_table->of._array.values, out_table->of._array.values); 
+            return zebra_neritic_clone_column (pool, in_table->of._array.values, out_table->of._array.values);
         }
 
         case ZEBRA_TABLE_MAP: {
+            out_table->of._map.default_ = in_table->of._map.default_;
             out_table->of._map.keys = anemone_mempool_alloc (pool, sizeof (zebra_column_t) );
             out_table->of._map.values = anemone_mempool_alloc (pool, sizeof (zebra_column_t) );
 
-            error_t err = zebra_neritic_clone_column (pool, in_table->of._map.keys, out_table->of._map.keys); 
+            error_t err = zebra_neritic_clone_column (pool, in_table->of._map.keys, out_table->of._map.keys);
             if (err) return err;
-            return zebra_neritic_clone_column (pool, in_table->of._map.values, out_table->of._map.values); 
+            return zebra_neritic_clone_column (pool, in_table->of._map.values, out_table->of._map.values);
         }
 
         default: {
@@ -205,18 +215,22 @@ error_t zebra_neritic_clone_column (
             return ZEBRA_SUCCESS;
 
         case ZEBRA_COLUMN_INT:
+            out_data->_int.default_ = in_data->_int.default_;
             out_data->_int.values = in_data->_int.values;
             return ZEBRA_SUCCESS;
 
         case ZEBRA_COLUMN_DOUBLE:
+            out_data->_double.default_ = in_data->_double.default_;
             out_data->_double.values = in_data->_double.values;
             return ZEBRA_SUCCESS;
 
         case ZEBRA_COLUMN_ENUM:
+            out_data->_enum.default_ = in_data->_enum.default_;
             out_data->_enum.tags = in_data->_enum.tags;
             return zebra_neritic_clone_named_column (pool, &in_data->_enum.columns, &out_data->_enum.columns);
 
         case ZEBRA_COLUMN_STRUCT:
+            out_data->_struct.default_ = in_data->_struct.default_;
             return zebra_neritic_clone_named_column (pool, &in_data->_struct.columns, &out_data->_struct.columns);
 
         case ZEBRA_COLUMN_NESTED:
@@ -269,23 +283,26 @@ error_t zebra_deep_clone_table (anemone_mempool_t *pool, const zebra_table_t *in
 
     switch (tag) {
         case ZEBRA_TABLE_BINARY: {
+            out_table->of._binary.default_ = in_table->of._binary.default_;
             out_table->of._binary.encoding = in_table->of._binary.encoding;
             out_table->of._binary.bytes = ZEBRA_CLONE_ARRAY (pool, in_table->of._binary.bytes, row_capacity);
             return ZEBRA_SUCCESS;
         }
 
         case ZEBRA_TABLE_ARRAY: {
+            out_table->of._array.default_ = in_table->of._array.default_;
             out_table->of._array.values = anemone_mempool_alloc (pool, sizeof (zebra_column_t) );
-            return zebra_deep_clone_column (pool, row_capacity, in_table->of._array.values, out_table->of._array.values); 
+            return zebra_deep_clone_column (pool, row_capacity, in_table->of._array.values, out_table->of._array.values);
         }
 
         case ZEBRA_TABLE_MAP: {
+            out_table->of._map.default_ = in_table->of._map.default_;
             out_table->of._map.keys = anemone_mempool_alloc (pool, sizeof (zebra_column_t) );
             out_table->of._map.values = anemone_mempool_alloc (pool, sizeof (zebra_column_t) );
 
-            error_t err = zebra_deep_clone_column (pool, row_capacity, in_table->of._map.keys, out_table->of._map.keys); 
+            error_t err = zebra_deep_clone_column (pool, row_capacity, in_table->of._map.keys, out_table->of._map.keys);
             if (err) return err;
-            return zebra_deep_clone_column (pool, row_capacity, in_table->of._map.values, out_table->of._map.values); 
+            return zebra_deep_clone_column (pool, row_capacity, in_table->of._map.values, out_table->of._map.values);
         }
 
         default: {
@@ -336,18 +353,22 @@ error_t zebra_deep_clone_column (
             return ZEBRA_SUCCESS;
 
         case ZEBRA_COLUMN_INT:
+            out_data->_int.default_ = in_data->_int.default_;
             out_data->_int.values = ZEBRA_CLONE_ARRAY (pool, in_data->_int.values, capacity);
             return ZEBRA_SUCCESS;
 
         case ZEBRA_COLUMN_DOUBLE:
+            out_data->_double.default_ = in_data->_double.default_;
             out_data->_double.values = ZEBRA_CLONE_ARRAY (pool, in_data->_double.values, capacity);
             return ZEBRA_SUCCESS;
 
         case ZEBRA_COLUMN_ENUM:
+            out_data->_enum.default_ = in_data->_enum.default_;
             out_data->_enum.tags = ZEBRA_CLONE_ARRAY (pool, in_data->_enum.tags, capacity);
             return zebra_deep_clone_named_column (pool, capacity, &in_data->_enum.columns, &out_data->_enum.columns);
 
         case ZEBRA_COLUMN_STRUCT:
+            out_data->_struct.default_ = in_data->_struct.default_;
             return zebra_deep_clone_named_column (pool, capacity, &in_data->_struct.columns, &out_data->_struct.columns);
 
         case ZEBRA_COLUMN_NESTED:

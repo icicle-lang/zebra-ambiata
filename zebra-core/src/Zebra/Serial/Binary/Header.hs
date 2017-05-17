@@ -37,6 +37,7 @@ import           Zebra.Factset.Data
 import           Zebra.Serial.Binary.Array
 import           Zebra.Serial.Binary.Data
 import           Zebra.Serial.Json.Schema
+import           Zebra.Table.Data
 import qualified Zebra.Table.Schema as Schema
 
 
@@ -110,7 +111,7 @@ bHeaderV2 features =
 
     schema =
       bStrings .
-      fmap (encodeSchema SchemaV0 . Schema.Array) .
+      fmap (encodeSchema SchemaV0 . Schema.Array DenyDefault) .
       Boxed.fromList $
       Map.elems features
   in
@@ -128,7 +129,7 @@ getHeaderV2 = do
   let
     cs =
       either (fail . Text.unpack . Schema.renderSchemaError) id $
-      traverse Schema.takeArray ts
+      traverse (fmap snd . Schema.takeArray) ts
 
   pure .
     Map.fromList . toList $

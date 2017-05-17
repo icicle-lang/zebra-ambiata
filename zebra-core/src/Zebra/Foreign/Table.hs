@@ -95,16 +95,19 @@ peekTable c_table = do
   case tag of
     C'ZEBRA_TABLE_BINARY ->
       Striped.Binary
-        <$> peekBinaryEncoding (p'zebra_table_variant'_binary'encoding c_of)
+        <$> peekDefault (p'zebra_table_variant'_binary'default_ c_of)
+        <*> peekBinaryEncoding (p'zebra_table_variant'_binary'encoding c_of)
         <*> peekByteString n_rows (p'zebra_table_variant'_binary'bytes c_of)
 
     C'ZEBRA_TABLE_ARRAY ->
       Striped.Array
-        <$> (peekColumn n_rows =<< peekIO (p'zebra_table_variant'_array'values c_of))
+        <$> peekDefault (p'zebra_table_variant'_array'default_ c_of)
+        <*> (peekColumn n_rows =<< peekIO (p'zebra_table_variant'_array'values c_of))
 
     C'ZEBRA_TABLE_MAP ->
       Striped.Map
-        <$> (peekColumn n_rows =<< peekIO (p'zebra_table_variant'_map'keys c_of))
+        <$> peekDefault (p'zebra_table_variant'_map'default_ c_of)
+        <*> (peekColumn n_rows =<< peekIO (p'zebra_table_variant'_map'keys c_of))
         <*> (peekColumn n_rows =<< peekIO (p'zebra_table_variant'_map'values c_of))
 
     _ ->
@@ -126,25 +129,46 @@ pokeTable pool c_table table = do
   pokeIO (p'zebra_table'row_capacity c_table) $ fromIntegral n_rows
 
   case table of
-    Striped.Binary encoding bytes -> do
+    Striped.Binary def encoding bytes -> do
       pokeIO c_tag C'ZEBRA_TABLE_BINARY
+      pokeDefault (p'zebra_table_variant'_binary'default_ c_of) def
       pokeBinaryEncoding (p'zebra_table_variant'_binary'encoding c_of) encoding
       pokeByteString pool (p'zebra_table_variant'_binary'bytes c_of) bytes
 
-    Striped.Array values -> do
+    Striped.Array def values -> do
       pokeIO c_tag C'ZEBRA_TABLE_ARRAY
+      pokeDefault (p'zebra_table_variant'_array'default_ c_of) def
       c_values <- liftIO $ calloc pool 1
       pokeIO (p'zebra_table_variant'_array'values c_of) c_values
       pokeColumn pool c_values values
 
-    Striped.Map keys values -> do
+    Striped.Map def keys values -> do
       pokeIO c_tag C'ZEBRA_TABLE_MAP
+      pokeDefault (p'zebra_table_variant'_map'default_ c_of) def
       c_keys <- liftIO $ calloc pool 1
       c_values <- liftIO $ calloc pool 1
       pokeIO (p'zebra_table_variant'_map'keys c_of) c_keys
       pokeIO (p'zebra_table_variant'_map'values c_of) c_values
       pokeColumn pool c_keys keys
       pokeColumn pool c_values values
+
+peekDefault :: MonadIO m => Ptr C'zebra_default -> EitherT ForeignError m Default
+peekDefault ptr = do
+  def <- peekIO ptr
+  case def of
+    C'ZEBRA_DEFAULT_DENY ->
+      pure DenyDefault
+    C'ZEBRA_DEFAULT_ALLOW ->
+      pure AllowDefault
+    _ ->
+      left $ ForeignInvalidDefault (fromIntegral def)
+
+pokeDefault :: MonadIO m => Ptr C'zebra_default -> Default-> m ()
+pokeDefault ptr = \case
+  DenyDefault ->
+    pokeIO ptr C'ZEBRA_DEFAULT_DENY
+  AllowDefault ->
+    pokeIO ptr C'ZEBRA_DEFAULT_ALLOW
 
 peekBinaryEncoding :: MonadIO m => Ptr C'zebra_binary_encoding -> EitherT ForeignError m (Maybe Encoding.Binary)
 peekBinaryEncoding ptr = do
@@ -175,20 +199,24 @@ peekColumn n_rows c_column = do
 
     C'ZEBRA_COLUMN_INT ->
       Striped.Int
-        <$> peekVector n_rows (p'zebra_column_variant'_int'values column)
+        <$> peekDefault (p'zebra_column_variant'_int'default_ column)
+        <*> peekVector n_rows (p'zebra_column_variant'_int'values column)
 
     C'ZEBRA_COLUMN_DOUBLE ->
       Striped.Double
-        <$> peekVector n_rows (p'zebra_column_variant'_double'values column)
+        <$> peekDefault (p'zebra_column_variant'_double'default_ column)
+        <*> peekVector n_rows (p'zebra_column_variant'_double'values column)
 
     C'ZEBRA_COLUMN_ENUM ->
       Striped.Enum
-        <$> (tagsOfForeign <$> peekVector n_rows (p'zebra_column_variant'_enum'tags column))
+        <$> peekDefault (p'zebra_column_variant'_enum'default_ column)
+        <*> (tagsOfForeign <$> peekVector n_rows (p'zebra_column_variant'_enum'tags column))
         <*> peekNamedColumns mkVariant n_rows (p'zebra_column_variant'_enum'columns column)
 
     C'ZEBRA_COLUMN_STRUCT ->
       Striped.Struct
-        <$> peekNamedColumns mkField n_rows (p'zebra_column_variant'_struct'columns column)
+        <$> peekDefault (p'zebra_column_variant'_struct'default_ column)
+        <*> peekNamedColumns mkField n_rows (p'zebra_column_variant'_struct'columns column)
 
     C'ZEBRA_COLUMN_NESTED ->
       Striped.Nested
@@ -215,21 +243,25 @@ pokeColumn pool c_column column =
       Striped.Unit _ ->
         pokeIO c_tag C'ZEBRA_COLUMN_UNIT
 
-      Striped.Int xs -> do
+      Striped.Int def xs -> do
         pokeIO c_tag C'ZEBRA_COLUMN_INT
+        pokeDefault (p'zebra_column_variant'_int'default_ c_of) def
         pokeVector pool (p'zebra_column_variant'_int'values c_of) xs
 
-      Striped.Double xs -> do
+      Striped.Double def xs -> do
         pokeIO c_tag C'ZEBRA_COLUMN_DOUBLE
+        pokeDefault (p'zebra_column_variant'_double'default_ c_of) def
         pokeVector pool (p'zebra_column_variant'_double'values c_of) xs
 
-      Striped.Enum tags vs -> do
+      Striped.Enum def tags vs -> do
         pokeIO c_tag C'ZEBRA_COLUMN_ENUM
+        pokeDefault (p'zebra_column_variant'_enum'default_ c_of) def
         pokeVector pool (p'zebra_column_variant'_enum'tags c_of) (foreignOfTags tags)
         pokeNamedColumns fromVariant pool (p'zebra_column_variant'_enum'columns c_of) vs
 
-      Striped.Struct fs -> do
+      Striped.Struct def fs -> do
         pokeIO c_tag C'ZEBRA_COLUMN_STRUCT
+        pokeDefault (p'zebra_column_variant'_struct'default_ c_of) def
         pokeNamedColumns fromField pool (p'zebra_column_variant'_struct'columns c_of) fs
 
       Striped.Nested ns table -> do

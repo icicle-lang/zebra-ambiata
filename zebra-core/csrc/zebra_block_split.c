@@ -66,6 +66,8 @@ error_t zebra_column_pop_rows (
         }
 
         case ZEBRA_COLUMN_INT: {
+            out_data->_int.default_ = in_data->_int.default_;
+
             int64_t *i = in_data->_int.values;
             out_data->_int.values = i;
             in_data->_int.values = i + n_rows;
@@ -74,6 +76,8 @@ error_t zebra_column_pop_rows (
         }
 
         case ZEBRA_COLUMN_DOUBLE: {
+            out_data->_int.default_ = in_data->_int.default_;
+
             double *d = in_data->_double.values;
             out_data->_double.values = d;
             in_data->_double.values = d + n_rows;
@@ -82,6 +86,8 @@ error_t zebra_column_pop_rows (
         }
 
         case ZEBRA_COLUMN_ENUM: {
+            out_data->_enum.default_ = in_data->_enum.default_;
+
             int64_t *tags = in_data->_enum.tags;
             out_data->_enum.tags = tags;
             in_data->_enum.tags = tags + n_rows;
@@ -90,6 +96,8 @@ error_t zebra_column_pop_rows (
         }
 
         case ZEBRA_COLUMN_STRUCT: {
+            out_data->_struct.default_ = in_data->_struct.default_;
+
             return zebra_named_columns_pop_rows (pool, n_rows, &in_data->_struct.columns, &out_data->_struct.columns);
         }
 
@@ -129,6 +137,7 @@ error_t zebra_table_pop_rows (
 
     switch (in_table->tag) {
         case ZEBRA_TABLE_BINARY: {
+            out_table->of._binary.default_ = in_table->of._binary.default_;
             out_table->of._binary.encoding = in_table->of._binary.encoding;
 
             char *bytes = in_table->of._binary.bytes;
@@ -139,11 +148,13 @@ error_t zebra_table_pop_rows (
         }
 
         case ZEBRA_TABLE_ARRAY: {
+            out_table->of._array.default_ = in_table->of._array.default_;
             out_table->of._array.values = anemone_mempool_alloc (pool, sizeof (zebra_column_t) );
             return zebra_column_pop_rows (pool, n_rows, in_table->of._array.values, out_table->of._array.values);
         }
 
         case ZEBRA_TABLE_MAP: {
+            out_table->of._map.default_ = in_table->of._map.default_;
             out_table->of._map.keys = anemone_mempool_alloc (pool, sizeof (zebra_column_t) );
             out_table->of._map.values = anemone_mempool_alloc (pool, sizeof (zebra_column_t) );
             error_t err = zebra_column_pop_rows (pool, n_rows, in_table->of._map.keys, out_table->of._map.keys);

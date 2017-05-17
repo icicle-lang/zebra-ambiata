@@ -133,35 +133,35 @@ jVariantName =
 
 tableSchemaTables :: Schema.Table -> [Schema.Table]
 tableSchemaTables = \case
-  Schema.Binary _ ->
+  Schema.Binary _ _ ->
     []
-  Schema.Array x ->
+  Schema.Array _ x ->
     columnSchemaTables x
-  Schema.Map k v ->
+  Schema.Map _ k v ->
     columnSchemaTables k <>
     columnSchemaTables v
 
 tableSchemaColumns :: Schema.Table -> [Schema.Column]
 tableSchemaColumns = \case
-  Schema.Binary _ ->
+  Schema.Binary _ _ ->
     []
-  Schema.Array x ->
+  Schema.Array _ x ->
     [x]
-  Schema.Map k v ->
+  Schema.Map _ k v ->
     [k, v]
 
 columnSchemaTables :: Schema.Column -> [Schema.Table]
 columnSchemaTables = \case
   Schema.Unit ->
     []
-  Schema.Int ->
+  Schema.Int _ ->
     []
-  Schema.Double ->
+  Schema.Double _ ->
     []
-  Schema.Enum variants ->
+  Schema.Enum _ variants ->
     concatMap columnSchemaTables . fmap variantData $
       Cons.toList variants
-  Schema.Struct fields ->
+  Schema.Struct _ fields ->
     concatMap columnSchemaTables . fmap fieldData $
       Cons.toList fields
   Schema.Nested table ->
@@ -173,13 +173,13 @@ columnSchemaColumns :: Schema.Column -> [Schema.Column]
 columnSchemaColumns = \case
   Schema.Unit ->
     []
-  Schema.Int ->
+  Schema.Int _ ->
     []
-  Schema.Double ->
+  Schema.Double _ ->
     []
-  Schema.Enum variants ->
+  Schema.Enum _ variants ->
     fmap variantData $ Cons.toList variants
-  Schema.Struct fields ->
+  Schema.Struct _ fields ->
     fmap fieldData $ Cons.toList fields
   Schema.Nested table ->
     tableSchemaColumns table
@@ -189,25 +189,25 @@ columnSchemaColumns = \case
 -- Strip a schema of features which can't be used in SchemaV0.
 tableSchemaV0 :: Schema.Table -> Schema.Table
 tableSchemaV0 = \case
-  Schema.Binary _ ->
-    Schema.Binary Nothing
-  Schema.Array x ->
-    Schema.Array $ columnSchemaV0 x
-  Schema.Map k v ->
-    Schema.Map (columnSchemaV0 k) (columnSchemaV0 v)
+  Schema.Binary _ _ ->
+    Schema.Binary DenyDefault Nothing
+  Schema.Array _ x ->
+    Schema.Array DenyDefault $ columnSchemaV0 x
+  Schema.Map _ k v ->
+    Schema.Map DenyDefault (columnSchemaV0 k) (columnSchemaV0 v)
 
 columnSchemaV0 :: Schema.Column -> Schema.Column
 columnSchemaV0 = \case
   Schema.Unit ->
     Schema.Unit
-  Schema.Int ->
-    Schema.Int
-  Schema.Double ->
-    Schema.Double
-  Schema.Enum variants ->
-    Schema.Enum $ fmap (fmap columnSchemaV0) variants
-  Schema.Struct fields ->
-    Schema.Struct $ fmap (fmap columnSchemaV0) fields
+  Schema.Int _ ->
+    Schema.Int DenyDefault
+  Schema.Double _ ->
+    Schema.Double DenyDefault
+  Schema.Enum _ variants ->
+    Schema.Enum DenyDefault $ fmap (fmap columnSchemaV0) variants
+  Schema.Struct _ fields ->
+    Schema.Struct DenyDefault $ fmap (fmap columnSchemaV0) fields
   Schema.Nested table ->
     Schema.Nested $ tableSchemaV0 table
   Schema.Reversed schema ->
@@ -217,10 +217,17 @@ jTableSchema :: Jack Schema.Table
 jTableSchema =
   reshrink tableSchemaTables $
   oneOfRec [
-      Schema.Binary <$> jBinaryEncoding
+      Schema.Binary <$> jDefault <*> jBinaryEncoding
     ] [
-      Schema.Array <$> jColumnSchema
+      Schema.Array <$> jDefault <*> jColumnSchema
     , jMapSchema
+    ]
+
+jDefault :: Jack Default
+jDefault =
+  elements [
+      DenyDefault
+    , AllowDefault
     ]
 
 jBinaryEncoding :: Jack (Maybe Encoding.Binary)
@@ -232,17 +239,17 @@ jBinaryEncoding =
 
 jMapSchema :: Jack Schema.Table
 jMapSchema =
-  Schema.Map <$> jColumnSchema <*> jColumnSchema
+  Schema.Map <$> jDefault <*> jColumnSchema <*> jColumnSchema
 
 jColumnSchema :: Jack Schema.Column
 jColumnSchema =
   reshrink columnSchemaColumns $
   oneOfRec [
-      pure Schema.Int
-    , pure Schema.Double
+      Schema.Int <$> jDefault
+    , Schema.Double <$> jDefault
     ] [
-      Schema.Enum <$> smallConsUniqueBy variantName (jVariant jColumnSchema)
-    , Schema.Struct <$> smallConsUniqueBy fieldName (jField jColumnSchema)
+      Schema.Enum <$> jDefault <*> smallConsUniqueBy variantName (jVariant jColumnSchema)
+    , Schema.Struct <$> jDefault <*> smallConsUniqueBy fieldName (jField jColumnSchema)
     , Schema.Nested <$> jTableSchema
     , Schema.Reversed <$> jColumnSchema
     ]
@@ -251,35 +258,35 @@ jColumnSchema =
 
 tableTables :: Striped.Table -> [Striped.Table]
 tableTables = \case
-  Striped.Binary _ _ ->
+  Striped.Binary _ _ _ ->
     []
-  Striped.Array x ->
+  Striped.Array _ x ->
     columnTables x
-  Striped.Map k v ->
+  Striped.Map _ k v ->
     columnTables k <>
     columnTables v
 
 tableColumns :: Striped.Table -> [Striped.Column]
 tableColumns = \case
-  Striped.Binary _ _ ->
+  Striped.Binary _ _ _ ->
     []
-  Striped.Array x ->
+  Striped.Array _ x ->
     [x]
-  Striped.Map k v ->
+  Striped.Map _ k v ->
     [k, v]
 
 columnTables :: Striped.Column -> [Striped.Table]
 columnTables = \case
   Striped.Unit _ ->
     []
-  Striped.Int _ ->
+  Striped.Int _ _ ->
     []
-  Striped.Double _ ->
+  Striped.Double _ _ ->
     []
-  Striped.Enum _ variants ->
+  Striped.Enum _ _ variants ->
     concatMap columnTables $
       fmap variantData (Cons.toList variants)
-  Striped.Struct fields ->
+  Striped.Struct _ fields ->
     concatMap columnTables $
       fmap fieldData (Cons.toList fields)
   Striped.Nested _ table ->
@@ -291,13 +298,13 @@ columnColumns :: Striped.Column -> [Striped.Column]
 columnColumns = \case
   Striped.Unit _ ->
     []
-  Striped.Int _ ->
+  Striped.Int _ _ ->
     []
-  Striped.Double _ ->
+  Striped.Double _ _ ->
     []
-  Striped.Enum _ variants ->
+  Striped.Enum _ _ variants ->
     fmap variantData $ Cons.toList variants
-  Striped.Struct fields ->
+  Striped.Struct _ fields ->
     fmap fieldData $ Cons.toList fields
   Striped.Nested _ table ->
     tableColumns table
@@ -356,23 +363,25 @@ jStripedBinary n = do
   encoding <- jBinaryEncoding
   case encoding of
     Nothing ->
-      Striped.Binary encoding <$> jByteString n
+      Striped.Binary <$> jDefault <*> pure encoding <*> jByteString n
     Just Encoding.Utf8 ->
       -- FIXME This will work out strangely for tests that have nested binary
       -- FIXME as we might get nonsense when we slice a utf-8 string, but the
       -- FIXME tests which generate striped tables don't care at the moment.
-      Striped.Binary encoding <$> jUtf8 n
+      Striped.Binary <$> jDefault <*> pure encoding <*> jUtf8 n
 
 jStripedArray :: Int -> Jack Striped.Table
 jStripedArray n = do
   Striped.Array
-    <$> jStripedColumn n
+    <$> jDefault
+    <*> jStripedColumn n
 
 -- FIXME this constructs a corrupt table
 jStripedMap :: Int -> Jack Striped.Table
 jStripedMap n = do
   Striped.Map
-    <$> jStripedColumn n
+    <$> jDefault
+    <*> jStripedColumn n
     <*> jStripedColumn n
 
 jStripedColumn :: Int -> Jack Striped.Column
@@ -390,11 +399,15 @@ jStripedColumn n =
 
 jStripedInt :: Int -> Jack Striped.Column
 jStripedInt n =
-  Striped.Int . Storable.fromList <$> vectorOf n sizedBounded
+  Striped.Int
+    <$> jDefault
+    <*> (Storable.fromList <$> vectorOf n sizedBounded)
 
 jStripedDouble :: Int -> Jack Striped.Column
 jStripedDouble n =
-  Striped.Double . Storable.fromList <$> vectorOf n arbitrary
+  Striped.Double
+    <$> jDefault
+    <*> (Storable.fromList <$> vectorOf n arbitrary)
 
 jStripedEnum :: Int -> Jack Striped.Column
 jStripedEnum n = do
@@ -402,12 +415,15 @@ jStripedEnum n = do
     ntags <- chooseInt (1, 1 + (size `div` 10))
     tags <- Storable.fromList . fmap fromIntegral <$> vectorOf n (chooseInt (0, ntags - 1))
     vs <- Cons.unsafeFromList <$> vectorOf ntags (jVariant . jStripedColumn $ Storable.length tags)
+    def <- jDefault
     pure $
-      Striped.Enum tags vs
+      Striped.Enum def tags vs
 
 jStripedStruct :: Int -> Jack Striped.Column
 jStripedStruct n =
-  Striped.Struct <$> smallConsOf (jField (jStripedColumn n))
+  Striped.Struct
+    <$> jDefault
+    <*> smallConsOf (jField (jStripedColumn n))
 
 jStripedNested :: Int -> Jack Striped.Column
 jStripedNested n =
@@ -449,13 +465,13 @@ jSizedLogical1 schema =
 jLogical :: Schema.Table -> Int -> Jack Logical.Table
 jLogical tschema n =
   case tschema of
-    Schema.Binary Nothing ->
+    Schema.Binary _ Nothing ->
       Logical.Binary <$> jByteString n
-    Schema.Binary (Just Encoding.Utf8) ->
+    Schema.Binary _ (Just Encoding.Utf8) ->
       Logical.Binary <$> jUtf8 n
-    Schema.Array x ->
+    Schema.Array _ x ->
       Logical.Array . Boxed.fromList <$> vectorOf n (jLogicalValue x)
-    Schema.Map k v ->
+    Schema.Map _ k v ->
       Logical.Map . Map.fromList <$> vectorOf n (jMapping k v)
 
 jMapping :: Schema.Column -> Schema.Column -> Jack (Logical.Value, Logical.Value)
@@ -471,13 +487,13 @@ jLogicalValue = \case
   Schema.Unit ->
     pure Logical.Unit
 
-  Schema.Int ->
+  Schema.Int _ ->
     Logical.Int <$> sizedBounded
 
-  Schema.Double ->
+  Schema.Double _ ->
     Logical.Double <$> arbitrary
 
-  Schema.Enum variants -> do
+  Schema.Enum _ variants -> do
     tag <- jTag variants
     case lookupVariant tag variants of
       Nothing ->
@@ -485,7 +501,7 @@ jLogicalValue = \case
       Just (Variant _ schema) ->
         Logical.Enum tag <$> jLogicalValue schema
 
-  Schema.Struct fields ->
+  Schema.Struct _ fields ->
     Logical.Struct <$> traverse (jLogicalValue . fieldData) fields
 
   Schema.Nested tschema ->
@@ -581,7 +597,8 @@ jYoloBlock = do
     Block
       <$> (Boxed.fromList <$> listOfN 0 (size `div` 5) jBlockEntity)
       <*> (Unboxed.fromList <$> listOfN 0 (size `div` 5) jBlockIndex)
-      <*> (Boxed.fromList <$> listOfN 0 (size `div` 5) (jStripedArray =<< chooseInt (0, size `div` 5)))
+      <*> (Boxed.fromList <$> listOfN 0 (size `div` 5)
+            (fmap (Striped.Array DenyDefault) . jStripedColumn =<< chooseInt (0, size `div` 5)))
 
 jBlockEntity :: Jack BlockEntity
 jBlockEntity =
