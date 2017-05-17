@@ -82,14 +82,15 @@ pTableSchemaV0 :: Aeson.Value -> Aeson.Parser Schema.Table
 pTableSchemaV0 =
   pEnum $ \case
     "binary" ->
-      pure . const . pure $ Schema.Binary Nothing
+      pure . const . pure $
+        Schema.Binary DenyDefault Nothing
     "array" ->
       pure . Aeson.withObject "object containing array schema" $ \o ->
-        Schema.Array
+        Schema.Array DenyDefault
           <$> withStructField "element" o pColumnSchemaV0
     "map" ->
       pure . Aeson.withObject "object containing map schema" $ \o ->
-        Schema.Map
+        Schema.Map DenyDefault
           <$> withStructField "key" o pColumnSchemaV0
           <*> withStructField "value" o pColumnSchemaV0
     _ ->
@@ -98,12 +99,12 @@ pTableSchemaV0 =
 
 ppTableSchemaV0 :: Schema.Table -> Aeson.Value
 ppTableSchemaV0 = \case
-  Schema.Binary _encoding ->
+  Schema.Binary _def _encoding ->
     ppEnum $ Variant "binary" ppUnit
-  Schema.Array e ->
+  Schema.Array _def e ->
     ppEnum . Variant "array" $
       Aeson.object ["element" .= ppColumnSchemaV0 e]
-  Schema.Map k v ->
+  Schema.Map _def k v ->
     ppEnum . Variant "map" $
       Aeson.object ["key" .= ppColumnSchemaV0 k, "value" .= ppColumnSchemaV0 v]
 {-# INLINABLE ppTableSchemaV0 #-}
@@ -114,15 +115,15 @@ pColumnSchemaV0 =
     "unit" ->
       pure . const $ pure Schema.Unit
     "int" ->
-      pure . const $ pure Schema.Int
+      pure . const . pure $ Schema.Int DenyDefault
     "double" ->
-      pure . const $ pure Schema.Double
+      pure . const . pure $ Schema.Double DenyDefault
     "enum" ->
       pure . Aeson.withObject "object containing enum column schema" $ \o ->
-        Schema.Enum <$> withStructField "variants" o pSchemaEnumVariantsV0
+        Schema.Enum DenyDefault <$> withStructField "variants" o pSchemaEnumVariantsV0
     "struct" ->
       pure . Aeson.withObject "object containing struct column schema" $ \o ->
-        Schema.Struct <$> withStructField "fields" o pSchemaStructFieldsV0
+        Schema.Struct DenyDefault <$> withStructField "fields" o pSchemaStructFieldsV0
     "nested" ->
       pure . Aeson.withObject "object containing nested column schema" $ \o ->
         Schema.Nested <$> withStructField "table" o pTableSchemaV0
@@ -137,14 +138,14 @@ ppColumnSchemaV0 :: Schema.Column -> Aeson.Value
 ppColumnSchemaV0 = \case
   Schema.Unit ->
     ppEnum $ Variant "unit" ppUnit
-  Schema.Int ->
+  Schema.Int _def ->
     ppEnum $ Variant "int" ppUnit
-  Schema.Double ->
+  Schema.Double _def ->
     ppEnum $ Variant "double" ppUnit
-  Schema.Enum vs ->
+  Schema.Enum _def vs ->
     ppEnum . Variant "enum" $
       Aeson.object ["variants" .= Aeson.Array (Cons.toVector $ fmap ppSchemaVariantV0 vs)]
-  Schema.Struct fs ->
+  Schema.Struct _def fs ->
     ppEnum . Variant "struct" $
       Aeson.object ["fields" .= Aeson.Array (Cons.toVector $ fmap ppSchemaFieldV0 fs)]
   Schema.Nested s ->
@@ -226,15 +227,18 @@ pTableVariantV1 = \case
   "binary" ->
     pure . Aeson.withObject "object containing binary schema" $ \o ->
       Schema.Binary
-        <$> withOptionalField "encoding" o pBinaryEncodingV1
+        <$> pDefaultFieldV1 o
+        <*> withOptionalField "encoding" o pBinaryEncodingV1
   "array" ->
     pure . Aeson.withObject "object containing array schema" $ \o ->
       Schema.Array
-        <$> withStructField "element" o pColumnSchemaV1
+        <$> pDefaultFieldV1 o
+        <*> withStructField "element" o pColumnSchemaV1
   "map" ->
     pure . Aeson.withObject "object containing map schema" $ \o ->
       Schema.Map
-        <$> withStructField "key" o pColumnSchemaV1
+        <$> pDefaultFieldV1 o
+        <*> withStructField "key" o pColumnSchemaV1
         <*> withStructField "value" o pColumnSchemaV1
   _ ->
     Nothing
@@ -242,20 +246,59 @@ pTableVariantV1 = \case
 
 ppTableSchemaV1 :: Schema.Table -> Aeson.Value
 ppTableSchemaV1 = \case
-  Schema.Binary mencoding ->
+  Schema.Binary def mencoding ->
     ppEnum . Variant "binary" . Aeson.object $
+      ppDefaultFieldV1 def <>
       case mencoding of
         Nothing ->
           []
         Just encoding ->
           [ "encoding" .= ppBinaryEncodingV1 encoding ]
-  Schema.Array e ->
-    ppEnum . Variant "array" $
-      Aeson.object ["element" .= ppColumnSchemaV1 e]
-  Schema.Map k v ->
-    ppEnum . Variant "map" $
-      Aeson.object ["key" .= ppColumnSchemaV1 k, "value" .= ppColumnSchemaV1 v]
+  Schema.Array def e ->
+    ppEnum . Variant "array" . Aeson.object $
+      ppDefaultFieldV1 def <> [
+        "element" .= ppColumnSchemaV1 e
+      ]
+  Schema.Map def k v ->
+    ppEnum . Variant "map" . Aeson.object $
+      ppDefaultFieldV1 def <> [
+        "key" .= ppColumnSchemaV1 k
+      , "value" .= ppColumnSchemaV1 v
+      ]
 {-# INLINABLE ppTableSchemaV1 #-}
+
+pDefaultFieldV1 :: Aeson.Object -> Aeson.Parser Default
+pDefaultFieldV1 o =
+  fromMaybe DenyDefault
+    <$> withOptionalField "default" o pDefaultV1
+{-# INLINABLE pDefaultFieldV1 #-}
+
+ppDefaultFieldV1 :: Default -> [Aeson.Pair]
+ppDefaultFieldV1 = \case
+  DenyDefault ->
+    []
+  AllowDefault ->
+    [ "default" .= ppDefaultV1 AllowDefault ]
+{-# INLINABLE ppDefaultFieldV1 #-}
+
+pDefaultV1 :: Aeson.Value -> Aeson.Parser Default
+pDefaultV1 =
+  pEnum $ \case
+    "deny" ->
+      pure . const $ pure DenyDefault
+    "allow" ->
+      pure . const $ pure AllowDefault
+    _ ->
+      Nothing
+{-# INLINABLE pDefaultV1 #-}
+
+ppDefaultV1 :: Default -> Aeson.Value
+ppDefaultV1 = \case
+  DenyDefault ->
+    ppEnum $ Variant "deny" ppUnit
+  AllowDefault ->
+    ppEnum $ Variant "allow" ppUnit
+{-# INLINABLE ppDefaultV1 #-}
 
 pBinaryEncodingV1 :: Aeson.Value -> Aeson.Parser Encoding.Binary
 pBinaryEncodingV1 =
@@ -278,15 +321,23 @@ pColumnSchemaV1 =
     "unit" ->
       pure . const $ pure Schema.Unit
     "int" ->
-      pure . const $ pure Schema.Int
+      pure . Aeson.withObject "object containing int column schema" $ \o ->
+        Schema.Int
+          <$> pDefaultFieldV1 o
     "double" ->
-      pure . const $ pure Schema.Double
+      pure . Aeson.withObject "object containing double column schema" $ \o ->
+        Schema.Double
+          <$> pDefaultFieldV1 o
     "enum" ->
       pure . Aeson.withObject "object containing enum column schema" $ \o ->
-        Schema.Enum <$> withStructField "variants" o pSchemaEnumVariantsV1
+        Schema.Enum
+          <$> pDefaultFieldV1 o
+          <*> withStructField "variants" o pSchemaEnumVariantsV1
     "struct" ->
       pure . Aeson.withObject "object containing struct column schema" $ \o ->
-        Schema.Struct <$> withStructField "fields" o pSchemaStructFieldsV1
+        Schema.Struct
+          <$> pDefaultFieldV1 o
+          <*> withStructField "fields" o pSchemaStructFieldsV1
     "reversed" ->
       pure $
         fmap Schema.Reversed . pColumnSchemaV1
@@ -298,16 +349,22 @@ ppColumnSchemaV1 :: Schema.Column -> Aeson.Value
 ppColumnSchemaV1 = \case
   Schema.Unit ->
     ppEnum $ Variant "unit" ppUnit
-  Schema.Int ->
-    ppEnum $ Variant "int" ppUnit
-  Schema.Double ->
-    ppEnum $ Variant "double" ppUnit
-  Schema.Enum vs ->
-    ppEnum . Variant "enum" $
-      Aeson.object ["variants" .= Aeson.Array (Cons.toVector $ fmap ppSchemaVariantV1 vs)]
-  Schema.Struct fs ->
-    ppEnum . Variant "struct" $
-      Aeson.object ["fields" .= Aeson.Array (Cons.toVector $ fmap ppSchemaFieldV1 fs)]
+  Schema.Int def ->
+    ppEnum . Variant "int" . Aeson.object $
+      ppDefaultFieldV1 def
+  Schema.Double def ->
+    ppEnum . Variant "double" . Aeson.object $
+      ppDefaultFieldV1 def
+  Schema.Enum def vs ->
+    ppEnum . Variant "enum" . Aeson.object $
+      ppDefaultFieldV1 def <> [
+        "variants" .= Aeson.Array (Cons.toVector $ fmap ppSchemaVariantV1 vs)
+      ]
+  Schema.Struct def fs ->
+    ppEnum . Variant "struct" . Aeson.object $
+      ppDefaultFieldV1 def <> [
+        "fields" .= Aeson.Array (Cons.toVector $ fmap ppSchemaFieldV1 fs)
+      ]
   Schema.Nested s ->
     ppTableSchemaV1 s
   Schema.Reversed s ->

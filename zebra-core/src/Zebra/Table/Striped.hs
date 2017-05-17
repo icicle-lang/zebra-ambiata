@@ -8,6 +8,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternGuards #-}
 {-# OPTIONS_GHC -funbox-strict-fields #-}
 module Zebra.Table.Striped (
     Table(..)
@@ -81,17 +82,17 @@ import qualified Zebra.X.Vector.Storable as Storable
 
 
 data Table =
-    Binary !(Maybe Encoding.Binary) !ByteString
-  | Array !Column
-  | Map !Column !Column
+    Binary !Default !(Maybe Encoding.Binary) !ByteString
+  | Array !Default !Column
+  | Map !Default !Column !Column
     deriving (Eq, Ord, Show, Generic)
 
 data Column =
     Unit !Int
-  | Int !(Storable.Vector Int64)
-  | Double !(Storable.Vector Double)
-  | Enum !(Storable.Vector Tag) !(Cons Boxed.Vector (Variant Column))
-  | Struct !(Cons Boxed.Vector (Field Column))
+  | Int !Default !(Storable.Vector Int64)
+  | Double !Default !(Storable.Vector Double)
+  | Enum !Default !(Storable.Vector Tag) !(Cons Boxed.Vector (Variant Column))
+  | Struct !Default !(Cons Boxed.Vector (Field Column))
   | Nested !(Storable.Vector Int64) !Table
   | Reversed !Column
     deriving (Eq, Ord, Show, Generic)
@@ -159,11 +160,11 @@ ppPrefix prefix =
 
 length :: Table -> Int
 length = \case
-  Binary _ bs ->
+  Binary _ _ bs ->
     ByteString.length bs
-  Array c ->
+  Array _ c ->
     lengthColumn c
-  Map k v ->
+  Map _ k v ->
     -- FIXME This is doing more work than required, would
     -- FIXME be good to have a 'validate :: Table -> Bool'
     -- FIXME function that checks a table has matching
@@ -175,13 +176,13 @@ lengthColumn :: Column -> Int
 lengthColumn = \case
   Unit n ->
     n
-  Int xs ->
+  Int _ xs ->
     Storable.length xs
-  Double xs ->
+  Double _ xs ->
     Storable.length xs
-  Enum tags _ ->
+  Enum _ tags _ ->
     Storable.length tags
-  Struct fs ->
+  Struct _ fs ->
     lengthColumn . fieldData $ Cons.head fs
   Nested ns _ ->
     Storable.length ns
@@ -191,26 +192,26 @@ lengthColumn = \case
 
 schema :: Table -> Schema.Table
 schema = \case
-  Binary encoding _ ->
-    Schema.Binary encoding
-  Array x ->
-    Schema.Array (schemaColumn x)
-  Map k v ->
-    Schema.Map (schemaColumn k) (schemaColumn v)
+  Binary def encoding _ ->
+    Schema.Binary def encoding
+  Array def x ->
+    Schema.Array def (schemaColumn x)
+  Map def k v ->
+    Schema.Map def (schemaColumn k) (schemaColumn v)
 {-# INLINABLE schema #-}
 
 schemaColumn :: Column -> Schema.Column
 schemaColumn = \case
   Unit _ ->
     Schema.Unit
-  Int _ ->
-    Schema.Int
-  Double _ ->
-    Schema.Double
-  Enum _ vs ->
-    Schema.Enum (fmap (fmap schemaColumn) vs)
-  Struct fs ->
-    Schema.Struct (fmap (fmap schemaColumn) fs)
+  Int def _ ->
+    Schema.Int def
+  Double def _ ->
+    Schema.Double def
+  Enum def _ vs ->
+    Schema.Enum def (fmap (fmap schemaColumn) vs)
+  Struct def fs ->
+    Schema.Struct def (fmap (fmap schemaColumn) fs)
   Nested _ t ->
     Schema.Nested (schema t)
   Reversed c ->
@@ -221,26 +222,26 @@ schemaColumn = \case
 
 empty :: Schema.Table -> Table
 empty = \case
-  Schema.Binary encoding ->
-    Binary encoding ByteString.empty
-  Schema.Array x ->
-    Array (emptyColumn x)
-  Schema.Map k v ->
-    Map (emptyColumn k) (emptyColumn v)
+  Schema.Binary def encoding ->
+    Binary def encoding ByteString.empty
+  Schema.Array def x ->
+    Array def (emptyColumn x)
+  Schema.Map def k v ->
+    Map def (emptyColumn k) (emptyColumn v)
 {-# INLINABLE empty #-}
 
 emptyColumn :: Schema.Column -> Column
 emptyColumn = \case
   Schema.Unit ->
     Unit 0
-  Schema.Int ->
-    Int Storable.empty
-  Schema.Double ->
-    Double Storable.empty
-  Schema.Enum vs ->
-    Enum Storable.empty (fmap (fmap emptyColumn) vs)
-  Schema.Struct fs ->
-    Struct (fmap (fmap emptyColumn) fs)
+  Schema.Int def ->
+    Int def Storable.empty
+  Schema.Double def ->
+    Double def Storable.empty
+  Schema.Enum def vs ->
+    Enum def Storable.empty (fmap (fmap emptyColumn) vs)
+  Schema.Struct def fs ->
+    Struct def (fmap (fmap emptyColumn) fs)
   Schema.Nested t ->
     Nested Storable.empty (empty t)
   Schema.Reversed c ->
@@ -249,58 +250,58 @@ emptyColumn = \case
 
 ------------------------------------------------------------------------
 
-takeBinary :: Table -> Either SchemaError ByteString
+takeBinary :: Table -> Either SchemaError (Default, Maybe Encoding.Binary, ByteString)
 takeBinary = \case
-  Binary _ x ->
-    Right x
+  Binary def encoding x ->
+    Right (def, encoding, x)
   x ->
     Left $ SchemaExpectedBinary (schema x)
 {-# INLINE takeBinary #-}
 
-takeArray :: Table -> Either SchemaError Column
+takeArray :: Table -> Either SchemaError (Default, Column)
 takeArray = \case
-  Array x ->
-    Right x
+  Array def x ->
+    Right (def, x)
   x ->
     Left $ SchemaExpectedArray (schema x)
 {-# INLINE takeArray #-}
 
-takeMap :: Table -> Either SchemaError (Column, Column)
+takeMap :: Table -> Either SchemaError (Default, Column, Column)
 takeMap = \case
-  Map k v ->
-    Right (k, v)
+  Map def k v ->
+    Right (def, k, v)
   x ->
     Left $ SchemaExpectedMap (schema x)
 {-# INLINE takeMap #-}
 
-takeInt :: Column -> Either SchemaError (Storable.Vector Int64)
+takeInt :: Column -> Either SchemaError (Default, Storable.Vector Int64)
 takeInt = \case
-  Int x ->
-    Right x
+  Int def x ->
+    Right (def, x)
   x ->
     Left $ SchemaExpectedInt (schemaColumn x)
 {-# INLINE takeInt #-}
 
-takeDouble :: Column -> Either SchemaError (Storable.Vector Double)
+takeDouble :: Column -> Either SchemaError (Default, Storable.Vector Double)
 takeDouble = \case
-  Double x ->
-    Right x
+  Double def x ->
+    Right (def, x)
   x ->
     Left $ SchemaExpectedDouble (schemaColumn x)
 {-# INLINE takeDouble #-}
 
-takeEnum :: Column -> Either SchemaError (Storable.Vector Tag, Cons Boxed.Vector (Variant Column))
+takeEnum :: Column -> Either SchemaError (Default, Storable.Vector Tag, Cons Boxed.Vector (Variant Column))
 takeEnum = \case
-  Enum tags x ->
-    Right (tags, x)
+  Enum def tags x ->
+    Right (def, tags, x)
   x ->
     Left $ SchemaExpectedEnum (schemaColumn x)
 {-# INLINE takeEnum #-}
 
-takeStruct :: Column -> Either SchemaError (Cons Boxed.Vector (Field Column))
+takeStruct :: Column -> Either SchemaError (Default, Cons Boxed.Vector (Field Column))
 takeStruct = \case
-  Struct x ->
-    Right x
+  Struct def x ->
+    Right (def, x)
   x ->
     Left $ SchemaExpectedStruct (schemaColumn x)
 {-# INLINE takeStruct #-}
@@ -327,18 +328,18 @@ takeReversed = \case
 fromLogical :: Schema.Table -> Logical.Table -> Either StripedError Table
 fromLogical tschema collection =
   case tschema of
-    Schema.Binary encoding ->
-      Binary encoding
+    Schema.Binary def encoding ->
+      Binary def encoding
         <$> first StripedLogicalSchemaError (Logical.takeBinary collection)
 
-    Schema.Array eschema -> do
+    Schema.Array def eschema -> do
       xs <- first StripedLogicalSchemaError $ Logical.takeArray collection
-      Array
+      Array def
         <$> fromValues eschema xs
 
-    Schema.Map kschema vschema -> do
+    Schema.Map def kschema vschema -> do
       kvs <- first StripedLogicalSchemaError $ Logical.takeMap collection
-      Map
+      Map def
         <$> fromValues kschema (Boxed.fromList $ Map.keys kvs)
         <*> fromValues vschema (Boxed.fromList $ Map.elems kvs)
 {-# INLINABLE fromLogical #-}
@@ -346,22 +347,22 @@ fromLogical tschema collection =
 fromNested :: Schema.Table -> Boxed.Vector Logical.Table -> Either StripedError (Storable.Vector Int64, Table)
 fromNested tschema xss0 =
   case tschema of
-    Schema.Binary encoding -> do
+    Schema.Binary def encoding -> do
       bss <- first StripedLogicalSchemaError $ traverse Logical.takeBinary xss0
       pure (
           Storable.convert $ fmap (fromIntegral . ByteString.length) bss
-        , Binary encoding . ByteString.concat $ Boxed.toList bss
+        , Binary def encoding . ByteString.concat $ Boxed.toList bss
         )
 
-    Schema.Array eschema -> do
+    Schema.Array def eschema -> do
       xss <- first StripedLogicalSchemaError $ traverse Logical.takeArray xss0
       column <- fromValues eschema . Boxed.concat $ Boxed.toList xss
       pure (
           Storable.convert $ fmap (fromIntegral . Boxed.length) xss
-        , Array column
+        , Array def column
         )
 
-    Schema.Map kschema vschema -> do
+    Schema.Map def kschema vschema -> do
       kvss <- first StripedLogicalSchemaError $ traverse Logical.takeMap xss0
 
       let
@@ -373,7 +374,7 @@ fromNested tschema xss0 =
 
       pure (
           Storable.convert $ fmap (fromIntegral . Map.size) kvss
-        , Map ks vs
+        , Map def ks vs
         )
 {-# INLINABLE fromNested #-}
 
@@ -387,28 +388,28 @@ fromValues cschema values =
         Schema.Unit ->
           pure . Unit $ Boxed.length values
 
-        Schema.Int ->
-          Int . Storable.convert
+        Schema.Int def ->
+          Int def . Storable.convert
             <$> traverse (first StripedLogicalSchemaError . Logical.takeInt) values
 
-        Schema.Double ->
-          Double . Storable.convert
+        Schema.Double def ->
+          Double def . Storable.convert
             <$> traverse (first StripedLogicalSchemaError . Logical.takeDouble) values
 
-        Schema.Enum vs -> do
+        Schema.Enum def vs -> do
           txs <- traverse (first StripedLogicalSchemaError . Logical.takeEnum) values
 
           let
             tags =
               Storable.convert $ fmap (fromIntegral . fst) txs
 
-          Enum
+          Enum def
             <$> pure tags
             <*> fromEnum vs txs
 
-        Schema.Struct fs -> do
+        Schema.Struct def fs -> do
           xss <- Cons.transpose <$> traverse (first StripedLogicalSchemaError . Logical.takeStruct) values1
-          Struct
+          Struct def
             <$> Cons.zipWithM fromField fs (fmap Cons.toVector xss)
 
         Schema.Nested tschema -> do
@@ -451,13 +452,13 @@ fromField field =
 
 toLogical :: Table -> Either StripedError Logical.Table
 toLogical = \case
-  Binary _ bs ->
+  Binary _ _ bs ->
     pure $ Logical.Binary bs
 
-  Array c ->
-    Logical.Array <$> toValues c
+  Array _ x ->
+    Logical.Array <$> toValues x
 
-  Map k v -> do
+  Map _ k v -> do
     ks <- toValues k
     vs <- toValues v
     pure . Logical.Map . fromSorted $
@@ -467,16 +468,16 @@ toLogical = \case
 toNested :: Storable.Vector Int64 -> Table -> Either StripedError (Boxed.Vector Logical.Table)
 toNested ns table =
   case table of
-    Binary _ bs -> do
+    Binary _ _ bs -> do
       bss <- first (StripedNestedLengthMismatch $ schema table) $ Segment.reify ns bs
       pure $ fmap Logical.Binary bss
 
-    Array c -> do
-      xs <- toValues c
+    Array _ x -> do
+      xs <- toValues x
       xss <- first (StripedNestedLengthMismatch $ schema table) $ Segment.reify ns xs
       pure $ fmap Logical.Array xss
 
-    Map k v -> do
+    Map _ k v -> do
       kvs <- Generic.zip <$> toValues k <*> toValues v
       kvss <- first (StripedNestedLengthMismatch $ schema table) $ Segment.reify ns kvs
       pure $ fmap (Logical.Map . fromSorted) kvss
@@ -493,13 +494,13 @@ toValues = \case
   Unit n ->
     pure $ Boxed.replicate n Logical.Unit
 
-  Int xs ->
+  Int _ xs ->
     pure . fmap Logical.Int $ Storable.convert xs
 
-  Double xs ->
+  Double _ xs ->
     pure . fmap Logical.Double $ Storable.convert xs
 
-  Enum tags0 vs0 -> do
+  Enum _ tags0 vs0 -> do
     let
       tags =
         Storable.convert tags0
@@ -508,7 +509,7 @@ toValues = \case
 
     Boxed.zipWithM mkEnum tags values
 
-  Struct fs ->
+  Struct _ fs ->
     fmap Logical.Struct . Cons.transposeCV <$> traverse (toValues . fieldData) fs
 
   Nested ns0 t -> do
@@ -532,14 +533,16 @@ mkEnum tag values =
 
 splitAt :: Int -> Table -> (Table, Table)
 splitAt i = \case
-  Binary encoding bs ->
-    bimap (Binary encoding) (Binary encoding) $
+  Binary def encoding bs ->
+    bimap (Binary def encoding) (Binary def encoding) $
       ByteString.splitAt i bs
-  Array c ->
-    bimap Array Array
-      (splitAtColumn i c)
-  Map k v ->
-    biliftA2 Map Map
+
+  Array def x ->
+    bimap (Array def) (Array def)
+      (splitAtColumn i x)
+
+  Map def k v ->
+    biliftA2 (Map def) (Map def)
       (splitAtColumn i k)
       (splitAtColumn i v)
 {-# INLINABLE splitAt #-}
@@ -553,15 +556,15 @@ splitAtColumn i = \case
     in
       (Unit m, Unit (n - m))
 
-  Int xs ->
-    bimap Int Int $
+  Int def xs ->
+    bimap (Int def) (Int def) $
       Storable.splitAt i xs
 
-  Double xs ->
-    bimap Double Double $
+  Double def xs ->
+    bimap (Double def) (Double def) $
       Storable.splitAt i xs
 
-  Enum tags0 variants0 ->
+  Enum def tags0 variants0 ->
     let
       tags =
         Storable.splitAt i tags0
@@ -575,9 +578,9 @@ splitAtColumn i = \case
       snd_variants =
         fmap (fmap snd) variants
     in
-      biliftA2 Enum Enum tags (fst_variants, snd_variants)
+      biliftA2 (Enum def) (Enum def) tags (fst_variants, snd_variants)
 
-  Struct fields0 ->
+  Struct def fields0 ->
     let
       fields =
         fmap (fmap (splitAtColumn i)) fields0
@@ -588,7 +591,7 @@ splitAtColumn i = \case
       snd_fields =
         fmap (fmap snd) fields
     in
-      (Struct fst_fields, Struct snd_fields)
+      (Struct def fst_fields, Struct def snd_fields)
 
   Nested ns table ->
     let
@@ -642,19 +645,24 @@ unsafeConcat =
 unsafeAppend :: Table -> Table -> Either StripedError Table
 unsafeAppend x0 x1 =
   case (x0, x1) of
-    (Binary encoding0 bs0, Binary encoding1 bs1)
-      | encoding0 == encoding1
+    (Binary def0 encoding0 bs0, Binary def1 encoding1 bs1)
+      | def0 == def1
+      , encoding0 == encoding1
       ->
-        pure $ Binary encoding0 (bs0 <> bs1)
+        pure $ Binary def0 encoding0 (bs0 <> bs1)
 
-    (Array xs0, Array xs1) ->
-      Array
-        <$> unsafeAppendColumn xs0 xs1
+    (Array def0 xs0, Array def1 xs1)
+      | def0 == def1
+      ->
+        Array def0
+          <$> unsafeAppendColumn xs0 xs1
 
-    (Map ks0 vs0, Map ks1 vs1) ->
-      Map
-        <$> unsafeAppendColumn ks0 ks1
-        <*> unsafeAppendColumn vs0 vs1
+    (Map def0 ks0 vs0, Map def1 ks1 vs1)
+      | def0 == def1
+      ->
+        Map def0
+          <$> unsafeAppendColumn ks0 ks1
+          <*> unsafeAppendColumn vs0 vs1
 
     _ ->
       Left $ StripedAppendTableMismatch (schema x0) (schema x1)
@@ -666,21 +674,27 @@ unsafeAppendColumn x0 x1 =
     (Unit n0, Unit n1) ->
       pure $ Unit (n0 + n1)
 
-    (Int xs0, Int xs1) ->
-      pure $ Int (xs0 <> xs1)
-
-    (Double xs0, Double xs1) ->
-      pure $ Double (xs0 <> xs1)
-
-    (Enum tags0 vs0, Enum tags1 vs1)
-      | Cons.length vs0 == Cons.length vs1
+    (Int def0 xs0, Int def1 xs1)
+      | def0 == def1
       ->
-        Enum (tags0 <> tags1) <$> Cons.zipWithM unsafeAppendVariant vs0 vs1
+        pure $ Int def0 (xs0 <> xs1)
 
-    (Struct fs0, Struct fs1)
-      | Cons.length fs0 == Cons.length fs1
+    (Double def0 xs0, Double def1 xs1)
+      | def0 == def1
       ->
-        Struct <$> Cons.zipWithM unsafeAppendField fs0 fs1
+        pure $ Double def0 (xs0 <> xs1)
+
+    (Enum def0 tags0 vs0, Enum def1 tags1 vs1)
+      | def0 == def1
+      , Cons.length vs0 == Cons.length vs1
+      ->
+        Enum def0 (tags0 <> tags1) <$> Cons.zipWithM unsafeAppendVariant vs0 vs1
+
+    (Struct def0 fs0, Struct def1 fs1)
+      | def0 == def1
+      , Cons.length fs0 == Cons.length fs1
+      ->
+        Struct def0 <$> Cons.zipWithM unsafeAppendField fs0 fs1
 
     (Nested ns0 t0, Nested ns1 t1) ->
       Nested (ns0 <> ns1) <$> unsafeAppend t0 t1

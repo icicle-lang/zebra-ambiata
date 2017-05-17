@@ -51,17 +51,17 @@ import qualified Zebra.Table.Encoding as Encoding
 
 
 data Table =
-    Binary !(Maybe Encoding.Binary)
-  | Array !Column
-  | Map !Column !Column
+    Binary !Default !(Maybe Encoding.Binary)
+  | Array !Default !Column
+  | Map !Default !Column !Column
     deriving (Eq, Ord, Show, Generic)
 
 data Column =
     Unit
-  | Int
-  | Double
-  | Enum !(Cons Boxed.Vector (Variant Column))
-  | Struct !(Cons Boxed.Vector (Field Column))
+  | Int !Default
+  | Double !Default
+  | Enum !Default !(Cons Boxed.Vector (Variant Column))
+  | Struct !Default !(Cons Boxed.Vector (Field Column))
   | Nested !Table
   | Reversed !Column
     deriving (Eq, Ord, Show, Generic)
@@ -113,9 +113,9 @@ true :: Variant Column
 true =
   Variant (VariantName "true") Unit
 
-bool :: Column
-bool =
-  Enum $ Cons.from2 false true
+bool :: Default -> Column
+bool def =
+  Enum def $ Cons.from2 false true
 
 none :: Variant Column
 none =
@@ -125,64 +125,64 @@ some :: Column -> Variant Column
 some =
   Variant (VariantName "some")
 
-option :: Column -> Column
-option =
-  Enum . Cons.from2 none . some
+option :: Default -> Column -> Column
+option def =
+  Enum def . Cons.from2 none . some
 
 ------------------------------------------------------------------------
 
-takeBinary :: Table -> Either SchemaError (Maybe Encoding.Binary)
+takeBinary :: Table -> Either SchemaError (Default, Maybe Encoding.Binary)
 takeBinary = \case
-  Binary encoding ->
-    Right encoding
+  Binary def encoding ->
+    Right (def, encoding)
   x ->
     Left $ SchemaExpectedBinary x
 {-# INLINE takeBinary #-}
 
-takeArray :: Table -> Either SchemaError Column
+takeArray :: Table -> Either SchemaError (Default, Column)
 takeArray = \case
-  Array x ->
-    Right x
+  Array def x ->
+    Right (def, x)
   x ->
     Left $ SchemaExpectedArray x
 {-# INLINE takeArray #-}
 
-takeMap :: Table -> Either SchemaError (Column, Column)
+takeMap :: Table -> Either SchemaError (Default, Column, Column)
 takeMap = \case
-  Map k v ->
-    Right (k, v)
+  Map def k v ->
+    Right (def, k, v)
   x ->
     Left $ SchemaExpectedMap x
 {-# INLINE takeMap #-}
 
-takeInt :: Column -> Either SchemaError ()
+takeInt :: Column -> Either SchemaError Default
 takeInt = \case
-  Int ->
-    Right ()
+  Int def ->
+    Right def
   x ->
     Left $ SchemaExpectedInt x
 {-# INLINE takeInt #-}
 
-takeDouble :: Column -> Either SchemaError ()
+takeDouble :: Column -> Either SchemaError Default
 takeDouble = \case
-  Double ->
-    Right ()
+  Double def ->
+    Right def
   x ->
     Left $ SchemaExpectedDouble x
 {-# INLINE takeDouble #-}
 
-takeEnum :: Column -> Either SchemaError (Cons Boxed.Vector (Variant Column))
+takeEnum :: Column -> Either SchemaError (Default, Cons Boxed.Vector (Variant Column))
 takeEnum = \case
-  Enum x ->
-    Right x
+  Enum def x ->
+    Right (def, x)
   x ->
     Left $ SchemaExpectedEnum x
 {-# INLINE takeEnum #-}
 
-takeStruct :: Column -> Either SchemaError (Cons Boxed.Vector (Field Column))
+takeStruct :: Column -> Either SchemaError (Default, Cons Boxed.Vector (Field Column))
 takeStruct = \case
-  Struct x ->
-    Right x
+  Struct def x ->
+    Right (def, x)
   x ->
     Left $ SchemaExpectedStruct x
 {-# INLINE takeStruct #-}
@@ -205,12 +205,12 @@ takeReversed = \case
 
 ------------------------------------------------------------------------
 
-takeOption :: Column -> Either SchemaError Column
+takeOption :: Column -> Either SchemaError (Default, Column)
 takeOption x0 = do
-  vs <- takeEnum x0
+  (def, vs) <- takeEnum x0
   case Cons.toList vs of
     [Variant "none" Unit, Variant "some" x] ->
-      pure x
+      pure (def, x)
     _ ->
       Left $ SchemaExpectedOption vs
 {-# INLINE takeOption #-}

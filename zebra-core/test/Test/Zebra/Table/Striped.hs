@@ -13,9 +13,10 @@ import           Test.Zebra.Jack
 
 import           Text.Show.Pretty (ppShow)
 
+import           Zebra.Table.Data
+import qualified Zebra.Table.Logical as Logical
 import qualified Zebra.Table.Schema as Schema
 import qualified Zebra.Table.Striped as Striped
-import qualified Zebra.Table.Logical as Logical
 
 
 prop_roundtrip_values :: Property
@@ -32,7 +33,7 @@ prop_roundtrip_values =
 
 prop_append_array_table :: Property
 prop_append_array_table =
-  gamble (Schema.Array <$> jColumnSchema) $ \schema ->
+  gamble (Schema.Array DenyDefault <$> jColumnSchema) $ \schema ->
   gamble (jSizedLogical schema) $ \logical0 ->
   gamble (jSizedLogical schema) $ \logical1 ->
   either (flip counterexample False) id $ do

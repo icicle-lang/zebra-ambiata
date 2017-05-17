@@ -19,6 +19,12 @@
 
 typedef int64_t bool64_t;
 
+// Default
+typedef enum zebra_default {
+    ZEBRA_DEFAULT_DENY,
+    ZEBRA_DEFAULT_ALLOW
+} zebra_default_t;
+
 // Encodings
 typedef enum zebra_binary_encoding {
     ZEBRA_BINARY_NONE,
@@ -41,15 +47,18 @@ typedef enum zebra_table_tag {
 typedef union zebra_table_variant {
     // ZEBRA_TABLE_BINARY
     struct {
+        zebra_default_t default_;
         zebra_binary_encoding_t encoding;
         char* bytes;
     } _binary;
     // ZEBRA_TABLE_ARRAY
     struct {
+        zebra_default_t default_;
         zebra_column_t* values;
     } _array;
     // ZEBRA_TABLE_MAP
     struct {
+        zebra_default_t default_;
         zebra_column_t* keys;
         zebra_column_t* values;
     } _map;
@@ -102,16 +111,20 @@ typedef union zebra_column_variant {
     struct {
     } _unit;
     struct {
+        zebra_default_t default_;
         int64_t *values;
     } _int;
     struct {
+        zebra_default_t default_;
         double *values;
     } _double;
     struct {
+        zebra_default_t default_;
         int64_t *tags;
         zebra_named_columns_t columns;
     } _enum;
     struct {
+        zebra_default_t default_;
         zebra_named_columns_t columns;
     } _struct;
     struct {

@@ -11,6 +11,7 @@ module Zebra.Table.Data (
   , Variant(..)
   , VariantName(..)
   , Tag(..)
+  , Default(..)
 
   , hasVariant
   , lookupVariant
@@ -90,6 +91,17 @@ newtype Tag =
 instance Show Tag where
   showsPrec =
     gshowsPrec
+
+--
+-- Ideally this would contain a Zebra.Table.Logical.Table/Value which is the
+-- default value for the Table/Column. However, all we need right now is to
+-- be able to default to empty lists/maps and 'none' enum values, so we go
+-- for a simpler approach where the default value is implied.
+--
+data Default =
+    DenyDefault  -- ^ Table/column can NOT be replaced by a default value if missing.
+  | AllowDefault -- ^ Table/column can be replaced by a default value if missing.
+    deriving (Eq, Ord, Show, Generic)
 
 ------------------------------------------------------------------------
 

@@ -100,17 +100,17 @@ decodeLogicalValue schema =
 pTable :: Schema.Table -> Aeson.Value -> Aeson.Parser Logical.Table
 pTable schema =
   case schema of
-    Schema.Binary Nothing ->
+    Schema.Binary _ Nothing ->
       fmap Logical.Binary . pBinary
 
-    Schema.Binary (Just Encoding.Utf8) ->
+    Schema.Binary _ (Just Encoding.Utf8) ->
       fmap (Logical.Binary . Text.encodeUtf8) . pText
 
-    Schema.Array element ->
+    Schema.Array _ element ->
       fmap Logical.Array .
       Aeson.withArray "array containing values" (kmapM $ pValue element)
 
-    Schema.Map kschema vschema ->
+    Schema.Map _ kschema vschema ->
       fmap (Logical.Map . Map.fromList . Boxed.toList) .
       Aeson.withArray "array containing key/value pairs" (kmapM $ pPair kschema vschema)
 {-# INLINABLE pTable #-}
@@ -118,22 +118,22 @@ pTable schema =
 ppTable :: Schema.Table -> Logical.Table -> Either JsonLogicalEncodeError Aeson.Value
 ppTable schema table0 =
   case schema of
-    Schema.Binary Nothing
+    Schema.Binary _ Nothing
       | Logical.Binary bs <- table0
       ->
         pure $ ppBinary bs
 
-    Schema.Binary (Just Encoding.Utf8)
+    Schema.Binary _ (Just Encoding.Utf8)
       | Logical.Binary bs <- table0
       -> do
         fmap ppText . first JsonLogicalEncodeUtf8 $ Encoding.decodeUtf8 bs
 
-    Schema.Array element
+    Schema.Array _ element
       | Logical.Array xs <- table0
       ->
         Aeson.Array <$> traverse (ppValue element) xs
 
-    Schema.Map kschema vschema
+    Schema.Map _ kschema vschema
       | Logical.Map kvs <- table0
       -> do
         ks <- traverse (ppValue kschema) $ Map.keys kvs
@@ -167,20 +167,20 @@ pValue schema =
     Schema.Unit ->
       (Logical.Unit <$) . pUnit
 
-    Schema.Int ->
+    Schema.Int _ ->
       fmap Logical.Int . pInt
 
-    Schema.Double ->
+    Schema.Double _ ->
       fmap Logical.Double . pDouble
 
-    Schema.Enum variants0 ->
+    Schema.Enum _ variants0 ->
       let
         variants =
           mkVariantMap variants0
       in
         pEnum $ flip Map.lookup variants
 
-    Schema.Struct fields0 ->
+    Schema.Struct _ fields0 ->
       Aeson.withObject "object containing a struct" $ \o ->
         fmap Logical.Struct . for fields0 $ \(Field name fschema) ->
           withStructField name o (pValue fschema)
@@ -209,23 +209,23 @@ ppValue schema value0 =
       ->
         pure ppUnit
 
-    Schema.Int
+    Schema.Int _
       | Logical.Int x <- value0
       ->
         pure $ ppInt x
 
-    Schema.Double
+    Schema.Double _
       | Logical.Double x <- value0
       ->
         pure $ ppDouble x
 
-    Schema.Enum variants
+    Schema.Enum _ variants
       | Logical.Enum tag x <- value0
       , Just var <- lookupVariant tag variants
       ->
         ppEnum <$> traverse (flip ppValue x) var
 
-    Schema.Struct fields
+    Schema.Struct _ fields
       | Logical.Struct values <- value0
       , Cons.length fields == Cons.length values
       -> do
