@@ -103,6 +103,8 @@ zebraExport export = do
           loop xs . hoist (firstJoin ExportIOError) . ByteStream.injectEitherT $
             ByteStream.writeFile path (ByteStream.copy tables)
 
+        -- FIXME this should not be done in this loop, causes the whole file to
+        -- FIXME be read even though we only need the schema.
         ExportSchemaStdout : xs -> do
           lift . tryEitherT ExportIOError . liftIO $
             ByteString.hPut stdout bschema

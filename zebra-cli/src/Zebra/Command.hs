@@ -6,16 +6,13 @@ module Zebra.Command (
   , zebraFacts
 
   , MergeOptions(..)
-  , zebraMerge
-  , zebraUnion
+  , zebraFastMerge
   ) where
 
 import qualified Anemone.Foreign.Mempool as Mempool
 
-import           Control.Monad.Catch (MonadCatch(..))
 import           Control.Monad.IO.Class (MonadIO(..))
-import           Control.Monad.Morph (hoist)
-import           Control.Monad.Trans.Resource (MonadResource, ResourceT)
+import           Control.Monad.Trans.Resource (MonadResource)
 import qualified Control.Monad.Trans.Resource as Resource
 
 import qualified Data.ByteString.Builder as Builder
@@ -38,7 +35,6 @@ import           Text.Show.Pretty (ppShow)
 
 import           X.Control.Monad.Trans.Either (EitherT, hoistEither, firstJoin)
 import qualified X.Data.Vector as Boxed
-import qualified X.Data.Vector.Cons as Cons
 import qualified X.Data.Vector.Storable as Storable
 import qualified X.Data.Vector.Stream as VStream
 import qualified X.Data.Vector.Unboxed as Unboxed
@@ -52,17 +48,12 @@ import qualified Zebra.Foreign.Block as Foreign
 import qualified Zebra.Foreign.Entity as Foreign
 import qualified Zebra.Merge.BlockC as Merge
 import qualified Zebra.Merge.Puller.File as Merge
-import qualified Zebra.Merge.Table as Merge
 import           Zebra.Serial.Binary (BinaryVersion(..))
-import qualified Zebra.Serial.Binary as Binary
 import qualified Zebra.Serial.Binary.Block as Binary
 import qualified Zebra.Serial.Binary.Data as Binary
 import qualified Zebra.Serial.Binary.File as Binary
 import qualified Zebra.Serial.Binary.Header as Binary
 import qualified Zebra.Table.Schema as Schema
-import qualified Zebra.Table.Striped as Striped
-import qualified Zebra.X.ByteStream as ByteStream
-import           Zebra.X.Stream (Stream, Of)
 
 
 data CatOptions =
@@ -97,8 +88,9 @@ zebraFacts f = do
   attributes <- firstT Block.renderBlockTableError . hoistEither $ Binary.attributesOfHeader header
   catFacts (Map.elems attributes) blocks
 
-zebraMerge :: MonadResource m => NonEmpty FilePath -> Maybe FilePath -> MergeOptions -> EitherT Text m ()
-zebraMerge ins outputPath opts = do
+-- FIXME remove at some point
+zebraFastMerge :: MonadResource m => NonEmpty FilePath -> Maybe FilePath -> MergeOptions -> EitherT Text m ()
+zebraFastMerge ins outputPath opts = do
   (puller, pullids) <- firstTshow $ Merge.blockChainPuller (Boxed.fromList $ NonEmpty.toList ins)
   let withPusher = case outputPath of
         Just out -> withOutputPusher opts (NonEmpty.head ins) out
@@ -111,27 +103,6 @@ zebraMerge ins outputPath opts = do
           truncate (mergeGcGigabytes opts * 1024 * 1024 * 1024)
     in
       firstJoin (Text.pack . ppShow) $ Merge.mergeBlocks runOpts pullids
-
-readStriped :: (MonadResource m, MonadCatch m) => FilePath -> Stream (Of Striped.Table) (EitherT Text m) ()
-readStriped path =
-  hoist (firstJoin (Text.pack . ppShow)) .
-    Binary.decodeStriped .
-  hoist (firstT (Text.pack . ppShow)) $
-    ByteStream.readFile path
-
-zebraUnion :: (MonadResource m, MonadCatch m) => NonEmpty FilePath -> FilePath -> EitherT Text m ()
-zebraUnion inputs0 output =
-  let
-    inputs =
-      fmap readStriped (Cons.fromNonEmpty inputs0)
-  in
-    firstJoin (Text.pack . ppShow) .
-      ByteStream.writeFile output .
-    hoist (firstJoin (Text.pack . ppShow)) .
-      Binary.encodeStriped .
-    hoist (firstJoin (Text.pack . ppShow)) $
-      Merge.unionStriped inputs
-{-# SPECIALIZE zebraUnion :: NonEmpty FilePath -> FilePath -> EitherT Text (ResourceT IO) () #-}
 
 withPrintPusher ::
      MonadResource m
