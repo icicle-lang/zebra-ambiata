@@ -37,8 +37,10 @@ library
 
   exposed-modules:
                     Zebra.Command
-                    Zebra.Command.Import
                     Zebra.Command.Export
+                    Zebra.Command.Import
+                    Zebra.Command.Merge
+                    Zebra.Command.Util
 
 executable zebra
   if impl(ghc >= 8.0)

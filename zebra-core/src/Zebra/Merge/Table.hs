@@ -3,8 +3,10 @@
 {-# LANGUAGE DoAndIfThenElse #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE OverloadedStrings #-}
 module Zebra.Merge.Table (
     UnionTableError(..)
+  , renderUnionTableError
 
   , unionLogical
   , unionStriped
@@ -16,11 +18,14 @@ import           Control.Monad.Trans.Class (lift)
 import qualified Data.List as List
 import           Data.Map (Map)
 import qualified Data.Map.Strict as Map
+import qualified Data.Text as Text
 import qualified Data.Vector as Boxed
 
 import           GHC.Types (SPEC(..))
 
 import           P
+
+import           Text.Show.Pretty (ppShow)
 
 import           X.Control.Monad.Trans.Either (EitherT, hoistEither, left)
 import           X.Data.Vector.Cons (Cons)
@@ -34,13 +39,6 @@ import qualified Zebra.Table.Striped as Striped
 import           Zebra.X.Stream (Stream, Of)
 import qualified Zebra.X.Stream as Stream
 
-data UnionTableError =
-    UnionEmptyInput
-  | UnionStripedError !StripedError
-  | UnionLogicalSchemaError !LogicalSchemaError
-  | UnionLogicalMergeError !LogicalMergeError
-  | UnionSchemaMismatch !Schema.Table !Schema.Table
-    deriving (Eq, Show)
 
 data Input m =
   Input {
@@ -53,6 +51,32 @@ data Step m =
       _stepComplete :: !(Map Logical.Value Logical.Value)
     , _stepRemaining :: !(Cons Boxed.Vector (Input m))
     }
+
+data UnionTableError =
+    UnionEmptyInput
+  | UnionStripedError !StripedError
+  | UnionLogicalSchemaError !LogicalSchemaError
+  | UnionLogicalMergeError !LogicalMergeError
+  | UnionSchemaMismatch !Schema.Table !Schema.Table
+    deriving (Eq, Show)
+
+renderUnionTableError :: UnionTableError -> Text
+renderUnionTableError = \case
+  UnionEmptyInput ->
+    "Cannot merge empty files"
+  UnionStripedError err ->
+    Striped.renderStripedError err
+  UnionLogicalSchemaError err ->
+    Logical.renderLogicalSchemaError err
+  UnionLogicalMergeError err ->
+    Logical.renderLogicalMergeError err
+  UnionSchemaMismatch schema0 wrong ->
+    "Cannot merge files with incompatible schemas." <>
+    "\n" <>
+    "\n  first file's schema =" <>
+    Text.pack (List.concatMap ("\n    " <>) . List.lines $ ppShow schema0) <>
+    "\n  mismatched schema =" <>
+    Text.pack (List.concatMap ("\n    " <>) . List.lines $ ppShow wrong)
 
 ------------------------------------------------------------------------
 -- General

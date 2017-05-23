@@ -23,6 +23,7 @@ import qualified X.Options.Applicative as Options
 import           Zebra.Command
 import           Zebra.Command.Export
 import           Zebra.Command.Import
+import           Zebra.Command.Merge
 import           Zebra.Serial.Binary (BinaryVersion(..))
 
 
@@ -33,12 +34,13 @@ main = do
   Options.cli "zebra" buildInfoVersion dependencyInfo parser run
 
 data Command =
-    ZebraCat !(NonEmpty FilePath) !CatOptions
-  | ZebraFacts !FilePath
-  | ZebraMerge !(NonEmpty FilePath) !(Maybe FilePath) !MergeOptions
-  | ZebraUnion !(NonEmpty FilePath) !FilePath
-  | ZebraImport !Import
+    ZebraImport !Import
   | ZebraExport !Export
+  | ZebraMerge !Merge
+  -- FIXME cleanup: move to own module like above commands
+  | ZebraCat !(NonEmpty FilePath) !CatOptions
+  | ZebraFacts !FilePath
+  | ZebraFastMerge !(NonEmpty FilePath) !(Maybe FilePath) !MergeOptions
     deriving (Eq, Show)
 
 parser :: Parser Command
@@ -52,6 +54,19 @@ cmd p name desc =
 commands :: [Mod CommandFields Command]
 commands =
   [ cmd
+      (ZebraImport <$> pImport)
+      "import"
+      "Import a zebra text file into a zebra binary file."
+  , cmd
+      (ZebraExport <$> pExport)
+      "export"
+      "Export a zebra binary file to a zebra text file."
+  , cmd
+      (ZebraMerge <$> pMerge)
+      "merge"
+      "Merge multiple zebra binary files together."
+  -- FIXME cleanup: move to own module like above commands
+  , cmd
       (ZebraCat <$> some1 pInputBinary <*> pCatOptions)
       "cat"
       "Dump all information in a zebra file."
@@ -60,21 +75,9 @@ commands =
       "facts"
       "Dump a zebra file as facts."
   , cmd
-      (ZebraMerge <$> some1 pInputBinary <*> pMaybeOutputBinary <*> pMergeOptions)
-      "merge"
-      "Merge multiple input files together."
-  , cmd
-      (ZebraUnion <$> some1 pInputBinary <*> pOutputBinary)
-      "union"
-      "Union multiple input files together."
-  , cmd
-      (ZebraImport <$> pImport)
-      "import"
-      "Import a zebra text file into a zebra binary file."
-  , cmd
-      (ZebraExport <$> pExport)
-      "export"
-      "Export a zebra binary file to a zebra text file."
+      (ZebraFastMerge <$> some1 pInputBinary <*> pMaybeOutputBinary <*> pMergeOptions)
+      "fast-merge"
+      "Merge multiple input files together using the C merging algorithm."
   ]
 
 pInputBinary :: Parser FilePath
@@ -178,6 +181,29 @@ pExportSchema =
     Options.metavar "OUTPUT_ZEBRA_SCHEMA" <>
     Options.help "Write schema to a file"
 
+pMerge :: Parser Merge
+pMerge =
+ Merge
+   <$> some1 pInputBinary
+   <*> ((Just <$> pOutputBinary) <|> pOutputBinaryStdout <|> pure Nothing)
+   <*> pOutputFormat
+
+pOutputFormat :: Parser BinaryVersion
+pOutputFormat =
+  fromMaybe BinaryV2 <$> optional (pOutputV2 <|> pOutputV3)
+
+pOutputV2 :: Parser BinaryVersion
+pOutputV2 =
+  Options.flag' BinaryV2 $
+    Options.long "output-v2" <>
+    Options.help "Force merge to output files in version 2 format. (default)"
+
+pOutputV3 :: Parser BinaryVersion
+pOutputV3 =
+  Options.flag' BinaryV3 $
+    Options.long "output-v3" <>
+    Options.help "Force merge to output files in version 3 format."
+
 pCatOptions :: Parser CatOptions
 pCatOptions =
   fmap fixCatOptions $
@@ -219,24 +245,22 @@ pOutputBlockFacts =
     Options.long "output-block-facts" <>
     Options.help "Minimum number of facts per output block (last block of leftovers will contain fewer)"
 
-pOutputFormat :: Parser BinaryVersion
-pOutputFormat =
-  fromMaybe BinaryV2 <$> optional (pOutputV2 <|> pOutputV3)
-
-pOutputV2 :: Parser BinaryVersion
-pOutputV2 =
-  Options.flag' BinaryV2 $
-    Options.long "output-v2" <>
-    Options.help "Force merge to output files in version 2 format. (default)"
-
-pOutputV3 :: Parser BinaryVersion
-pOutputV3 =
-  Options.flag' BinaryV3 $
-    Options.long "output-v3" <>
-    Options.help "Force merge to output files in version 3 format."
-
 run :: Command -> IO ()
 run = \case
+  ZebraImport import_ ->
+    orDie renderImportError . hoist runResourceT $
+      zebraImport import_
+
+  ZebraExport export ->
+    orDie renderExportError . hoist runResourceT $
+      zebraExport export
+
+  ZebraMerge merge ->
+    orDie renderMergeError . hoist runResourceT $
+      zebraMerge merge
+
+  -- FIXME cleanup: move to own module like above commands
+
   ZebraCat inputs options ->
     orDie id . hoist runResourceT $
       zebraCat inputs options
@@ -245,18 +269,6 @@ run = \case
     orDie id . hoist runResourceT $
       zebraFacts input
 
-  ZebraMerge inputs output options ->
+  ZebraFastMerge inputs output options ->
     orDie id . hoist runResourceT $
-      zebraMerge inputs output options
-
-  ZebraUnion inputs output ->
-    orDie id . hoist runResourceT $
-      zebraUnion inputs output
-
-  ZebraImport import_ ->
-    orDie renderImportError . hoist runResourceT $
-      zebraImport import_
-
-  ZebraExport export ->
-    orDie renderExportError . hoist runResourceT $
-      zebraExport export
+      zebraFastMerge inputs output options
