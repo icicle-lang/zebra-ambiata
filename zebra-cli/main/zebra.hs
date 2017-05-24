@@ -187,6 +187,16 @@ pMerge =
    <$> some1 pInputBinary
    <*> ((Just <$> pOutputBinary) <|> pOutputBinaryStdout <|> pure Nothing)
    <*> pOutputFormat
+   <*> pMergeRowsPerBlock
+
+pMergeRowsPerBlock :: Parser MergeRowsPerBlock
+pMergeRowsPerBlock =
+  fmap MergeRowsPerBlock .
+  Options.option Options.auto $
+    Options.value 256 <>
+    Options.long "rows-per-block" <>
+    Options.metavar "ROWS_PER_BLOCK" <>
+    Options.help "The maximum numbers of rows to include in each block. (defaults to 256)"
 
 pOutputFormat :: Parser BinaryVersion
 pOutputFormat =
