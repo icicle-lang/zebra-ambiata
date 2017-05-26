@@ -4,6 +4,9 @@ module Test.Zebra.Table.Striped where
 
 import           Disorder.Jack (Property, quickCheckAll)
 import           Disorder.Jack ((===), gamble, tripping, arbitrary, counterexample, discard)
+import           Disorder.Jack (listOf1, choose)
+
+import           Data.Functor.Identity (runIdentity)
 
 import           P
 
@@ -13,10 +16,14 @@ import           Test.Zebra.Jack
 
 import           Text.Show.Pretty (ppShow)
 
+import           X.Control.Monad.Trans.Either (runEitherT)
+import qualified X.Data.Vector.Cons as Cons
+
 import           Zebra.Table.Data
 import qualified Zebra.Table.Logical as Logical
 import qualified Zebra.Table.Schema as Schema
 import qualified Zebra.Table.Striped as Striped
+import qualified Zebra.X.Stream as Stream
 
 
 prop_roundtrip_values :: Property
@@ -68,6 +75,24 @@ prop_roundtrip_splitAt =
   gamble arbitrary $ \ix ->
   gamble jSizedStriped $
     tripping (Striped.splitAt ix) (uncurry Striped.unsafeAppend)
+
+prop_rechunk :: Property
+prop_rechunk =
+  gamble (choose (1, 100)) $ \n ->
+  gamble (Cons.fromNonEmpty <$> listOf1 jSizedStriped) $ \xss ->
+    let
+      original =
+        Striped.unsafeConcat xss
+
+      rechunked =
+        bind (Striped.unsafeConcat . Cons.unsafeFromList) $
+          runIdentity .
+          runEitherT .
+          Stream.toList_ .
+          Striped.rechunk n $
+          Stream.each xss
+    in
+      original === rechunked
 
 return []
 tests :: IO Bool

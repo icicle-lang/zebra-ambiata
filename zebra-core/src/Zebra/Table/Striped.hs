@@ -9,6 +9,7 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternGuards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# OPTIONS_GHC -funbox-strict-fields #-}
 module Zebra.Table.Striped (
     Table(..)
@@ -50,7 +51,12 @@ module Zebra.Table.Striped (
   , unsafeConcat
   , unsafeAppend
   , unsafeAppendColumn
+
+  -- * Streaming Operations
+  , rechunk
   ) where
+
+import           Control.Monad.Trans.Class (lift)
 
 import           Data.Biapplicative (biliftA2)
 import qualified Data.ByteString as ByteString
@@ -65,6 +71,7 @@ import           P hiding (empty, concat, splitAt, length)
 
 import           Text.Show.Pretty (ppShow)
 
+import           X.Control.Monad.Trans.Either (EitherT, hoistEither)
 import qualified X.Data.Vector as Boxed
 import           X.Data.Vector.Cons (Cons)
 import qualified X.Data.Vector.Cons as Cons
@@ -76,6 +83,8 @@ import           Zebra.Table.Logical (LogicalSchemaError, LogicalMergeError)
 import qualified Zebra.Table.Logical as Logical
 import           Zebra.Table.Schema (SchemaError(..))
 import qualified Zebra.Table.Schema as Schema
+import           Zebra.X.Stream (Stream, Of)
+import qualified Zebra.X.Stream as Stream
 import           Zebra.X.Vector.Segment (SegmentError)
 import qualified Zebra.X.Vector.Segment as Segment
 import qualified Zebra.X.Vector.Storable as Storable
@@ -721,3 +730,69 @@ unsafeAppendField f0 f1 =
   else
     Left $ StripedAppendFieldMismatch (fmap schemaColumn f0) (fmap schemaColumn f1)
 {-# INLINABLE unsafeAppendField #-}
+
+------------------------------------------------------------------------
+-- Streaming Operations
+
+data Yield =
+    YieldedNone
+  | YieldedSome
+    deriving (Eq)
+
+data Rechunk =
+  Rechunk {
+      _rechunkCount :: !Int
+    , _rechunkYield :: !Yield
+    , _rechunkDList :: [Table] -> [Table]
+    }
+
+-- | Takes a stream of tables and rearranges them such that each chunk contains
+--   the specified number of rows.
+--
+--   /The last chunk may contain fewer rows than the specified row count./
+--
+rechunk ::
+     forall m r.
+     Monad m
+  => Int
+  -> Stream (Of Table) m r
+  -> Stream (Of Table) (EitherT StripedError m)  r
+rechunk max_n =
+  let
+    loop :: Rechunk -> Stream (Of Table) m r -> Stream (Of Table) (EitherT StripedError m) r
+    loop (Rechunk n0 emit dl) incoming0 =
+      if n0 >= max_n then do
+        x <- lift . hoistEither $ unsafeFromDList dl []
+
+        let
+          (x0, x1) =
+            splitAt max_n x
+
+        Stream.yield x0
+        loop (Rechunk (length x1) YieldedSome (x1 :)) incoming0
+
+      else do
+        ex <- lift . lift $ Stream.next incoming0
+        case ex of
+          Left r -> do
+            x <- lift . hoistEither $ unsafeFromDList dl []
+
+            -- We need to yield a block if it contains any data, or if we have
+            -- never yielded a block before. Streams of striped tables should
+            -- contain at least one table, even if it is empty, because it
+            -- carries schema information and makes the stream self-describing.
+            when (n0 /= 0 || emit == YieldedNone) $
+              Stream.yield x
+
+            pure r
+
+          Right (hd, tl) ->
+            loop (Rechunk (n0 + length hd) emit (dl . (hd :))) tl
+  in
+    loop (Rechunk 0 YieldedNone id)
+{-# INLINABLE rechunk #-}
+
+unsafeFromDList :: ([Table] -> [Table]) -> [Table] -> Either StripedError Table
+unsafeFromDList dl end =
+  unsafeConcat . Cons.unsafeFromList $ dl end
+{-# INLINE unsafeFromDList #-}

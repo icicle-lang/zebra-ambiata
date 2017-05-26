@@ -1,10 +1,13 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE DoAndIfThenElse #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module Zebra.Command.Merge (
     Merge(..)
+  , MergeRowsPerBlock(..)
   , zebraMerge
 
   , MergeError(..)
@@ -32,6 +35,7 @@ import qualified Zebra.Merge.Table as Merge
 import           Zebra.Serial.Binary (BinaryStripedEncodeError, BinaryStripedDecodeError)
 import           Zebra.Serial.Binary (BinaryVersion(..))
 import qualified Zebra.Serial.Binary as Binary
+import           Zebra.Table.Striped (StripedError)
 import qualified Zebra.Table.Striped as Striped
 import qualified Zebra.X.ByteStream as ByteStream
 import           Zebra.X.Stream (Stream, Of)
@@ -42,12 +46,19 @@ data Merge =
       mergeInputs :: !(NonEmpty FilePath)
     , mergeOutput :: !(Maybe FilePath)
     , mergeVersion :: !BinaryVersion
+    , mergeRowsPerChunk :: !MergeRowsPerBlock
+    } deriving (Eq, Ord, Show)
+
+newtype MergeRowsPerBlock =
+  MergeRowsPerBlock {
+      unMergeRowsPerBlock :: Int
     } deriving (Eq, Ord, Show)
 
 data MergeError =
     MergeIOError !IOError
   | MergeBinaryStripedDecodeError !BinaryStripedDecodeError
   | MergeBinaryStripedEncodeError !BinaryStripedEncodeError
+  | MergeStripedError !StripedError
   | MergeUnionTableError !UnionTableError
     deriving (Eq, Show)
 
@@ -59,6 +70,8 @@ renderMergeError = \case
     Binary.renderBinaryStripedDecodeError err
   MergeBinaryStripedEncodeError err ->
     Binary.renderBinaryStripedEncodeError err
+  MergeStripedError err ->
+    Striped.renderStripedError err
   MergeUnionTableError err ->
     Merge.renderUnionTableError err
 
@@ -79,6 +92,8 @@ zebraMerge x =
       writeFileOrStdout (mergeOutput x) .
     hoist (firstJoin MergeBinaryStripedEncodeError) .
       Binary.encodeStripedWith (mergeVersion x) .
+    hoist (firstJoin MergeStripedError) .
+      Striped.rechunk (unMergeRowsPerBlock $ mergeRowsPerChunk x) .
     hoist (firstJoin MergeUnionTableError) $
       Merge.unionStriped inputs
 {-# SPECIALIZE zebraMerge :: Merge -> EitherT MergeError (ResourceT IO) () #-}
