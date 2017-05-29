@@ -48,6 +48,13 @@ module Zebra.Table.Striped (
   , merges
   , merge
 
+  , defaultTable
+  , defaultColumn
+
+  , transmute
+  , transmuteColumn
+  , transmuteStruct
+
   , unsafeConcat
   , unsafeAppend
   , unsafeAppendColumn
@@ -111,6 +118,10 @@ data StripedError =
   | StripedLogicalMergeError !LogicalMergeError
   | StripedNoValueForEnumTag !Tag !(Cons Boxed.Vector Logical.Value)
   | StripedNestedLengthMismatch !Schema.Table !SegmentError
+  | StripedDefaultFieldNotAllowed !(Field Schema.Column)
+  | StripedTransmuteMapKeyNotAllowed !Schema.Table !Schema.Table
+  | StripedTransmuteTableMismatch !Schema.Table !Schema.Table
+  | StripedTransmuteColumnMismatch !Schema.Column !Schema.Column
   | StripedAppendTableMismatch !Schema.Table !Schema.Table
   | StripedAppendColumnMismatch !Schema.Column !Schema.Column
   | StripedAppendVariantMismatch !(Variant Schema.Column) !(Variant Schema.Column)
@@ -134,6 +145,25 @@ renderStripedError = \case
   StripedNestedLengthMismatch ts err ->
     "Failed to split table: " <> Text.pack (ppShow ts) <>
     "\n" <> Segment.renderSegmentError err
+
+  StripedDefaultFieldNotAllowed (Field name value) ->
+    "Schema did not allow defaulting of struct field:" <>
+    ppField (unFieldName name) value
+
+  StripedTransmuteMapKeyNotAllowed x y ->
+    "Cannot transmute the key of a map, it could invalidate the ordering invariant:" <>
+    ppField "actual" x <>
+    ppField "desired" y
+
+  StripedTransmuteTableMismatch x y ->
+    "Cannot transmute table from actual schema to desired schema:" <>
+    ppField "actual" x <>
+    ppField "desired" y
+
+  StripedTransmuteColumnMismatch x y ->
+    "Cannot transmute column from actual schema to desired schema:" <>
+    ppField "actual" x <>
+    ppField "desired" y
 
   StripedAppendTableMismatch x y ->
     "Cannot append tables with different schemas:" <>
@@ -636,6 +666,151 @@ merge x0 x1 = do
   c2 <- first StripedLogicalMergeError $ Logical.merge c0 c1
   fromLogical (schema x0) c2
 {-# INLINABLE merge #-}
+
+------------------------------------------------------------------------
+-- Default
+
+defaultTable :: Schema.Table -> Table
+defaultTable = \case
+  Schema.Binary def encoding ->
+    Binary def encoding ""
+  Schema.Array def x ->
+    Array def (defaultColumn 0 x)
+  Schema.Map def k v ->
+    Map def (defaultColumn 0 k) (defaultColumn 0 v)
+{-# INLINABLE defaultTable #-}
+
+defaultColumn :: Int -> Schema.Column -> Column
+defaultColumn n = \case
+  Schema.Unit ->
+    Unit n
+  Schema.Int def ->
+    Int def (Storable.replicate n 0)
+  Schema.Double def ->
+    Double def (Storable.replicate n 0)
+  Schema.Enum def vs ->
+    Enum def (Storable.replicate n 0) (fmap2 (defaultColumn n) vs)
+  Schema.Struct def fs ->
+    Struct def (fmap2 (defaultColumn n) fs)
+  Schema.Nested x ->
+    Nested (Storable.replicate n 0) (defaultTable x)
+  Schema.Reversed x ->
+    Reversed (defaultColumn n x)
+{-# INLINABLE defaultColumn #-}
+
+------------------------------------------------------------------------
+-- Transmute
+
+--
+-- FIXME should we allow more flexibility with mismatched defaults / encodings / enums?
+--
+
+-- | Modify a table's structure so that it has the desired schema.
+--
+--   This operation will only be successful if the original table had a
+--   compatible structure. Compatible in this case means that it is only
+--   allowed to be missing columns which can be set to a default value.
+--
+transmute :: Schema.Table -> Table -> Either StripedError Table
+transmute s t =
+  case (s, t) of
+    (Schema.Binary def0 encoding0, Binary def1 encoding1 bs)
+      | def0 == def1
+      , encoding0 == encoding1
+      ->
+        pure $
+          Binary def1 encoding1 bs
+
+    (Schema.Array def0 column0, Array def1 column1)
+      | def0 == def1
+      ->
+        Array def1
+          <$> transmuteColumn column0 column1
+
+    (Schema.Map def0 k0 v0, Map def1 k1 v1)
+      | k0 /= schemaColumn k1
+      ->
+        Left $ StripedTransmuteMapKeyNotAllowed (schema t) s
+
+      | def0 == def1
+      ->
+        Map def1
+          <$> transmuteColumn k0 k1
+          <*> transmuteColumn v0 v1
+
+    _ ->
+      Left $ StripedTransmuteTableMismatch (schema t) s
+{-# INLINABLE transmute #-}
+
+transmuteColumn :: Schema.Column -> Column -> Either StripedError Column
+transmuteColumn s c =
+  case (s, c) of
+    (Schema.Unit, Unit n) ->
+      pure $ Unit n
+
+    (Schema.Int def0, Int def1 xs)
+      | def0 == def1
+      ->
+        pure $ Int def1 xs
+
+    (Schema.Double def0, Double def1 xs)
+      | def0 == def1
+      ->
+        pure $ Double def1 xs
+
+    (Schema.Enum def0 vs0, Enum def1 tags vs1)
+      | def0 == def1
+      , fmap variantName vs0 == fmap variantName vs1
+      ->
+        Enum def1 tags
+          <$> Cons.zipWithM (\(Variant _ x) (Variant n y) -> Variant n <$> transmuteColumn x y) vs0 vs1
+
+    (Schema.Struct def0 fs0, Struct def1 fs1)
+      | def0 == def1
+      ->
+        Struct def1
+          <$> transmuteStruct fs0 fs1
+
+    (Schema.Nested xs0, Nested ns1 xs1) ->
+      Nested ns1
+        <$> transmute xs0 xs1
+
+    (Schema.Reversed xs0, Reversed xs1) ->
+      Reversed
+        <$> transmuteColumn xs0 xs1
+
+    _ ->
+      Left $ StripedTransmuteColumnMismatch (schemaColumn c) s
+{-# INLINABLE transmuteColumn #-}
+
+transmuteStruct ::
+     Cons Boxed.Vector (Field Schema.Column)
+  -> Cons Boxed.Vector (Field Column)
+  -> Either StripedError (Cons Boxed.Vector (Field Column))
+transmuteStruct schemas columns0 =
+  let
+    n =
+      lengthColumn . fieldData $ Cons.head columns0
+
+    columns =
+      Map.fromList .
+      fmap (\(Field k v) -> (k, v)) $
+      Cons.toList columns0
+
+    lookupField field@(Field name fschema) =
+      case Map.lookup name columns of
+        Nothing ->
+          case Schema.takeDefaultColumn fschema of
+            DenyDefault ->
+              Left $ StripedDefaultFieldNotAllowed field
+            AllowDefault ->
+              pure . Field name $ defaultColumn n fschema
+
+        Just column ->
+          Field name <$> transmuteColumn fschema column
+  in
+    traverse lookupField schemas
+{-# INLINABLE transmuteStruct #-}
 
 ------------------------------------------------------------------------
 -- Concat/Append

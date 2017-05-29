@@ -39,6 +39,8 @@ module Test.Zebra.Jack (
   , jColumnSchema
   , tableSchemaV0
   , columnSchemaV0
+  , jExpandedTableSchema
+  , jExpandedColumnSchema
 
   -- * Zebra.Table.Striped
   , jSizedStriped
@@ -82,7 +84,7 @@ import           Disorder.Corpus (muppets, southpark, boats, weather)
 import           Disorder.Jack (Jack, Property, mkJack, reshrink, shrinkTowards, sized, scale)
 import           Disorder.Jack (elements, arbitrary, choose, chooseInt, sizedBounded)
 import           Disorder.Jack (oneOf, oneOfRec, listOf, listOfN, vectorOf, justOf, maybeOf)
-import           Disorder.Jack ((===), boundedEnum, property, counterexample)
+import           Disorder.Jack ((===), boundedEnum, property, counterexample, shuffle)
 
 import           P
 
@@ -256,6 +258,42 @@ jColumnSchema =
 
 ------------------------------------------------------------------------
 
+jExpandedTableSchema :: Schema.Table -> Jack Schema.Table
+jExpandedTableSchema = \case
+  Schema.Binary def encoding ->
+    pure $ Schema.Binary def encoding
+  Schema.Array def x ->
+    Schema.Array def <$> jExpandedColumnSchema x
+  Schema.Map def k v ->
+    Schema.Map def k <$> jExpandedColumnSchema v
+
+jExpandedColumnSchema :: Schema.Column -> Jack Schema.Column
+jExpandedColumnSchema = \case
+  Schema.Unit ->
+    pure Schema.Unit
+  Schema.Int def ->
+    pure $ Schema.Int def
+  Schema.Double def ->
+    pure $ Schema.Double def
+  Schema.Enum def vs ->
+    Schema.Enum def <$> traverse (traverse jExpandedColumnSchema) vs
+  Schema.Struct def fs0 -> do
+    fs1 <- Cons.toList <$> traverse (traverse jExpandedColumnSchema) fs0
+    fs2 <- fmap2 (fmap (Schema.withDefaultColumn AllowDefault)) <$> listOfN 0 3 $ jField jColumnSchema
+
+    let
+      fs3 =
+        ordNubBy (comparing fieldName) (fs1 <> fs2)
+
+    fs4 <- shuffle fs3
+    pure . Schema.Struct def $ Cons.unsafeFromList fs4
+  Schema.Nested x ->
+    Schema.Nested <$> jExpandedTableSchema x
+  Schema.Reversed x ->
+    Schema.Reversed <$> jExpandedColumnSchema x
+
+------------------------------------------------------------------------
+
 tableTables :: Striped.Table -> [Striped.Table]
 tableTables = \case
   Striped.Binary _ _ _ ->
@@ -423,7 +461,7 @@ jStripedStruct :: Int -> Jack Striped.Column
 jStripedStruct n =
   Striped.Struct
     <$> jDefault
-    <*> smallConsOf (jField (jStripedColumn n))
+    <*> smallConsUniqueBy fieldName (jField (jStripedColumn n))
 
 jStripedNested :: Int -> Jack Striped.Column
 jStripedNested n =
@@ -644,11 +682,6 @@ jTombstone =
 jMaybe' :: Jack a -> Jack (Maybe' a)
 jMaybe' j =
   oneOfRec [ pure Nothing' ] [ Just' <$> j ]
-
-smallConsOf :: Jack a -> Jack (Cons Boxed.Vector a)
-smallConsOf gen =
-  sized $ \n ->
-    Cons.unsafeFromList <$> listOfN 1 (1 + (n `div` 10)) gen
 
 smallConsUniqueBy :: Ord b => (a -> b) -> Jack a -> Jack (Cons Boxed.Vector a)
 smallConsUniqueBy f gen =
