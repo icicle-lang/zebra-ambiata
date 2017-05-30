@@ -7,6 +7,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE PatternGuards #-}
 {-# OPTIONS_GHC -funbox-strict-fields #-}
 module Zebra.Table.Schema (
     Table(..)
@@ -14,6 +15,9 @@ module Zebra.Table.Schema (
 
   , SchemaError(..)
   , renderSchemaError
+
+  , SchemaUnionError(..)
+  , renderSchemaUnionError
 
   , bool
   , false
@@ -37,8 +41,14 @@ module Zebra.Table.Schema (
   , takeDefaultColumn
   , withDefault
   , withDefaultColumn
+
+  , union
+  , unionColumn
+  , unionStruct
   ) where
 
+import           Data.Map (Map)
+import qualified Data.Map.Strict as Map
 import qualified Data.Text as Text
 
 import           GHC.Generics (Generic)
@@ -85,6 +95,14 @@ data SchemaError =
   | SchemaExpectedOption !(Cons Boxed.Vector (Variant Column))
     deriving (Eq, Show)
 
+data SchemaUnionError =
+    SchemaUnionMapKeyNotAllowed !Table !Table
+  | SchemaUnionDefaultNotAllowed !(Field Column)
+  | SchemaUnionFailedLookupInternalError !(Field Column)
+  | SchemaUnionTableMismatch !Table !Table
+  | SchemaUnionColumnMismatch !Column !Column
+    deriving (Eq, Show)
+
 renderSchemaError :: SchemaError -> Text
 renderSchemaError = \case
   SchemaExpectedBinary x ->
@@ -107,6 +125,41 @@ renderSchemaError = \case
     "Expected Reversed, but was: " <> Text.pack (ppShow x)
   SchemaExpectedOption x ->
     "Expected option variants (i.e. none/some), but was: " <> Text.pack (ppShow x)
+
+renderSchemaUnionError :: SchemaUnionError -> Text
+renderSchemaUnionError = \case
+  SchemaUnionMapKeyNotAllowed x y ->
+    "Cannot union tables with different map keys, it could invalidate the ordering invariant:" <>
+    ppField "first" x <>
+    ppField "second" y
+
+  SchemaUnionDefaultNotAllowed (Field name value) ->
+    "Schema did not allow defaulting of struct field:" <>
+    ppField (unFieldName name) value
+
+  SchemaUnionFailedLookupInternalError (Field name value) ->
+    "This should not have happened, please report an issue. Internal error when trying to union struct field:" <>
+    ppField (unFieldName name) value
+
+  SchemaUnionTableMismatch x y ->
+    "Cannot union tables with incompatible schemas:" <>
+    ppField "first" x <>
+    ppField "second" y
+
+  SchemaUnionColumnMismatch x y ->
+    "Cannot union columns with incompatible schemas:" <>
+    ppField "first" x <>
+    ppField "second" y
+
+ppField :: Show a => Text -> a -> Text
+ppField name x =
+  "\n" <>
+  "\n  " <> name <> " =" <>
+  ppPrefix "\n    " x
+
+ppPrefix :: Show a => Text -> a -> Text
+ppPrefix prefix =
+  Text.concat . fmap (prefix <>) . Text.lines . Text.pack . ppShow
 
 ------------------------------------------------------------------------
 
@@ -277,3 +330,139 @@ withDefaultColumn def = \case
   Reversed x ->
     Reversed $ withDefaultColumn def x
 {-# INLINABLE withDefaultColumn #-}
+
+------------------------------------------------------------------------
+
+union :: Table -> Table -> Either SchemaUnionError Table
+union t0 t1 =
+  case (t0, t1) of
+    (Binary def0 encoding0, Binary def1 encoding1)
+      | def0 == def1
+      , encoding0 == encoding1
+      ->
+        pure $ Binary def0 encoding0
+
+    (Array def0 x0, Array def1 x1)
+      | def0 == def1
+      ->
+        Array def0
+          <$> unionColumn x0 x1
+
+    (Map def0 k0 v0, Map def1 k1 v1)
+      | k0 /= k1
+      ->
+        Left $ SchemaUnionMapKeyNotAllowed t0 t1
+
+      | def0 == def1
+      ->
+        Map def0 k0
+          <$> unionColumn v0 v1
+
+    _ ->
+      Left $ SchemaUnionTableMismatch t0 t1
+{-# INLINABLE union #-}
+
+unionColumn :: Column -> Column -> Either SchemaUnionError Column
+unionColumn c0 c1 =
+  case (c0, c1) of
+    (Unit, Unit) ->
+      pure Unit
+
+    (Int def0, Int def1)
+      | def0 == def1
+      ->
+        pure $ Int def0
+
+    (Double def0, Double def1)
+      | def0 == def1
+      ->
+        pure $ Double def0
+
+    (Enum def0 vs0, Enum def1 vs1)
+      | def0 == def1
+      , fmap variantName vs0 == fmap variantName vs1
+      ->
+        Enum def0
+          <$> Cons.zipWithM (\(Variant n x) (Variant _ y) -> Variant n <$> unionColumn x y) vs0 vs1
+
+    (Struct def0 fs0, Struct def1 fs1)
+      | def0 == def1
+      ->
+        Struct def1
+          <$> unionStruct fs0 fs1
+
+    (Nested x0, Nested x1) ->
+      Nested
+        <$> union x0 x1
+
+    (Reversed x0, Reversed x1) ->
+      Reversed
+        <$> unionColumn x0 x1
+
+    _ ->
+      Left $ SchemaUnionColumnMismatch c0 c1
+{-# INLINABLE unionColumn #-}
+
+data In a =
+    One !a
+  | Both !a !a
+
+defaultOrUnion :: Map FieldName (In Column) -> Field Column -> Either SchemaUnionError (Field Column)
+defaultOrUnion fields field@(Field name _) =
+  case Map.lookup name fields of
+    Nothing ->
+      Left $ SchemaUnionFailedLookupInternalError field
+
+    Just (One schema) ->
+      case takeDefaultColumn schema of
+        DenyDefault ->
+          Left $ SchemaUnionDefaultNotAllowed field
+        AllowDefault ->
+          pure $ Field name schema
+
+    Just (Both schema0 schema1) ->
+      Field name <$> unionColumn schema0 schema1
+
+defaultOrNothing :: Map FieldName (In Column) -> Field Column -> Either SchemaUnionError (Maybe (Field Column))
+defaultOrNothing fields field@(Field name _) =
+  case Map.lookup name fields of
+    Nothing ->
+      Left $ SchemaUnionFailedLookupInternalError field
+
+    Just (One schema) ->
+      case takeDefaultColumn schema of
+        DenyDefault ->
+          Left $ SchemaUnionDefaultNotAllowed field
+        AllowDefault ->
+          pure . Just $ Field name schema
+
+    Just (Both _ _) ->
+      pure Nothing
+
+fromCons :: Cons Boxed.Vector (Field Column) -> Map FieldName Column
+fromCons =
+  Map.fromList .
+  fmap (\(Field k v) -> (k, v)) .
+  Cons.toList
+
+unionStruct ::
+     Cons Boxed.Vector (Field Column)
+  -> Cons Boxed.Vector (Field Column)
+  -> Either SchemaUnionError (Cons Boxed.Vector (Field Column))
+unionStruct cfields0 cfields1 = do
+  let
+    fields =
+      Map.mergeWithKey
+        (\_ x y -> Just (Both x y))
+        (fmap One)
+        (fmap One)
+        (fromCons cfields0)
+        (fromCons cfields1)
+
+  xs <- traverse (defaultOrUnion fields) cfields0
+  ys <- traverse (defaultOrNothing fields) cfields1
+
+  pure . Cons.unsafeFromVector $
+    Cons.toVector xs <>
+    Cons.mapMaybe id ys
+{-# INLINABLE unionStruct #-}

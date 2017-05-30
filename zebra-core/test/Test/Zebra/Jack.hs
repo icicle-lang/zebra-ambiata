@@ -41,6 +41,8 @@ module Test.Zebra.Jack (
   , columnSchemaV0
   , jExpandedTableSchema
   , jExpandedColumnSchema
+  , jContractedTableSchema
+  , jContractedColumnSchema
 
   -- * Zebra.Table.Striped
   , jSizedStriped
@@ -64,6 +66,8 @@ module Test.Zebra.Jack (
   -- * x-disorder-jack
   , trippingBoth
   , withList
+  , testEither
+  , discardLeft
   ) where
 
 import           Data.ByteString (ByteString)
@@ -83,8 +87,8 @@ import qualified Data.Vector.Unboxed as Unboxed
 import           Disorder.Corpus (muppets, southpark, boats, weather)
 import           Disorder.Jack (Jack, Property, mkJack, reshrink, shrinkTowards, sized, scale)
 import           Disorder.Jack (elements, arbitrary, choose, chooseInt, sizedBounded)
-import           Disorder.Jack (oneOf, oneOfRec, listOf, listOfN, vectorOf, justOf, maybeOf)
-import           Disorder.Jack ((===), boundedEnum, property, counterexample, shuffle)
+import           Disorder.Jack (oneOf, oneOfRec, listOf, listOfN, vectorOf, justOf, maybeOf, sublistOf)
+import           Disorder.Jack ((===), boundedEnum, property, counterexample, shuffle, discard, suchThat)
 
 import           P
 
@@ -291,6 +295,34 @@ jExpandedColumnSchema = \case
     Schema.Nested <$> jExpandedTableSchema x
   Schema.Reversed x ->
     Schema.Reversed <$> jExpandedColumnSchema x
+
+jContractedTableSchema :: Schema.Table -> Jack Schema.Table
+jContractedTableSchema = \case
+  Schema.Binary def encoding ->
+    pure $ Schema.Binary def encoding
+  Schema.Array def x ->
+    Schema.Array def <$> jContractedColumnSchema x
+  Schema.Map def k v ->
+    Schema.Map def k <$> jContractedColumnSchema v
+
+jContractedColumnSchema :: Schema.Column -> Jack Schema.Column
+jContractedColumnSchema = \case
+  Schema.Unit ->
+    pure Schema.Unit
+  Schema.Int def ->
+    pure $ Schema.Int def
+  Schema.Double def ->
+    pure $ Schema.Double def
+  Schema.Enum def vs ->
+    Schema.Enum def <$> traverse (traverse jContractedColumnSchema) vs
+  Schema.Struct def fs0 -> do
+    fs1 <- Cons.toList <$> traverse (traverse jContractedColumnSchema) fs0
+    fs2 <- sublistOf fs1 `suchThat` (not . null)
+    pure . Schema.Struct def $ Cons.unsafeFromList fs2
+  Schema.Nested x ->
+    Schema.Nested <$> jContractedTableSchema x
+  Schema.Reversed x ->
+    Schema.Reversed <$> jContractedColumnSchema x
 
 ------------------------------------------------------------------------
 
@@ -750,3 +782,14 @@ trippingBoth to from x =
 withList :: (Stream (Of a) Identity () -> Stream (Of b) (EitherT x Identity) ()) -> [a] -> Either x [b]
 withList f =
   runIdentity . runEitherT . Stream.toList_ . f . Stream.each
+
+testEither :: Show a => Either a Property -> Property
+testEither =
+  either (flip counterexample False . ppShow) property
+
+discardLeft :: Either x a -> a
+discardLeft = \case
+  Left _ ->
+    discard
+  Right a ->
+    a
