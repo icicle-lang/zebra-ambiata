@@ -1,0 +1,69 @@
+{
+  "version": "v0",
+  "schema": {
+    "map": {
+      "key": {
+        "struct": {
+          "fields": [
+            {
+              "name": "entity_hash",
+              "schema": {
+                "int": {}
+              }
+            },
+            {
+              "name": "entity_id",
+              "schema": {
+                "binary": {
+                  "encoding": { "utf8": {} }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "value": {
+        "struct": {
+          "fields": [
+            {
+              "name": "cash",
+              "schema": {
+                "double": {
+                  "default": {
+                    "allow": {}
+                  }
+                }
+              }
+            },
+            {
+              "name": "item",
+              "schema": {
+                "enum": {
+                  "variants": [
+                    {
+                      "name": "none",
+                      "schema": {
+                        "unit": {}
+                      }
+                    },
+                    {
+                      "name": "some",
+                      "schema": {
+                        "binary": {
+                          "encoding": { "utf8": {} }
+                        }
+                      }
+                    }
+                  ],
+                  "default": {
+                    "allow": {}
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

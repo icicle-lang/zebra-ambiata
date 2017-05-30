@@ -1,0 +1,82 @@
+=== Schema ===
+{
+  "version": "v0",
+  "schema": {
+    "map": {
+      "key": {
+        "struct": {
+          "fields": [
+            {
+              "name": "entity_hash",
+              "schema": {
+                "int": {}
+              }
+            },
+            {
+              "name": "entity_id",
+              "schema": {
+                "binary": {
+                  "encoding": {
+                    "utf8": {}
+                  }
+                }
+              }
+            }
+          ]
+        }
+      },
+      "value": {
+        "struct": {
+          "fields": [
+            {
+              "name": "cash",
+              "schema": {
+                "double": {
+                  "default": {
+                    "allow": {}
+                  }
+                }
+              }
+            },
+            {
+              "name": "item",
+              "schema": {
+                "enum": {
+                  "variants": [
+                    {
+                      "name": "none",
+                      "schema": {
+                        "unit": {}
+                      }
+                    },
+                    {
+                      "name": "some",
+                      "schema": {
+                        "binary": {
+                          "encoding": {
+                            "utf8": {}
+                          }
+                        }
+                      }
+                    }
+                  ],
+                  "default": {
+                    "allow": {}
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}
+
+=== Data ===
+{"key":{"entity_hash":10,"entity_id":"barney"},"value":{"item":{"none":{}},"cash":27.6}}
+{"key":{"entity_hash":10,"entity_id":"homer"},"value":{"item":{"none":{}},"cash":6.1}}
+{"key":{"entity_hash":20,"entity_id":"marge"},"value":{"item":{"none":{}},"cash":45.1}}
+{"key":{"entity_hash":30,"entity_id":"lisa"},"value":{"item":{"some":"saxophone"},"cash":5}}
+{"key":{"entity_hash":50,"entity_id":"bart"},"value":{"item":{"some":"skateboard"},"cash":27}}
+{"key":{"entity_hash":50,"entity_id":"millhouse"},"value":{"item":{"none":{}},"cash":19}}

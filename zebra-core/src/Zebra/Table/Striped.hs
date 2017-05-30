@@ -88,7 +88,7 @@ import           Zebra.Table.Data
 import qualified Zebra.Table.Encoding as Encoding
 import           Zebra.Table.Logical (LogicalSchemaError, LogicalMergeError)
 import qualified Zebra.Table.Logical as Logical
-import           Zebra.Table.Schema (SchemaError(..))
+import           Zebra.Table.Schema (SchemaError(..), SchemaUnionError)
 import qualified Zebra.Table.Schema as Schema
 import           Zebra.X.Stream (Stream, Of)
 import qualified Zebra.X.Stream as Stream
@@ -116,9 +116,11 @@ data Column =
 data StripedError =
     StripedLogicalSchemaError !LogicalSchemaError
   | StripedLogicalMergeError !LogicalMergeError
+  | StripedFieldCountMismatch !Int !(Cons Boxed.Vector (Field (Schema.Column)))
   | StripedNoValueForEnumTag !Tag !(Cons Boxed.Vector Logical.Value)
   | StripedNestedLengthMismatch !Schema.Table !SegmentError
   | StripedDefaultFieldNotAllowed !(Field Schema.Column)
+  | StripedSchemaUnionError !SchemaUnionError
   | StripedTransmuteMapKeyNotAllowed !Schema.Table !Schema.Table
   | StripedTransmuteTableMismatch !Schema.Table !Schema.Table
   | StripedTransmuteColumnMismatch !Schema.Column !Schema.Column
@@ -136,6 +138,14 @@ renderStripedError = \case
   StripedLogicalMergeError err ->
     Logical.renderLogicalMergeError err
 
+  StripedFieldCountMismatch n fields ->
+    "Cannot convert from logical struct with <" <>
+    Text.pack (show n) <>
+    "> fields, schema had <" <>
+    Text.pack (show (Cons.length fields)) <>
+    ">: " <>
+    ppField "fields" fields
+
   StripedNoValueForEnumTag tag values ->
     "Cannot construct enum with <" <>
     Text.pack (show tag) <>
@@ -149,6 +159,9 @@ renderStripedError = \case
   StripedDefaultFieldNotAllowed (Field name value) ->
     "Schema did not allow defaulting of struct field:" <>
     ppField (unFieldName name) value
+
+  StripedSchemaUnionError err ->
+    Schema.renderSchemaUnionError err
 
   StripedTransmuteMapKeyNotAllowed x y ->
     "Cannot transmute the key of a map, it could invalidate the ordering invariant:" <>
@@ -448,6 +461,10 @@ fromValues cschema values =
 
         Schema.Struct def fs -> do
           xss <- Cons.transpose <$> traverse (first StripedLogicalSchemaError . Logical.takeStruct) values1
+
+          when (Cons.length fs /= Cons.length xss) $
+            Left $ StripedFieldCountMismatch (Cons.length xss) fs
+
           Struct def
             <$> Cons.zipWithM fromField fs (fmap Cons.toVector xss)
 
@@ -653,18 +670,24 @@ splitAtColumn i = \case
 -- | /O(sorry)/
 merges :: Cons Boxed.Vector Table -> Either StripedError Table
 merges xss = do
-  vss <- Cons.mapM toLogical xss
+  s <- first StripedSchemaUnionError . Cons.fold1M' Schema.union $ fmap schema xss
+
+  vss <- Cons.mapM (bind toLogical . transmute s) xss
   vs <- first StripedLogicalMergeError $ Cons.fold1M' Logical.merge vss
-  fromLogical (schema $ Cons.head xss) vs
+
+  fromLogical s vs
 {-# INLINABLE merges #-}
 
 -- | /O(no)/
 merge :: Table -> Table -> Either StripedError Table
 merge x0 x1 = do
-  c0 <- toLogical x0
-  c1 <- toLogical x1
+  s2 <- first StripedSchemaUnionError $ Schema.union (schema x0) (schema x1)
+
+  c0 <- toLogical =<< transmute s2 x0
+  c1 <- toLogical =<< transmute s2 x1
   c2 <- first StripedLogicalMergeError $ Logical.merge c0 c1
-  fromLogical (schema x0) c2
+
+  fromLogical s2 c2
 {-# INLINABLE merge #-}
 
 ------------------------------------------------------------------------
