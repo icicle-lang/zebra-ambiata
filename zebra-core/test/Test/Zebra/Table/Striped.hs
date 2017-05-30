@@ -5,7 +5,7 @@ module Test.Zebra.Table.Striped where
 
 import           Disorder.Jack (Property)
 import           Disorder.Jack ((===), gamble, tripping, arbitrary, counterexample, discard)
-import           Disorder.Jack (listOf1, choose, conjoin, property)
+import           Disorder.Jack (listOf1, choose, conjoin)
 import           Disorder.Core (ExpectedTestSpeed(..), disorderCheckEnvAll)
 
 import           Data.Functor.Identity (runIdentity)
@@ -150,17 +150,6 @@ prop_transmute_expand =
         , counterexample "=== Roundtrip Table ===" $
             (Striped.transmute schema0 =<< Striped.transmute schema table0) === Right table0
         ]
-
-testEither :: Show a => Either a Property -> Property
-testEither =
-  either (flip counterexample False . ppShow) property
-
-discardLeft :: Either x a -> a
-discardLeft = \case
-  Left _ ->
-    discard
-  Right a ->
-    a
 
 prop_transmute_merge :: Property
 prop_transmute_merge =
