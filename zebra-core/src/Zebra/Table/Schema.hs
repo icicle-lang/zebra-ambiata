@@ -32,6 +32,11 @@ module Zebra.Table.Schema (
   , takeNested
   , takeReversed
   , takeOption
+
+  , takeDefault
+  , takeDefaultColumn
+  , withDefault
+  , withDefaultColumn
   ) where
 
 import qualified Data.Text as Text
@@ -214,3 +219,61 @@ takeOption x0 = do
     _ ->
       Left $ SchemaExpectedOption vs
 {-# INLINE takeOption #-}
+
+------------------------------------------------------------------------
+
+takeDefault :: Table -> Default
+takeDefault = \case
+  Binary def _ ->
+    def
+  Array def _ ->
+    def
+  Map def _ _ ->
+    def
+{-# INLINABLE takeDefault #-}
+
+takeDefaultColumn :: Column -> Default
+takeDefaultColumn = \case
+  Unit ->
+    AllowDefault
+  Int def ->
+    def
+  Double def ->
+    def
+  Enum def _ ->
+    def
+  Struct def _ ->
+    def
+  Nested x ->
+    takeDefault x
+  Reversed x ->
+    takeDefaultColumn x
+{-# INLINABLE takeDefaultColumn #-}
+
+withDefault :: Default -> Table -> Table
+withDefault def = \case
+  Binary _ encoding ->
+    Binary def encoding
+  Array _ x ->
+    Array def x
+  Map _ k v ->
+    Map def k v
+{-# INLINABLE withDefault #-}
+
+withDefaultColumn :: Default -> Column -> Column
+withDefaultColumn def = \case
+  Unit ->
+    Unit
+  Int _ ->
+    Int def
+  Double _ ->
+    Double def
+  Enum _ vs ->
+    Enum def vs
+  Struct _ fs ->
+    Struct def fs
+  Nested x ->
+    Nested $ withDefault def x
+  Reversed x ->
+    Reversed $ withDefaultColumn def x
+{-# INLINABLE withDefaultColumn #-}
