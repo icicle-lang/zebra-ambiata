@@ -18,14 +18,11 @@ import           Control.Monad.Trans.Class (lift)
 import qualified Data.List as List
 import           Data.Map (Map)
 import qualified Data.Map.Strict as Map
-import qualified Data.Text as Text
 import qualified Data.Vector as Boxed
 
 import           GHC.Types (SPEC(..))
 
 import           P
-
-import           Text.Show.Pretty (ppShow)
 
 import           X.Control.Monad.Trans.Either (EitherT, hoistEither, left)
 import           X.Data.Vector.Cons (Cons)
@@ -33,6 +30,7 @@ import qualified X.Data.Vector.Cons as Cons
 
 import           Zebra.Table.Logical (LogicalSchemaError, LogicalMergeError)
 import qualified Zebra.Table.Logical as Logical
+import           Zebra.Table.Schema (SchemaUnionError)
 import qualified Zebra.Table.Schema as Schema
 import           Zebra.Table.Striped (StripedError)
 import qualified Zebra.Table.Striped as Striped
@@ -57,7 +55,7 @@ data UnionTableError =
   | UnionStripedError !StripedError
   | UnionLogicalSchemaError !LogicalSchemaError
   | UnionLogicalMergeError !LogicalMergeError
-  | UnionSchemaMismatch !Schema.Table !Schema.Table
+  | UnionSchemaError !SchemaUnionError
     deriving (Eq, Show)
 
 renderUnionTableError :: UnionTableError -> Text
@@ -70,29 +68,16 @@ renderUnionTableError = \case
     Logical.renderLogicalSchemaError err
   UnionLogicalMergeError err ->
     Logical.renderLogicalMergeError err
-  UnionSchemaMismatch schema0 wrong ->
-    "Cannot merge files with incompatible schemas." <>
-    "\n" <>
-    "\n  first file's schema =" <>
-    Text.pack (List.concatMap ("\n    " <>) . List.lines $ ppShow schema0) <>
-    "\n  mismatched schema =" <>
-    Text.pack (List.concatMap ("\n    " <>) . List.lines $ ppShow wrong)
+  UnionSchemaError err ->
+    Schema.renderSchemaUnionError err
 
 ------------------------------------------------------------------------
 -- General
 
-takeSchema :: Cons Boxed.Vector Schema.Table -> Either UnionTableError Schema.Table
-takeSchema inputs =
-  let
-    (schema0, schemas) =
-      Cons.uncons inputs
-  in
-    case Boxed.find (/= schema0) schemas of
-      Nothing ->
-        pure schema0
-      Just wrong ->
-        Left $ UnionSchemaMismatch schema0 wrong
-{-# INLINABLE takeSchema #-}
+unionSchemas :: Cons Boxed.Vector Schema.Table -> Either UnionTableError Schema.Table
+unionSchemas =
+  first UnionSchemaError . Cons.fold1M' Schema.union
+{-# INLINABLE unionSchemas #-}
 
 peekHead :: Monad m => Stream (Of x) m r -> EitherT UnionTableError m (x, Stream (Of x) m r)
 peekHead input = do
@@ -220,11 +205,13 @@ unionStriped ::
   -> Stream (Of Striped.Table) (EitherT UnionTableError m) ()
 unionStriped inputs0 = do
   (heads, inputs1) <- fmap Cons.unzip . lift $ traverse peekHead inputs0
-  schema <- lift . hoistEither . takeSchema $ fmap Striped.schema heads
+  schema <- lift . hoistEither . unionSchemas $ fmap Striped.schema heads
 
   let
     fromStriped =
-      Stream.mapM (hoistEither . first UnionStripedError . Striped.toLogical) . hoist lift
+      Stream.mapM (hoistEither . first UnionStripedError . Striped.toLogical) .
+      Stream.mapM (hoistEither . first UnionStripedError . Striped.transmute schema) .
+      hoist lift
 
   hoist squash .
     Stream.mapM (hoistEither . first UnionStripedError . Striped.fromLogical schema) $
