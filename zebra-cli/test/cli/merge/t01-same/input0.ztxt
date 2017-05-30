@@ -1,0 +1,3 @@
+{ "key": { "entity_hash": 10, "entity_id": "barney" }, "value": { "cash": 27.6, "item": { "none": {} } } }
+{ "key": { "entity_hash": 10, "entity_id": "homer" }, "value": { "cash": 6.1, "item": { "none": {} } } }
+{ "key": { "entity_hash": 20, "entity_id": "marge" }, "value": { "cash": 45.1, "item": { "none": {} } } }

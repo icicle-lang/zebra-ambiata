@@ -1,0 +1,16 @@
+#!/bin/sh -eu
+
+ZBIN0=$ZEBRA_TEMP/intermediate0.zbin
+ZBIN1=$ZEBRA_TEMP/intermediate1.zbin
+MERGED=$ZEBRA_TEMP/merged.zbin
+
+$ZEBRA import input0.ztxt --schema input.zschema --output $ZBIN0
+$ZEBRA import input1.ztxt --schema input.zschema --output $ZBIN1
+$ZEBRA merge $ZBIN0 $ZBIN1 -o $MERGED --output-v3
+
+echo "=== Schema ==="
+$ZEBRA export $MERGED --schema-stdout
+
+echo
+echo "=== Data ==="
+$ZEBRA export $MERGED --output-stdout

@@ -1,0 +1,3 @@
+{ "key": { "entity_hash": 30, "entity_id": "lisa" }, "value": { "cash": 5, "item": { "some": "saxophone" } } }
+{ "key": { "entity_hash": 50, "entity_id": "bart" }, "value": { "cash": 27, "item": { "some": "skateboard" } } }
+{ "key": { "entity_hash": 50, "entity_id": "millhouse" }, "value": { "cash": 19, "item": { "none": {} } } }
