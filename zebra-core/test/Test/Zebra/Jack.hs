@@ -196,7 +196,7 @@ columnSchemaColumns = \case
 tableSchemaV0 :: Schema.Table -> Schema.Table
 tableSchemaV0 = \case
   Schema.Binary _ _ ->
-    Schema.Binary DenyDefault Nothing
+    Schema.Binary DenyDefault Encoding.Binary
   Schema.Array _ x ->
     Schema.Array DenyDefault $ columnSchemaV0 x
   Schema.Map _ k v ->
@@ -236,11 +236,11 @@ jDefault =
     , AllowDefault
     ]
 
-jBinaryEncoding :: Jack (Maybe Encoding.Binary)
+jBinaryEncoding :: Jack Encoding.Binary
 jBinaryEncoding =
   elements [
-      Nothing
-    , Just Encoding.Utf8
+      Encoding.Binary
+    , Encoding.Utf8
     ]
 
 jMapSchema :: Jack Schema.Table
@@ -432,9 +432,9 @@ jStripedBinary  :: Int -> Jack Striped.Table
 jStripedBinary n = do
   encoding <- jBinaryEncoding
   case encoding of
-    Nothing ->
+    Encoding.Binary ->
       Striped.Binary <$> jDefault <*> pure encoding <*> jByteString n
-    Just Encoding.Utf8 ->
+    Encoding.Utf8 ->
       -- FIXME This will work out strangely for tests that have nested binary
       -- FIXME as we might get nonsense when we slice a utf-8 string, but the
       -- FIXME tests which generate striped tables don't care at the moment.
@@ -535,9 +535,9 @@ jSizedLogical1 schema =
 jLogical :: Schema.Table -> Int -> Jack Logical.Table
 jLogical tschema n =
   case tschema of
-    Schema.Binary _ Nothing ->
+    Schema.Binary _ Encoding.Binary ->
       Logical.Binary <$> jByteString n
-    Schema.Binary _ (Just Encoding.Utf8) ->
+    Schema.Binary _ Encoding.Utf8 ->
       Logical.Binary <$> jUtf8 n
     Schema.Array _ x ->
       Logical.Array . Boxed.fromList <$> vectorOf n (jLogicalValue x)

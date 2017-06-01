@@ -29,7 +29,8 @@ import           Text.Printf (printf)
 
 
 data Binary =
-    Utf8
+    Binary
+  | Utf8
     deriving (Eq, Ord, Show, Generic)
 
 data Utf8Error =
@@ -44,11 +45,11 @@ renderUtf8Error = \case
     Text.pack $
       printf "Not valid UTF-8, cannot decode byte 0x%02x: %s" byte msg
 
-validateBinary :: Maybe Binary -> ByteString -> Either Utf8Error ()
+validateBinary :: Binary -> ByteString -> Either Utf8Error ()
 validateBinary = \case
-  Nothing ->
+  Binary ->
     const $ pure ()
-  Just Utf8 ->
+  Utf8 ->
     validateUtf8
 
 -- FIXME replace with something that doesn't allocate

@@ -94,7 +94,7 @@ entityIdColumn xs =
       fmap (fromIntegral . ByteString.length . unEntityId . entityId) xs
 
     bytes =
-      Striped.Binary DenyDefault (Just Encoding.Utf8) .
+      Striped.Binary DenyDefault Encoding.Utf8 .
       ByteString.concat .
       Boxed.toList $
       fmap (unEntityId . entityId) xs
@@ -426,7 +426,7 @@ tableSchemaOfAttributes attrs0 =
     Schema.Map DenyDefault
       (Schema.Struct DenyDefault $ Cons.from2
         (Field "entity_hash" $ Schema.Int DenyDefault)
-        (Field "entity_id" . Schema.Nested . Schema.Binary DenyDefault $ Just Encoding.Utf8))
+        (Field "entity_id" . Schema.Nested $ Schema.Binary DenyDefault Encoding.Utf8))
       attrs
 
 ------------------------------------------------------------------------

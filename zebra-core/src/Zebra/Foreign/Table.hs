@@ -170,22 +170,22 @@ pokeDefault ptr = \case
   AllowDefault ->
     pokeIO ptr C'ZEBRA_DEFAULT_ALLOW
 
-peekBinaryEncoding :: MonadIO m => Ptr C'zebra_binary_encoding -> EitherT ForeignError m (Maybe Encoding.Binary)
+peekBinaryEncoding :: MonadIO m => Ptr C'zebra_binary_encoding -> EitherT ForeignError m Encoding.Binary
 peekBinaryEncoding ptr = do
   encoding <- peekIO ptr
   case encoding of
     C'ZEBRA_BINARY_NONE ->
-      pure Nothing
+      pure Encoding.Binary
     C'ZEBRA_BINARY_UTF8 ->
-      pure $ Just Encoding.Utf8
+      pure Encoding.Utf8
     _ ->
       left $ ForeignInvalidBinaryEncoding (fromIntegral encoding)
 
-pokeBinaryEncoding :: MonadIO m => Ptr C'zebra_binary_encoding -> Maybe Encoding.Binary -> m ()
+pokeBinaryEncoding :: MonadIO m => Ptr C'zebra_binary_encoding -> Encoding.Binary -> m ()
 pokeBinaryEncoding ptr = \case
-  Nothing ->
+  Encoding.Binary ->
     pokeIO ptr C'ZEBRA_BINARY_NONE
-  Just Encoding.Utf8 ->
+  Encoding.Utf8 ->
     pokeIO ptr C'ZEBRA_BINARY_UTF8
 
 peekColumn :: MonadIO m => Int -> Ptr C'zebra_column -> EitherT ForeignError m Striped.Column

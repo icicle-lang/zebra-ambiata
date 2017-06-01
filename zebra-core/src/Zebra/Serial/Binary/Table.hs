@@ -105,7 +105,7 @@ getTable version n = \case
       <*> getColumn version n v
 {-# INLINABLE getTable #-}
 
-validateBinary :: Maybe Encoding.Binary -> ByteString -> Get ByteString
+validateBinary :: Encoding.Binary -> ByteString -> Get ByteString
 validateBinary encoding bs =
   case Encoding.validateBinary encoding bs of
     Left err ->

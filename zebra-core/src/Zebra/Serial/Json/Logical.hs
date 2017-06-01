@@ -100,10 +100,10 @@ decodeLogicalValue schema =
 pTable :: Schema.Table -> Aeson.Value -> Aeson.Parser Logical.Table
 pTable schema =
   case schema of
-    Schema.Binary _ Nothing ->
+    Schema.Binary _ Encoding.Binary ->
       fmap Logical.Binary . pBinary
 
-    Schema.Binary _ (Just Encoding.Utf8) ->
+    Schema.Binary _ Encoding.Utf8 ->
       fmap (Logical.Binary . Text.encodeUtf8) . pText
 
     Schema.Array _ element ->
@@ -118,12 +118,12 @@ pTable schema =
 ppTable :: Schema.Table -> Logical.Table -> Either JsonLogicalEncodeError Aeson.Value
 ppTable schema table0 =
   case schema of
-    Schema.Binary _ Nothing
+    Schema.Binary _ Encoding.Binary
       | Logical.Binary bs <- table0
       ->
         pure $ ppBinary bs
 
-    Schema.Binary _ (Just Encoding.Utf8)
+    Schema.Binary _ Encoding.Utf8
       | Logical.Binary bs <- table0
       -> do
         fmap ppText . first JsonLogicalEncodeUtf8 $ Encoding.decodeUtf8 bs

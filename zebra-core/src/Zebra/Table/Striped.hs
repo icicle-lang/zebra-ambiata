@@ -98,7 +98,7 @@ import qualified Zebra.X.Vector.Storable as Storable
 
 
 data Table =
-    Binary !Default !(Maybe Encoding.Binary) !ByteString
+    Binary !Default !Encoding.Binary !ByteString
   | Array !Default !Column
   | Map !Default !Column !Column
     deriving (Eq, Ord, Show, Generic)
@@ -302,7 +302,7 @@ emptyColumn = \case
 
 ------------------------------------------------------------------------
 
-takeBinary :: Table -> Either SchemaError (Default, Maybe Encoding.Binary, ByteString)
+takeBinary :: Table -> Either SchemaError (Default, Encoding.Binary, ByteString)
 takeBinary = \case
   Binary def encoding x ->
     Right (def, encoding, x)
