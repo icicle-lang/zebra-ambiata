@@ -66,7 +66,7 @@ import qualified Zebra.Table.Encoding as Encoding
 
 
 data Table =
-    Binary !Default !(Maybe Encoding.Binary)
+    Binary !Default !Encoding.Binary
   | Array !Default !Column
   | Map !Default !Column !Column
     deriving (Eq, Ord, Show, Generic)
@@ -189,7 +189,7 @@ option def =
 
 ------------------------------------------------------------------------
 
-takeBinary :: Table -> Either SchemaError (Default, Maybe Encoding.Binary)
+takeBinary :: Table -> Either SchemaError (Default, Encoding.Binary)
 takeBinary = \case
   Binary def encoding ->
     Right (def, encoding)

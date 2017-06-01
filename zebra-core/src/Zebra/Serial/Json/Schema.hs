@@ -83,7 +83,7 @@ pTableSchemaV0 =
   pEnum $ \case
     "binary" ->
       pure . const . pure $
-        Schema.Binary DenyDefault Nothing
+        Schema.Binary DenyDefault Encoding.Binary
     "array" ->
       pure . Aeson.withObject "object containing array schema" $ \o ->
         Schema.Array DenyDefault
@@ -228,7 +228,7 @@ pTableVariantV1 = \case
     pure . Aeson.withObject "object containing binary schema" $ \o ->
       Schema.Binary
         <$> pDefaultFieldV1 o
-        <*> withOptionalField "encoding" o pBinaryEncodingV1
+        <*> pBinaryEncodingFieldV1 o
   "array" ->
     pure . Aeson.withObject "object containing array schema" $ \o ->
       Schema.Array
@@ -246,14 +246,10 @@ pTableVariantV1 = \case
 
 ppTableSchemaV1 :: Schema.Table -> Aeson.Value
 ppTableSchemaV1 = \case
-  Schema.Binary def mencoding ->
+  Schema.Binary def encoding ->
     ppEnum . Variant "binary" . Aeson.object $
       ppDefaultFieldV1 def <>
-      case mencoding of
-        Nothing ->
-          []
-        Just encoding ->
-          [ "encoding" .= ppBinaryEncodingV1 encoding ]
+      ppBinaryEncodingFieldV1 encoding
   Schema.Array def e ->
     ppEnum . Variant "array" . Aeson.object $
       ppDefaultFieldV1 def <> [
@@ -300,9 +296,25 @@ ppDefaultV1 = \case
     ppEnum $ Variant "allow" ppUnit
 {-# INLINABLE ppDefaultV1 #-}
 
+pBinaryEncodingFieldV1 :: Aeson.Object -> Aeson.Parser Encoding.Binary
+pBinaryEncodingFieldV1 o =
+  fromMaybe Encoding.Binary
+    <$> withOptionalField "encoding" o pBinaryEncodingV1
+{-# INLINABLE pBinaryEncodingFieldV1 #-}
+
+ppBinaryEncodingFieldV1 :: Encoding.Binary -> [Aeson.Pair]
+ppBinaryEncodingFieldV1 = \case
+  Encoding.Binary ->
+    []
+  x ->
+    [ "encoding" .= ppBinaryEncodingV1 x ]
+{-# INLINABLE ppBinaryEncodingFieldV1 #-}
+
 pBinaryEncodingV1 :: Aeson.Value -> Aeson.Parser Encoding.Binary
 pBinaryEncodingV1 =
   pEnum $ \case
+    "binary" ->
+      pure . const $ pure Encoding.Binary
     "utf8" ->
       pure . const $ pure Encoding.Utf8
     _ ->
@@ -311,6 +323,8 @@ pBinaryEncodingV1 =
 
 ppBinaryEncodingV1 :: Encoding.Binary -> Aeson.Value
 ppBinaryEncodingV1 = \case
+  Encoding.Binary ->
+    ppEnum $ Variant "binary" ppUnit
   Encoding.Utf8 ->
     ppEnum $ Variant "utf8" ppUnit
 {-# INLINABLE ppBinaryEncodingV1 #-}
