@@ -56,7 +56,7 @@ bColumn version = \case
   Striped.Unit _ ->
     pure $ mempty
 
-  Striped.Int _def xs ->
+  Striped.Int _def _encoding xs ->
     pure $ bIntArray xs
 
   Striped.Double _def xs ->
@@ -122,8 +122,8 @@ getColumn version n = \case
   Schema.Unit ->
     pure $ Striped.Unit n
 
-  Schema.Int def ->
-    Striped.Int def
+  Schema.Int def encoding ->
+    Striped.Int def encoding
       <$> getIntArray n
 
   Schema.Double def ->

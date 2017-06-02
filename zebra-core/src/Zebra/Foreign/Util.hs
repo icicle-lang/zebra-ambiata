@@ -57,6 +57,7 @@ data ForeignError =
   | ForeignInvalidTableType
   | ForeignInvalidDefault !Int
   | ForeignInvalidBinaryEncoding !Int
+  | ForeignInvalidIntEncoding !Int
   | ForeignAttributeNotFound
   | ForeignNotEnoughBytes
   | ForeignNotEnoughRows

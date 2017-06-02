@@ -84,7 +84,9 @@ renderBlockTableError = \case
 
 entityHashColumn :: Boxed.Vector BlockEntity -> Striped.Column
 entityHashColumn =
-  Striped.Int DenyDefault . Storable.convert . fmap (fromIntegral . unEntityHash . entityHash)
+  Striped.Int DenyDefault Encoding.Int .
+  Storable.convert .
+  fmap (fromIntegral . unEntityHash . entityHash)
 
 entityIdColumn :: Boxed.Vector BlockEntity -> Striped.Column
 entityIdColumn xs =
@@ -148,11 +150,16 @@ distributeIndices done0 entities indices columns =
 
 timeColumn :: Unboxed.Vector BlockIndex -> Striped.Column
 timeColumn =
-  Striped.Int DenyDefault . Storable.convert . Unboxed.map (unTime . indexTime)
+  Striped.Int DenyDefault Encoding.TimeSeconds .
+  Storable.convert .
+  Unboxed.map (unTime . indexTime)
 
 factsetColumn :: Unboxed.Vector BlockIndex -> Striped.Column
 factsetColumn =
-  Striped.Reversed . Striped.Int DenyDefault . Storable.convert . Unboxed.map (unFactsetId . indexFactsetId)
+  Striped.Reversed .
+  Striped.Int DenyDefault Encoding.Int .
+  Storable.convert .
+  Unboxed.map (unFactsetId . indexFactsetId)
 
 tombstoneTags :: Unboxed.Vector BlockIndex -> Storable.Vector Tag
 tombstoneTags =
@@ -243,7 +250,7 @@ tableOfBlock names block = do
 takeEntityHash :: Striped.Column -> Either BlockTableError (Boxed.Vector EntityHash)
 takeEntityHash =
   first BlockTableSchemaError .
-  fmap (fmap (EntityHash . fromIntegral) . Boxed.convert . snd) .
+  fmap (fmap (EntityHash . fromIntegral) . Boxed.convert . (\(_,_,x) -> x)) .
   Striped.takeInt
 
 takeEntityId :: Striped.Column -> Either BlockTableError (Boxed.Vector EntityId)
@@ -305,12 +312,15 @@ takeEntities key0 value0 = do
 
 takeTime :: Striped.Column -> Either BlockTableError (Unboxed.Vector Time)
 takeTime =
-  fmap (Unboxed.map Time . Unboxed.convert . snd) . first BlockTableSchemaError . Striped.takeInt
+  fmap (Unboxed.map Time . Unboxed.convert . (\(_,_,x) -> x)) .
+  first BlockTableSchemaError .
+  Striped.takeInt
 
 takeFactsetId :: Striped.Column -> Either BlockTableError (Unboxed.Vector FactsetId)
 takeFactsetId column0 = do
   column <- first BlockTableSchemaError $ Striped.takeReversed column0
-  fmap (Unboxed.map FactsetId . Unboxed.convert . snd) . first BlockTableSchemaError $ Striped.takeInt column
+  fmap (Unboxed.map FactsetId . Unboxed.convert . (\(_,_,x) -> x)) . first BlockTableSchemaError $
+    Striped.takeInt column
 
 takeIndexKey :: Striped.Column -> Either BlockTableError (Unboxed.Vector  (Time, FactsetId))
 takeIndexKey column = do
@@ -402,8 +412,8 @@ fromAttribute (AttributeName name) column =
   Field (FieldName name) . Schema.Nested $
     Schema.Map AllowDefault
       (Schema.Struct DenyDefault $ Cons.from2
-        (Field "time" $ Schema.Int DenyDefault )
-        (Field "factset_id" . Schema.Reversed $ Schema.Int DenyDefault))
+        (Field "time" $ Schema.Int DenyDefault Encoding.TimeSeconds)
+        (Field "factset_id" . Schema.Reversed $ Schema.Int DenyDefault Encoding.Int))
       (Schema.Nested . Schema.Array DenyDefault $ Schema.option DenyDefault column)
 
 fromFields :: Boxed.Vector (Field Schema.Column) -> Schema.Column
@@ -425,7 +435,7 @@ tableSchemaOfAttributes attrs0 =
   in
     Schema.Map DenyDefault
       (Schema.Struct DenyDefault $ Cons.from2
-        (Field "entity_hash" $ Schema.Int DenyDefault)
+        (Field "entity_hash" $ Schema.Int DenyDefault Encoding.Int)
         (Field "entity_id" . Schema.Nested $ Schema.Binary DenyDefault Encoding.Utf8))
       attrs
 
@@ -438,7 +448,7 @@ takeAttribute (Field (FieldName name) column) = do
   (_, k, v) <- first BlockTableSchemaError $ Schema.takeMap kv_table
   (_, k_fields) <- first BlockTableSchemaError $ Schema.takeStruct k
   case Cons.toList k_fields of
-    [Field "time" (Schema.Int _), Field "factset_id" (Schema.Reversed (Schema.Int _))] -> do
+    [Field "time" (Schema.Int _ _), Field "factset_id" (Schema.Reversed (Schema.Int _ _))] -> do
       v_table <- first BlockTableSchemaError $ Schema.takeNested v
       (_, v_array) <- first BlockTableSchemaError $ Schema.takeArray v_table
       (_, v_some) <- first BlockTableSchemaError $ Schema.takeOption v_array
@@ -460,7 +470,7 @@ attributesOfTableSchema table = do
   (_, k, v) <- first BlockTableSchemaError $ Schema.takeMap table
   (_, k_fields) <- first BlockTableSchemaError $ Schema.takeStruct k
   case Cons.toList k_fields of
-    [Field "entity_hash" (Schema.Int _), Field "entity_id" (Schema.Nested (Schema.Binary _ _))] -> do
+    [Field "entity_hash" (Schema.Int _ _), Field "entity_id" (Schema.Nested (Schema.Binary _ _))] -> do
       v_fields <- takeFields v
       attrs <- traverse takeAttribute v_fields
       pure . Map.fromList $ Boxed.toList attrs

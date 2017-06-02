@@ -1,8 +1,13 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 module Test.Zebra.Jack (
-  -- -- * Zebra.Factset.Block
-    jBlock
+  -- * Zebra.Time
+    jTime
+  , jDate
+  , jTimeOfDay
+
+  -- * Zebra.Factset.Block
+  , jBlock
   , jYoloBlock
   , jBlockEntity
   , jBlockAttribute
@@ -15,8 +20,8 @@ module Test.Zebra.Jack (
   , jEntityHashId
   , jAttributeId
   , jAttributeName
-  , jTime
-  , jDay
+  , jFactsetTime
+  , jFactsetDay
   , jFactsetId
 
   -- * Zebra.Factset.Entity
@@ -79,7 +84,7 @@ import qualified Data.List as List
 import qualified Data.Map as Map
 import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
-import           Data.Thyme.Calendar (Year, Day, YearMonthDay(..), gregorianValid)
+import qualified Data.Thyme.Calendar as Thyme
 import qualified Data.Vector as Boxed
 import qualified Data.Vector.Storable as Storable
 import qualified Data.Vector.Unboxed as Unboxed
@@ -105,7 +110,7 @@ import           X.Data.Vector.Cons (Cons)
 import qualified X.Data.Vector.Cons as Cons
 
 import           Zebra.Factset.Block
-import           Zebra.Factset.Data
+import qualified Zebra.Factset.Data as Factset
 import           Zebra.Factset.Entity
 import           Zebra.Factset.Fact
 import           Zebra.Serial.Binary.Data
@@ -114,8 +119,23 @@ import qualified Zebra.Table.Encoding as Encoding
 import qualified Zebra.Table.Logical as Logical
 import qualified Zebra.Table.Schema as Schema
 import qualified Zebra.Table.Striped as Striped
+import           Zebra.Time
 import           Zebra.X.Stream (Stream, Of)
 import qualified Zebra.X.Stream as Stream
+
+------------------------------------------------------------------------
+
+jDate :: Jack Date
+jDate =
+  justOf (rightToMaybe . fromDays <$> choose (toDays minBound, toDays maxBound))
+
+jTime :: Jack Time
+jTime =
+  justOf (rightToMaybe . fromMicroseconds <$> choose (toMicroseconds minBound, toMicroseconds maxBound))
+
+jTimeOfDay :: Jack TimeOfDay
+jTimeOfDay =
+  toTimeOfDay <$> choose (0, 24 * 60 * 60 * 1000000)
 
 ------------------------------------------------------------------------
 
@@ -160,7 +180,7 @@ columnSchemaTables :: Schema.Column -> [Schema.Table]
 columnSchemaTables = \case
   Schema.Unit ->
     []
-  Schema.Int _ ->
+  Schema.Int _ _ ->
     []
   Schema.Double _ ->
     []
@@ -179,7 +199,7 @@ columnSchemaColumns :: Schema.Column -> [Schema.Column]
 columnSchemaColumns = \case
   Schema.Unit ->
     []
-  Schema.Int _ ->
+  Schema.Int _ _ ->
     []
   Schema.Double _ ->
     []
@@ -206,8 +226,8 @@ columnSchemaV0 :: Schema.Column -> Schema.Column
 columnSchemaV0 = \case
   Schema.Unit ->
     Schema.Unit
-  Schema.Int _ ->
-    Schema.Int DenyDefault
+  Schema.Int _ _ ->
+    Schema.Int DenyDefault Encoding.Int
   Schema.Double _ ->
     Schema.Double DenyDefault
   Schema.Enum _ variants ->
@@ -251,13 +271,23 @@ jColumnSchema :: Jack Schema.Column
 jColumnSchema =
   reshrink columnSchemaColumns $
   oneOfRec [
-      Schema.Int <$> jDefault
+      Schema.Int <$> jDefault <*> jIntEncoding
     , Schema.Double <$> jDefault
     ] [
       Schema.Enum <$> jDefault <*> smallConsUniqueBy variantName (jVariant jColumnSchema)
     , Schema.Struct <$> jDefault <*> smallConsUniqueBy fieldName (jField jColumnSchema)
     , Schema.Nested <$> jTableSchema
     , Schema.Reversed <$> jColumnSchema
+    ]
+
+jIntEncoding :: Jack Encoding.Int
+jIntEncoding =
+  elements [
+      Encoding.Int
+    , Encoding.Date
+    , Encoding.TimeSeconds
+    , Encoding.TimeMilliseconds
+    , Encoding.TimeMicroseconds
     ]
 
 ------------------------------------------------------------------------
@@ -275,8 +305,8 @@ jExpandedColumnSchema :: Schema.Column -> Jack Schema.Column
 jExpandedColumnSchema = \case
   Schema.Unit ->
     pure Schema.Unit
-  Schema.Int def ->
-    pure $ Schema.Int def
+  Schema.Int def encoding ->
+    pure $ Schema.Int def encoding
   Schema.Double def ->
     pure $ Schema.Double def
   Schema.Enum def vs ->
@@ -309,8 +339,8 @@ jContractedColumnSchema :: Schema.Column -> Jack Schema.Column
 jContractedColumnSchema = \case
   Schema.Unit ->
     pure Schema.Unit
-  Schema.Int def ->
-    pure $ Schema.Int def
+  Schema.Int def encoding ->
+    pure $ Schema.Int def encoding
   Schema.Double def ->
     pure $ Schema.Double def
   Schema.Enum def vs ->
@@ -349,7 +379,7 @@ columnTables :: Striped.Column -> [Striped.Table]
 columnTables = \case
   Striped.Unit _ ->
     []
-  Striped.Int _ _ ->
+  Striped.Int _ _ _ ->
     []
   Striped.Double _ _ ->
     []
@@ -368,7 +398,7 @@ columnColumns :: Striped.Column -> [Striped.Column]
 columnColumns = \case
   Striped.Unit _ ->
     []
-  Striped.Int _ _ ->
+  Striped.Int _ _ _ ->
     []
   Striped.Double _ _ ->
     []
@@ -471,6 +501,7 @@ jStripedInt :: Int -> Jack Striped.Column
 jStripedInt n =
   Striped.Int
     <$> jDefault
+    <*> jIntEncoding
     <*> (Storable.fromList <$> vectorOf n sizedBounded)
 
 jStripedDouble :: Int -> Jack Striped.Column
@@ -511,14 +542,14 @@ jFacts :: [Schema.Column] -> Jack [Fact]
 jFacts schemas =
   fmap (List.sort . List.concat) .
   scale (`div` max 1 (length schemas)) $
-  zipWithM (\e a -> listOf $ jFact e a) schemas (fmap AttributeId [0..])
+  zipWithM (\e a -> listOf $ jFact e a) schemas (fmap Factset.AttributeId [0..])
 
-jFact :: Schema.Column -> AttributeId -> Jack Fact
+jFact :: Schema.Column -> Factset.AttributeId -> Jack Fact
 jFact schema aid =
   uncurry Fact
     <$> jEntityHashId
     <*> pure aid
-    <*> jTime
+    <*> jFactsetTime
     <*> jFactsetId
     <*> (strictMaybe <$> maybeOf (jLogicalValue schema))
 
@@ -557,8 +588,20 @@ jLogicalValue = \case
   Schema.Unit ->
     pure Logical.Unit
 
-  Schema.Int _ ->
+  Schema.Int _ Encoding.Int ->
     Logical.Int <$> sizedBounded
+
+  Schema.Int _ Encoding.Date ->
+    Logical.Int . Encoding.encodeDate <$> jDate
+
+  Schema.Int _ Encoding.TimeSeconds ->
+    Logical.Int . Encoding.encodeTimeSeconds <$> jTime
+
+  Schema.Int _ Encoding.TimeMilliseconds ->
+    Logical.Int . Encoding.encodeTimeMilliseconds <$> jTime
+
+  Schema.Int _ Encoding.TimeMicroseconds ->
+    Logical.Int . Encoding.encodeTimeMicroseconds <$> jTime
 
   Schema.Double _ ->
     Logical.Double <$> arbitrary
@@ -595,58 +638,59 @@ jBinaryVersion :: Jack BinaryVersion
 jBinaryVersion =
   elements [BinaryV2, BinaryV3]
 
-jEntityId :: Jack EntityId
+jEntityId :: Jack Factset.EntityId
 jEntityId =
   let
-    mkEnt :: ByteString -> Int -> EntityId
+    mkEnt :: ByteString -> Int -> Factset.EntityId
     mkEnt name num =
-      EntityId $ name <> Char8.pack (printf "-%03d" num)
+      Factset.EntityId $ name <> Char8.pack (printf "-%03d" num)
   in
     oneOf [
         mkEnt <$> elements southpark <*> pure 0
       , mkEnt <$> elements southpark <*> chooseInt (0, 999)
       ]
 
-jEntityHashId :: Jack (EntityHash, EntityId)
+jEntityHashId :: Jack (Factset.EntityHash, Factset.EntityId)
 jEntityHashId =
   let
     hash eid =
-      EntityHash $ unEntityHash (hashEntityId eid) `mod` 10
+      Factset.EntityHash $
+        Factset.unEntityHash (Factset.hashEntityId eid) `mod` 10
   in
     (\eid -> (hash eid, eid)) <$> jEntityId
 
-jAttributeId :: Jack AttributeId
+jAttributeId :: Jack Factset.AttributeId
 jAttributeId =
-  AttributeId <$> choose (0, 10000)
+  Factset.AttributeId <$> choose (0, 10000)
 
-jAttributeName :: Jack AttributeName
+jAttributeName :: Jack Factset.AttributeName
 jAttributeName =
-  AttributeName <$> oneOf [elements muppets, arbitrary]
+  Factset.AttributeName <$> oneOf [elements muppets, arbitrary]
 
-jTime :: Jack Time
-jTime =
+jFactsetTime :: Jack Factset.Time
+jFactsetTime =
   oneOf [
-      Time <$> choose (0, 5)
-    , fromDay <$> jDay
+      Factset.Time <$> choose (0, 5)
+    , Factset.fromDay <$> jFactsetDay
     ]
 
-jDay :: Jack Day
-jDay =
-  justOf . fmap gregorianValid $
-    YearMonthDay
-      <$> jYear
+jFactsetDay :: Jack Thyme.Day
+jFactsetDay =
+  justOf . fmap Thyme.gregorianValid $
+    Thyme.YearMonthDay
+      <$> jFactsetYear
       <*> chooseInt (1, 12)
       <*> chooseInt (1, 31)
 
-jYear :: Jack Year
-jYear =
+jFactsetYear :: Jack Thyme.Year
+jFactsetYear =
   mkJack (shrinkTowards 2000) $ QC.choose (1600, 3000)
 
-jFactsetId :: Jack FactsetId
+jFactsetId :: Jack Factset.FactsetId
 jFactsetId =
   oneOf [
-      FactsetId <$> choose (0, 5)
-    , FactsetId <$> choose (0, 100000)
+      Factset.FactsetId <$> choose (0, 5)
+    , Factset.FactsetId <$> choose (0, 100000)
     ]
 
 jBlock :: Jack Block
@@ -685,7 +729,7 @@ jBlockAttribute =
 jBlockIndex :: Jack BlockIndex
 jBlockIndex =
   BlockIndex
-    <$> jTime
+    <$> jFactsetTime
     <*> jFactsetId
     <*> jTombstone
 
@@ -697,7 +741,7 @@ jEntity =
 
 jAttribute :: Jack Attribute
 jAttribute = do
-  (ts, ps, bs) <- List.unzip3 <$> listOf ((,,) <$> jTime <*> jFactsetId <*> jTombstone)
+  (ts, ps, bs) <- List.unzip3 <$> listOf ((,,) <$> jFactsetTime <*> jFactsetId <*> jTombstone)
   Attribute
     <$> pure (Storable.fromList ts)
     <*> pure (Storable.fromList ps)

@@ -346,7 +346,7 @@ defaultValue :: Schema.Column -> Value
 defaultValue = \case
   Schema.Unit ->
     Unit
-  Schema.Int _ ->
+  Schema.Int _ _ ->
     Int 0
   Schema.Double _ ->
     Double 0

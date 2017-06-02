@@ -73,7 +73,7 @@ data Table =
 
 data Column =
     Unit
-  | Int !Default
+  | Int !Default !Encoding.Int
   | Double !Default
   | Enum !Default !(Cons Boxed.Vector (Variant Column))
   | Struct !Default !(Cons Boxed.Vector (Field Column))
@@ -213,10 +213,10 @@ takeMap = \case
     Left $ SchemaExpectedMap x
 {-# INLINE takeMap #-}
 
-takeInt :: Column -> Either SchemaError Default
+takeInt :: Column -> Either SchemaError (Default, Encoding.Int)
 takeInt = \case
-  Int def ->
-    Right def
+  Int def encoding ->
+    Right (def, encoding)
   x ->
     Left $ SchemaExpectedInt x
 {-# INLINE takeInt #-}
@@ -289,7 +289,7 @@ takeDefaultColumn :: Column -> Default
 takeDefaultColumn = \case
   Unit ->
     AllowDefault
-  Int def ->
+  Int def _ ->
     def
   Double def ->
     def
@@ -317,8 +317,8 @@ withDefaultColumn :: Default -> Column -> Column
 withDefaultColumn def = \case
   Unit ->
     Unit
-  Int _ ->
-    Int def
+  Int _ encoding ->
+    Int def encoding
   Double _ ->
     Double def
   Enum _ vs ->
@@ -368,10 +368,11 @@ unionColumn c0 c1 =
     (Unit, Unit) ->
       pure Unit
 
-    (Int def0, Int def1)
+    (Int def0 encoding0, Int def1 encoding1)
       | def0 == def1
+      , encoding0 == encoding1
       ->
-        pure $ Int def0
+        pure $ Int def0 encoding0
 
     (Double def0, Double def1)
       | def0 == def1

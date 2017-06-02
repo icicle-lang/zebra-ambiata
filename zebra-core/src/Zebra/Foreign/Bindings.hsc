@@ -47,6 +47,14 @@ import Anemone.Foreign.Mempool (Mempool(..))
 #znum ZEBRA_BINARY_NONE
 #znum ZEBRA_BINARY_UTF8
 
+-- Zebra.Table.Encoding.Int
+#integral_t enum zebra_int_encoding
+#znum ZEBRA_INT_NONE
+#znum ZEBRA_INT_DATE
+#znum ZEBRA_INT_TIME_SECONDS
+#znum ZEBRA_INT_TIME_MILLISECONDS
+#znum ZEBRA_INT_TIME_MICROSECONDS
+
 -- Zebra.Table.Striped.Table
 #integral_t enum zebra_table_tag
 #znum ZEBRA_TABLE_BINARY
@@ -100,6 +108,7 @@ import Anemone.Foreign.Mempool (Mempool(..))
 -- ZEBRA_COLUMN_UNIT (empty)
 -- ZEBRA_COLUMN_INT
 #field _int.default_    , <zebra_default>
+#field _int.encoding    , <zebra_int_encoding>
 #field _int.values      , Ptr Int64
 -- ZEBRA_COLUMN_DOUBLE
 #field _double.default_ , <zebra_default>

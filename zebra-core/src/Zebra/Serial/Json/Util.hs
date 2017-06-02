@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -14,17 +15,22 @@ module Zebra.Serial.Json.Util (
   , pBinary
   , pUnit
   , pInt
+  , pDate
+  , pTime
   , pDouble
   , pEnum
   , withStructField
   , withOptionalField
   , kmapM
+  , fromEither
 
   -- * Pretty Printing
   , ppText
   , ppBinary
   , ppUnit
   , ppInt
+  , ppDate
+  , ppTime
   , ppDouble
   , ppEnum
   , ppStruct
@@ -50,6 +56,7 @@ import qualified Data.Vector as Boxed
 import           P
 
 import           Zebra.Table.Data
+import           Zebra.Time
 
 
 data JsonDecodeError =
@@ -229,3 +236,37 @@ kmapM f =
   Boxed.imapM $ \i x ->
     f x <?> Aeson.Index i
 {-# INLINABLE kmapM #-}
+
+pDate :: Aeson.Value -> Aeson.Parser Date
+pDate =
+  Aeson.withText "date" $
+    fromEither renderTimeError .
+    parseDate .
+    Text.encodeUtf8
+{-# INLINABLE pDate #-}
+
+ppDate :: Date -> Aeson.Value
+ppDate =
+  Aeson.String . Text.decodeUtf8 . renderDate
+{-# INLINABLE ppDate #-}
+
+pTime :: Aeson.Value -> Aeson.Parser Time
+pTime =
+  Aeson.withText "time" $
+    fromEither renderTimeError .
+    parseTime .
+    Text.encodeUtf8
+{-# INLINABLE pTime #-}
+
+ppTime :: Time -> Aeson.Value
+ppTime =
+  Aeson.String . Text.decodeUtf8 . renderTime
+{-# INLINABLE ppTime #-}
+
+fromEither :: (x -> Text) -> Either x a -> Aeson.Parser a
+fromEither render = \case
+  Left err ->
+    fail . Text.unpack $ render err
+  Right x ->
+    pure x
+{-# INLINABLE fromEither #-}

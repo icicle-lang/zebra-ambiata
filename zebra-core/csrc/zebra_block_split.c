@@ -67,6 +67,7 @@ error_t zebra_column_pop_rows (
 
         case ZEBRA_COLUMN_INT: {
             out_data->_int.default_ = in_data->_int.default_;
+            out_data->_int.encoding = in_data->_int.encoding;
 
             int64_t *i = in_data->_int.values;
             out_data->_int.values = i;
@@ -76,7 +77,7 @@ error_t zebra_column_pop_rows (
         }
 
         case ZEBRA_COLUMN_DOUBLE: {
-            out_data->_int.default_ = in_data->_int.default_;
+            out_data->_double.default_ = in_data->_double.default_;
 
             double *d = in_data->_double.values;
             out_data->_double.values = d;

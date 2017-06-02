@@ -1,0 +1,5 @@
+{"entity_id": "abc", "attribute_id": "delicious", "value": "szechuan", "date": "2017-01-01", "time_s": "2017-01-01 12:34:56", "time_ms": "2017-01-01 12:34:56.789", "time_us": "2017-01-01 12:34:56.789012"}
+{"entity_id": "def", "attribute_id": "delicious", "value": "bacon", "date": "2017-02-03", "time_s": "2017-02-03 13:35:57", "time_ms": "2017-02-03 13:35:57.790", "time_us": "2017-02-03 13:35:57.790013"}
+{"entity_id": "ghi", "attribute_id": "delicious", "value": "avocado", "date": "2017-03-04", "time_s": "2017-03-04 14:36:37", "time_ms": "2017-03-04 14:36:37.123", "time_us": "2017-03-04 14:36:37.123456"}
+{"entity_id": "jkl", "attribute_id": "delicious", "value": "wagyu", "date": "1600-03-01", "time_s": "1600-03-01 00:00:00", "time_ms": "1600-03-01 00:00:00.000", "time_us": "1600-03-01 00:00:00.000000"}
+{"entity_id": "mno", "attribute_id": "delicious", "value": "praline", "date": "2999-12-31", "time_s": "2999-12-31 23:59:59", "time_ms": "2999-12-31 23:59:59.999", "time_us": "2999-12-31 23:59:59.999999"}

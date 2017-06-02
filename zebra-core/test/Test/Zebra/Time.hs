@@ -8,37 +8,27 @@ import           P
 
 import           System.IO (IO)
 
+import           Test.Zebra.Jack
+
 import           Zebra.Time
 
 
-jDate :: Jack Date
-jDate =
-  justOf (rightToMaybe . fromDays <$> choose (toDays minBound, toDays maxBound))
-
-jTime :: Jack Time
-jTime =
-  justOf (rightToMaybe . fromMicroseconds <$> choose (toMicroseconds minBound, toMicroseconds maxBound))
-
-jTimeOfDay :: Jack TimeOfDay
-jTimeOfDay =
-  toTimeOfDay <$> choose (0, 24 * 60 * 60 * 1000000)
-
-prop_roundtrip_date_render :: Property 
+prop_roundtrip_date_render :: Property
 prop_roundtrip_date_render =
   gamble jDate $
-    tripping renderDate parseDate 
+    tripping renderDate parseDate
 
-prop_roundtrip_date_days :: Property 
+prop_roundtrip_date_days :: Property
 prop_roundtrip_date_days =
   gamble jDate $
-    tripping toDays fromDays 
+    tripping toDays fromDays
 
-prop_roundtrip_date_calendar :: Property 
+prop_roundtrip_date_calendar :: Property
 prop_roundtrip_date_calendar =
   gamble jDate $
-    tripping toCalendarDate fromCalendarDate 
+    tripping toCalendarDate fromCalendarDate
 
-prop_roundtrip_time_seconds :: Property 
+prop_roundtrip_time_seconds :: Property
 prop_roundtrip_time_seconds =
   gamble jTime $ \time0 ->
   let
@@ -47,7 +37,7 @@ prop_roundtrip_time_seconds =
   in
     tripping toSeconds fromSeconds time
 
-prop_roundtrip_time_milliseconds :: Property 
+prop_roundtrip_time_milliseconds :: Property
 prop_roundtrip_time_milliseconds =
   gamble jTime $ \time0 ->
   let
@@ -56,17 +46,17 @@ prop_roundtrip_time_milliseconds =
   in
     tripping toMilliseconds fromMilliseconds time
 
-prop_roundtrip_time_microseconds :: Property 
+prop_roundtrip_time_microseconds :: Property
 prop_roundtrip_time_microseconds =
   gamble jTime $
-    tripping toMicroseconds fromMicroseconds 
+    tripping toMicroseconds fromMicroseconds
 
-prop_roundtrip_time_calendar :: Property 
+prop_roundtrip_time_calendar :: Property
 prop_roundtrip_time_calendar =
   gamble jTime $
-    tripping toCalendarTime fromCalendarTime 
+    tripping toCalendarTime fromCalendarTime
 
-prop_roundtrip_time_of_day_microsecond :: Property 
+prop_roundtrip_time_of_day_microsecond :: Property
 prop_roundtrip_time_of_day_microsecond =
   gamble jTimeOfDay $
     tripping fromTimeOfDay (Just . toTimeOfDay)

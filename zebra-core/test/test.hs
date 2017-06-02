@@ -18,6 +18,7 @@ import qualified Test.Zebra.Serial.Binary.Table
 import qualified Test.Zebra.Serial.Json.Logical
 import qualified Test.Zebra.Serial.Json.Schema
 import qualified Test.Zebra.Serial.Json.Striped
+import qualified Test.Zebra.Serial.Json.Util
 import qualified Test.Zebra.Serial.Text.Logical
 import qualified Test.Zebra.Serial.Text.Schema
 import qualified Test.Zebra.Serial.Text.Striped
@@ -46,6 +47,7 @@ main =
     , Test.Zebra.Serial.Json.Logical.tests
     , Test.Zebra.Serial.Json.Schema.tests
     , Test.Zebra.Serial.Json.Striped.tests
+    , Test.Zebra.Serial.Json.Util.tests
     , Test.Zebra.Serial.Text.Logical.tests
     , Test.Zebra.Serial.Text.Schema.tests
     , Test.Zebra.Serial.Text.Striped.tests
