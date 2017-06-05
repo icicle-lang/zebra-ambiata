@@ -23,6 +23,7 @@ import qualified Test.Zebra.Serial.Text.Schema
 import qualified Test.Zebra.Serial.Text.Striped
 import qualified Test.Zebra.Table.Logical
 import qualified Test.Zebra.Table.Striped
+import qualified Test.Zebra.Time
 
 main :: IO ()
 main =
@@ -50,4 +51,5 @@ main =
     , Test.Zebra.Serial.Text.Striped.tests
     , Test.Zebra.Table.Logical.tests
     , Test.Zebra.Table.Striped.tests
+    , Test.Zebra.Time.tests
     ]
