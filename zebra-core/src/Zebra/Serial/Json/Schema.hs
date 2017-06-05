@@ -115,7 +115,7 @@ pColumnSchemaV0 =
     "unit" ->
       pure . const $ pure Schema.Unit
     "int" ->
-      pure . const . pure $ Schema.Int DenyDefault
+      pure . const . pure $ Schema.Int DenyDefault Encoding.Int
     "double" ->
       pure . const . pure $ Schema.Double DenyDefault
     "enum" ->
@@ -138,7 +138,7 @@ ppColumnSchemaV0 :: Schema.Column -> Aeson.Value
 ppColumnSchemaV0 = \case
   Schema.Unit ->
     ppEnum $ Variant "unit" ppUnit
-  Schema.Int _def ->
+  Schema.Int _def _encoding ->
     ppEnum $ Variant "int" ppUnit
   Schema.Double _def ->
     ppEnum $ Variant "double" ppUnit
@@ -228,7 +228,7 @@ pTableVariantV1 = \case
     pure . Aeson.withObject "object containing binary schema" $ \o ->
       Schema.Binary
         <$> pDefaultFieldV1 o
-        <*> pBinaryEncodingFieldV1 o
+        <*> pEncodingFieldV1 Encoding.Binary pBinaryEncodingV1 o
   "array" ->
     pure . Aeson.withObject "object containing array schema" $ \o ->
       Schema.Array
@@ -249,7 +249,7 @@ ppTableSchemaV1 = \case
   Schema.Binary def encoding ->
     ppEnum . Variant "binary" . Aeson.object $
       ppDefaultFieldV1 def <>
-      ppBinaryEncodingFieldV1 encoding
+      ppEncodingFieldV1 Encoding.Binary ppBinaryEncodingV1 encoding
   Schema.Array def e ->
     ppEnum . Variant "array" . Aeson.object $
       ppDefaultFieldV1 def <> [
@@ -296,19 +296,19 @@ ppDefaultV1 = \case
     ppEnum $ Variant "allow" ppUnit
 {-# INLINABLE ppDefaultV1 #-}
 
-pBinaryEncodingFieldV1 :: Aeson.Object -> Aeson.Parser Encoding.Binary
-pBinaryEncodingFieldV1 o =
-  fromMaybe Encoding.Binary
-    <$> withOptionalField "encoding" o pBinaryEncodingV1
-{-# INLINABLE pBinaryEncodingFieldV1 #-}
+pEncodingFieldV1 :: a -> (Aeson.Value -> Aeson.Parser a) -> Aeson.Object -> Aeson.Parser a
+pEncodingFieldV1 def p o =
+  fromMaybe def
+    <$> withOptionalField "encoding" o p
+{-# INLINABLE pEncodingFieldV1 #-}
 
-ppBinaryEncodingFieldV1 :: Encoding.Binary -> [Aeson.Pair]
-ppBinaryEncodingFieldV1 = \case
-  Encoding.Binary ->
+ppEncodingFieldV1 :: Eq a => a -> (a -> Aeson.Value) -> a -> [Aeson.Pair]
+ppEncodingFieldV1 def pp x =
+  if def == x then
     []
-  x ->
-    [ "encoding" .= ppBinaryEncodingV1 x ]
-{-# INLINABLE ppBinaryEncodingFieldV1 #-}
+  else
+    [ "encoding" .= pp x ]
+{-# INLINABLE ppEncodingFieldV1 #-}
 
 pBinaryEncodingV1 :: Aeson.Value -> Aeson.Parser Encoding.Binary
 pBinaryEncodingV1 =
@@ -338,6 +338,7 @@ pColumnSchemaV1 =
       pure . Aeson.withObject "object containing int column schema" $ \o ->
         Schema.Int
           <$> pDefaultFieldV1 o
+          <*> pEncodingFieldV1 Encoding.Int pIntEncodingV1 o
     "double" ->
       pure . Aeson.withObject "object containing double column schema" $ \o ->
         Schema.Double
@@ -363,9 +364,10 @@ ppColumnSchemaV1 :: Schema.Column -> Aeson.Value
 ppColumnSchemaV1 = \case
   Schema.Unit ->
     ppEnum $ Variant "unit" ppUnit
-  Schema.Int def ->
+  Schema.Int def encoding ->
     ppEnum . Variant "int" . Aeson.object $
-      ppDefaultFieldV1 def
+      ppDefaultFieldV1 def <>
+      ppEncodingFieldV1 Encoding.Int ppIntEncodingV1 encoding
   Schema.Double def ->
     ppEnum . Variant "double" . Aeson.object $
       ppDefaultFieldV1 def
@@ -385,6 +387,63 @@ ppColumnSchemaV1 = \case
     ppEnum . Variant "reversed" $
       ppColumnSchemaV1 s
 {-# INLINABLE ppColumnSchemaV1 #-}
+
+pIntEncodingV1 :: Aeson.Value -> Aeson.Parser Encoding.Int
+pIntEncodingV1 =
+  pEnum $ \case
+    "int" ->
+      pure . const $ pure Encoding.Int
+    "date" ->
+      pure . const $ pure Encoding.Date
+    "time" ->
+      pure . Aeson.withObject "object containing a time encoding" $ \o ->
+        withStructField "interval" o pIntTimeEncodingV1
+    _ ->
+      Nothing
+{-# INLINABLE pIntEncodingV1 #-}
+
+pIntTimeEncodingV1 :: Aeson.Value -> Aeson.Parser Encoding.Int
+pIntTimeEncodingV1 =
+  pEnum $ \case
+    "seconds" ->
+      pure . const $ pure Encoding.TimeSeconds
+    "milliseconds" ->
+      pure . const $ pure Encoding.TimeMilliseconds
+    "microseconds" ->
+      pure . const $ pure Encoding.TimeMicroseconds
+    _ ->
+      Nothing
+{-# INLINABLE pIntTimeEncodingV1 #-}
+
+ppIntEncodingV1 :: Encoding.Int -> Aeson.Value
+ppIntEncodingV1 = \case
+  Encoding.Int ->
+    ppEnum $ Variant "int" ppUnit
+
+  Encoding.Date ->
+    ppEnum $ Variant "date" ppUnit
+
+  Encoding.TimeSeconds ->
+    ppEnum . Variant "time" $
+      ppStruct [
+          Field "interval" $
+            ppEnum $ Variant "seconds" ppUnit
+        ]
+
+  Encoding.TimeMilliseconds ->
+    ppEnum . Variant "time" $
+      ppStruct [
+          Field "interval" $
+            ppEnum $ Variant "milliseconds" ppUnit
+        ]
+
+  Encoding.TimeMicroseconds ->
+    ppEnum . Variant "time" $
+      ppStruct [
+          Field "interval" $
+            ppEnum $ Variant "microseconds" ppUnit
+        ]
+{-# INLINABLE ppIntEncodingV1 #-}
 
 pSchemaEnumVariantsV1 :: Aeson.Value -> Aeson.Parser (Cons Boxed.Vector (Variant Schema.Column))
 pSchemaEnumVariantsV1 =

@@ -2,8 +2,10 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DoAndIfThenElse #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# OPTIONS_GHC -funbox-strict-fields #-}
@@ -45,6 +47,9 @@ module Zebra.Time (
   , toCalendarDate
   , fromTimeOfDay
   , toTimeOfDay
+
+  , TimeError(..)
+  , renderTimeError
   ) where
 
 import qualified Anemone.Parser as Anemone
@@ -54,6 +59,8 @@ import qualified Data.ByteString as ByteString
 import qualified Data.ByteString.Char8 as Char8
 import qualified Data.ByteString.Unsafe as ByteString
 import qualified Data.Char as Char
+import qualified Data.Text as Text
+import qualified Data.Text.Encoding as Text
 import qualified Data.Thyme.Calendar as Thyme
 import           Data.Vector.Unboxed.Deriving (derivingUnbox)
 import           Data.Word (Word8)
@@ -61,6 +68,8 @@ import           Data.Word (Word8)
 import           Foreign.Storable (Storable)
 
 import           GHC.Generics (Generic)
+
+import qualified Numeric as Numeric
 
 import           P
 
@@ -183,6 +192,92 @@ data TimeError =
   | TimeInvalidDateTimeSeparator !Char !ByteString
     deriving (Eq, Ord, Show)
 
+renderTimeError :: TimeError -> Text
+renderTimeError = \case
+  TimeCalendarDateOutOfBounds date ->
+    "Tried to convert illegal date <" <>
+    Text.decodeUtf8 (renderCalendarDate date) <>
+    ">, " <>
+    dateRangeError
+
+  TimeCalendarTimeOutOfBounds time ->
+    "Tried to convert illegal time <" <>
+    Text.decodeUtf8 (renderCalendarTime time) <>
+    ">, " <>
+    timeRangeError
+
+  TimeDaysOutOfBounds days ->
+    "Tried convert illegal date from days <" <>
+    Text.decodeUtf8 (renderDate (Date days)) <>
+    ">, " <>
+    dateRangeError
+
+  TimeSecondsOutOfBounds seconds ->
+    "Tried convert illegal time from seconds <" <>
+    Text.decodeUtf8 (renderTime (Time . Microseconds $ unSeconds seconds * 1000000)) <>
+    ">, " <>
+    timeRangeError
+
+  TimeMillisecondsOutOfBounds ms ->
+    "Tried convert illegal time from milliseconds <" <>
+    Text.decodeUtf8 (renderTime (Time . Microseconds $ unMilliseconds ms * 1000)) <>
+    ">, " <>
+    timeRangeError
+
+  TimeMicrosecondsOutOfBounds us ->
+    "Tried convert illegal time from microseconds <" <>
+    Text.decodeUtf8 (renderTime (Time us)) <>
+    ">, " <>
+    timeRangeError
+
+  TimeDateParseError err ->
+    Anemone.renderTimeError err
+
+  TimeDateLeftover date leftover ->
+    "Date <" <>
+    Text.decodeUtf8 date <>
+    "> was parsed but found unused characters <" <>
+    Text.decodeUtf8 leftover <>
+    "> at end"
+
+  TimeTimeOfDayParseError bs ->
+    "Could not parse <" <>
+    Text.decodeUtf8 bs <>
+    "> as time of day"
+
+  TimeSecondsParseError bs ->
+    "Could not parse <" <>
+    Text.decodeUtf8 bs <>
+    "> as seconds"
+
+  TimeMissingTimeOfDay bs ->
+    "Could not parse <" <>
+    Text.decodeUtf8 bs <>
+    "> as a time because it was missing the time of day"
+
+  TimeInvalidDateTimeSeparator d bs ->
+    "Could not parse <" <>
+    Text.decodeUtf8 bs <>
+    "> as a time because it had an unregonised date/time separator " <>
+    Text.pack (show d) <>
+    ", expected either 'T' or ' '"
+
+dateRangeError :: Text
+dateRangeError =
+  "dates must be in the range <" <>
+  Text.decodeUtf8 (renderDate minBound) <>
+  "> to <" <>
+  Text.decodeUtf8 (renderDate maxBound) <>
+  ">"
+
+timeRangeError :: Text
+timeRangeError =
+  "times must be in the range <" <>
+  Text.decodeUtf8 (renderTime minBound) <>
+  "> to <" <>
+  Text.decodeUtf8 (renderTime maxBound) <>
+  ">"
+
 ------------------------------------------------------------------------
 -- Date
 
@@ -200,16 +295,22 @@ fromDays days =
       Left $ TimeDaysOutOfBounds days
 {-# INLINABLE fromDays #-}
 
+-- | Convert a 'Date' to days since the our epoch date, 1600-03-01.
+--
 toDays :: Date -> Days
 toDays (Date days) =
   days
 {-# INLINABLE toDays #-}
 
+-- | Construct a 'Date' from days since the modified julian epoch, 1858-11-17.
+--
 fromModifiedJulianDay :: Days -> Either TimeError Date
 fromModifiedJulianDay mjd =
   fromDays (mjd + 94493)
 {-# INLINABLE fromModifiedJulianDay #-}
 
+-- | Convert a 'Date' to days since the modified julian epoch, 1858-11-17.
+--
 toModifiedJulianDay :: Date -> Days
 toModifiedJulianDay date =
   toDays date - 94493
@@ -233,13 +334,8 @@ parseDate bs =
 {-# INLINABLE parseDate #-}
 
 renderDate :: Date -> ByteString
-renderDate date =
-  let
-    CalendarDate y m d =
-      toCalendarDate date
-  in
-    Char8.pack $
-      printf "%04d-%02d-%02d" (unYear y) (unMonth m) (unDay d)
+renderDate =
+  renderCalendarDate . toCalendarDate
 {-# INLINABLE renderDate #-}
 
 ------------------------------------------------------------------------
@@ -329,40 +425,9 @@ parseTime bs0 =
 {-# INLINABLE parseTime #-}
 
 renderTime :: Time -> ByteString
-renderTime time =
-  let
-    CalendarTime date tod =
-      toCalendarTime time
-
-    CalendarDate (Year year) (Month month) (Day day) =
-      date
-
-    TimeOfDay (Hour hour) (Minute minute) (Microseconds us) =
-      tod
-
-    secs :: Double
-    !secs =
-      fromIntegral us / 1000000.0
-
-    !bs =
-      Char8.pack $
-        printf "%04d-%02d-%02d %02d:%02d:%02f"
-          year month day hour minute secs
-
-    !n =
-      ByteString.length bs
-
-    !bs_1 =
-      ByteString.unsafeIndex bs (n - 1)
-
-    !bs_2 =
-      ByteString.unsafeIndex bs (n - 2)
-  in
-    -- trim off trailing ".0"
-    if bs_2 == period && bs_1 == zero then
-      ByteString.take (n - 2) bs
-    else
-      bs
+renderTime =
+  renderCalendarTime . toCalendarTime
+{-# INLINABLE renderTime #-}
 
 ------------------------------------------------------------------------
 -- CalendarDate
@@ -435,6 +500,12 @@ toCalendarDate (Date (Days g)) =
     CalendarDate (Year (y + 1600)) (Month mm) (Day dd)
 {-# INLINABLE toCalendarDate #-}
 
+renderCalendarDate :: CalendarDate -> ByteString
+renderCalendarDate (CalendarDate y m d) =
+  Char8.pack $
+    printf "%04d-%02d-%02d" (unYear y) (unMonth m) (unDay d)
+{-# INLINABLE renderCalendarDate #-}
+
 ------------------------------------------------------------------------
 -- TimeOfDay
 
@@ -478,20 +549,10 @@ colon =
   0x3A -- :
 {-# INLINE colon #-}
 
-period :: Word8
-period =
-  0x2E -- .
-{-# INLINE period #-}
-
 space :: Word8
 space =
   0x20 -- ' '
 {-# INLINE space #-}
-
-zero :: Word8
-zero =
-  0x30
-{-# INLINE zero #-}
 
 isDigit :: Word8 -> Bool
 isDigit x =
@@ -594,14 +655,48 @@ toCalendarTime (Time (Microseconds us0)) =
     !us_per_day =
       1000000 * 60 * 60 * 24
 
+    (!days, !us) =
+      us0 `divMod` us_per_day
+
     !date =
-      Date . Days $ us0 `quot` us_per_day
+      Date $ Days days
 
     !tod =
-      Microseconds $ us0 `rem` us_per_day
+      Microseconds us
   in
     CalendarTime (toCalendarDate date) (toTimeOfDay tod)
 {-# INLINABLE toCalendarTime #-}
+
+renderCalendarTime :: CalendarTime -> ByteString
+renderCalendarTime (CalendarTime date tod) =
+  let
+    CalendarDate (Year year) (Month month) (Day day) =
+      date
+
+    TimeOfDay (Hour hour) (Minute minute) (Microseconds us0) =
+      tod
+
+    (!secs, !us1) =
+      us0 `quotRem` 1000000
+
+    us :: Double
+    !us =
+      fromIntegral us1 / 1000000.0
+
+    !bs0 =
+      Char8.pack $
+        printf "%04d-%02d-%02d %02d:%02d:%02d"
+          year month day hour minute secs
+
+    !bs1 =
+      if us == 0 then
+        ByteString.empty
+      else
+        Char8.pack . drop 1 $
+          Numeric.showFFloat Nothing us ""
+  in
+    bs0 <> bs1
+{-# INLINABLE renderCalendarTime #-}
 
 ------------------------------------------------------------------------
 

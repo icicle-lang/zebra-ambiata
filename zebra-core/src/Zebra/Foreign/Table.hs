@@ -181,13 +181,42 @@ peekBinaryEncoding ptr = do
     _ ->
       left $ ForeignInvalidBinaryEncoding (fromIntegral encoding)
 
+pokeIntEncoding :: MonadIO m => Ptr C'zebra_int_encoding -> Encoding.Int -> m ()
+pokeIntEncoding ptr = \case
+  Encoding.Int ->
+    pokeIO ptr C'ZEBRA_INT_NONE
+  Encoding.Date ->
+    pokeIO ptr C'ZEBRA_INT_DATE
+  Encoding.TimeSeconds ->
+    pokeIO ptr C'ZEBRA_INT_TIME_SECONDS
+  Encoding.TimeMilliseconds ->
+    pokeIO ptr C'ZEBRA_INT_TIME_MILLISECONDS
+  Encoding.TimeMicroseconds ->
+    pokeIO ptr C'ZEBRA_INT_TIME_MICROSECONDS
+
+peekIntEncoding :: MonadIO m => Ptr C'zebra_int_encoding -> EitherT ForeignError m Encoding.Int
+peekIntEncoding ptr = do
+  encoding <- peekIO ptr
+  case encoding of
+    C'ZEBRA_INT_NONE ->
+      pure Encoding.Int
+    C'ZEBRA_INT_DATE ->
+      pure Encoding.Date
+    C'ZEBRA_INT_TIME_SECONDS ->
+      pure Encoding.TimeSeconds
+    C'ZEBRA_INT_TIME_MILLISECONDS ->
+      pure Encoding.TimeMilliseconds
+    C'ZEBRA_INT_TIME_MICROSECONDS ->
+      pure Encoding.TimeMicroseconds
+    _ ->
+      left $ ForeignInvalidIntEncoding (fromIntegral encoding)
+
 pokeBinaryEncoding :: MonadIO m => Ptr C'zebra_binary_encoding -> Encoding.Binary -> m ()
 pokeBinaryEncoding ptr = \case
   Encoding.Binary ->
     pokeIO ptr C'ZEBRA_BINARY_NONE
   Encoding.Utf8 ->
     pokeIO ptr C'ZEBRA_BINARY_UTF8
-
 peekColumn :: MonadIO m => Int -> Ptr C'zebra_column -> EitherT ForeignError m Striped.Column
 peekColumn n_rows c_column = do
   let column = p'zebra_column'of c_column
@@ -200,6 +229,7 @@ peekColumn n_rows c_column = do
     C'ZEBRA_COLUMN_INT ->
       Striped.Int
         <$> peekDefault (p'zebra_column_variant'_int'default_ column)
+        <*> peekIntEncoding (p'zebra_column_variant'_int'encoding column)
         <*> peekVector n_rows (p'zebra_column_variant'_int'values column)
 
     C'ZEBRA_COLUMN_DOUBLE ->
@@ -243,9 +273,10 @@ pokeColumn pool c_column column =
       Striped.Unit _ ->
         pokeIO c_tag C'ZEBRA_COLUMN_UNIT
 
-      Striped.Int def xs -> do
+      Striped.Int def encoding xs -> do
         pokeIO c_tag C'ZEBRA_COLUMN_INT
         pokeDefault (p'zebra_column_variant'_int'default_ c_of) def
+        pokeIntEncoding (p'zebra_column_variant'_int'encoding c_of) encoding
         pokeVector pool (p'zebra_column_variant'_int'values c_of) xs
 
       Striped.Double def xs -> do

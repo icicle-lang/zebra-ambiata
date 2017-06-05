@@ -105,7 +105,7 @@ data Table =
 
 data Column =
     Unit !Int
-  | Int !Default !(Storable.Vector Int64)
+  | Int !Default !Encoding.Int !(Storable.Vector Int64)
   | Double !Default !(Storable.Vector Double)
   | Enum !Default !(Storable.Vector Tag) !(Cons Boxed.Vector (Variant Column))
   | Struct !Default !(Cons Boxed.Vector (Field Column))
@@ -228,7 +228,7 @@ lengthColumn :: Column -> Int
 lengthColumn = \case
   Unit n ->
     n
-  Int _ xs ->
+  Int _ _ xs ->
     Storable.length xs
   Double _ xs ->
     Storable.length xs
@@ -256,8 +256,8 @@ schemaColumn :: Column -> Schema.Column
 schemaColumn = \case
   Unit _ ->
     Schema.Unit
-  Int def _ ->
-    Schema.Int def
+  Int def encoding _ ->
+    Schema.Int def encoding
   Double def _ ->
     Schema.Double def
   Enum def _ vs ->
@@ -286,8 +286,8 @@ emptyColumn :: Schema.Column -> Column
 emptyColumn = \case
   Schema.Unit ->
     Unit 0
-  Schema.Int def ->
-    Int def Storable.empty
+  Schema.Int def encoding ->
+    Int def encoding Storable.empty
   Schema.Double def ->
     Double def Storable.empty
   Schema.Enum def vs ->
@@ -326,10 +326,10 @@ takeMap = \case
     Left $ SchemaExpectedMap (schema x)
 {-# INLINE takeMap #-}
 
-takeInt :: Column -> Either SchemaError (Default, Storable.Vector Int64)
+takeInt :: Column -> Either SchemaError (Default, Encoding.Int, Storable.Vector Int64)
 takeInt = \case
-  Int def x ->
-    Right (def, x)
+  Int def encoding x ->
+    Right (def, encoding, x)
   x ->
     Left $ SchemaExpectedInt (schemaColumn x)
 {-# INLINE takeInt #-}
@@ -440,8 +440,8 @@ fromValues cschema values =
         Schema.Unit ->
           pure . Unit $ Boxed.length values
 
-        Schema.Int def ->
-          Int def . Storable.convert
+        Schema.Int def encoding ->
+          Int def encoding . Storable.convert
             <$> traverse (first StripedLogicalSchemaError . Logical.takeInt) values
 
         Schema.Double def ->
@@ -550,7 +550,7 @@ toValues = \case
   Unit n ->
     pure $ Boxed.replicate n Logical.Unit
 
-  Int _ xs ->
+  Int _ _ xs ->
     pure . fmap Logical.Int $ Storable.convert xs
 
   Double _ xs ->
@@ -612,8 +612,8 @@ splitAtColumn i = \case
     in
       (Unit m, Unit (n - m))
 
-  Int def xs ->
-    bimap (Int def) (Int def) $
+  Int def encoding xs ->
+    bimap (Int def encoding) (Int def encoding) $
       Storable.splitAt i xs
 
   Double def xs ->
@@ -707,8 +707,8 @@ defaultColumn :: Int -> Schema.Column -> Column
 defaultColumn n = \case
   Schema.Unit ->
     Unit n
-  Schema.Int def ->
-    Int def (Storable.replicate n 0)
+  Schema.Int def encoding ->
+    Int def encoding (Storable.replicate n 0)
   Schema.Double def ->
     Double def (Storable.replicate n 0)
   Schema.Enum def vs ->
@@ -771,10 +771,11 @@ transmuteColumn s c =
     (Schema.Unit, Unit n) ->
       pure $ Unit n
 
-    (Schema.Int def0, Int def1 xs)
+    (Schema.Int def0 encoding0, Int def1 encoding1 xs)
       | def0 == def1
+      , encoding0 == encoding1
       ->
-        pure $ Int def1 xs
+        pure $ Int def1 encoding1 xs
 
     (Schema.Double def0, Double def1 xs)
       | def0 == def1
@@ -881,10 +882,11 @@ unsafeAppendColumn x0 x1 =
     (Unit n0, Unit n1) ->
       pure $ Unit (n0 + n1)
 
-    (Int def0 xs0, Int def1 xs1)
+    (Int def0 encoding0 xs0, Int def1 encoding1 xs1)
       | def0 == def1
+      , encoding0 == encoding1
       ->
-        pure $ Int def0 (xs0 <> xs1)
+        pure $ Int def0 encoding0 (xs0 <> xs1)
 
     (Double def0 xs0, Double def1 xs1)
       | def0 == def1

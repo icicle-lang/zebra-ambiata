@@ -93,6 +93,7 @@ error_t zebra_agile_clone_column (
 
         case ZEBRA_COLUMN_INT:
             out_data->_int.default_ = in_data->_int.default_;
+            out_data->_int.encoding = in_data->_int.encoding;
             out_data->_int.values = NULL;
             return ZEBRA_SUCCESS;
 
@@ -216,6 +217,7 @@ error_t zebra_neritic_clone_column (
 
         case ZEBRA_COLUMN_INT:
             out_data->_int.default_ = in_data->_int.default_;
+            out_data->_int.encoding = in_data->_int.encoding;
             out_data->_int.values = in_data->_int.values;
             return ZEBRA_SUCCESS;
 
@@ -354,6 +356,7 @@ error_t zebra_deep_clone_column (
 
         case ZEBRA_COLUMN_INT:
             out_data->_int.default_ = in_data->_int.default_;
+            out_data->_int.encoding = in_data->_int.encoding;
             out_data->_int.values = ZEBRA_CLONE_ARRAY (pool, in_data->_int.values, capacity);
             return ZEBRA_SUCCESS;
 

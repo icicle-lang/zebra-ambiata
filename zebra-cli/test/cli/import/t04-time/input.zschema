@@ -1,0 +1,69 @@
+{
+  "version": "v0",
+  "schema": {
+    "array": {
+      "element": {
+        "struct": {
+          "fields": [
+            {
+              "name": "entity_id",
+              "schema": {
+                 "binary": {
+                   "encoding": { "utf8": {} }
+                 }
+              }
+            },
+            {
+              "name": "attribute_id",
+              "schema": {
+                 "binary": {
+                   "encoding": { "utf8": {} }
+                 }
+              }
+            },
+            {
+              "name": "value",
+              "schema": {
+                 "binary": {
+                   "encoding": { "utf8": {} }
+                 }
+              }
+            },
+            {
+              "name": "date",
+              "schema": {
+                 "int": {
+                   "encoding": { "date": {} }
+                 }
+              }
+            },
+            {
+              "name": "time_s",
+              "schema": {
+                 "int": {
+                   "encoding": { "time": { "interval": { "seconds": {} } } }
+                 }
+              }
+            },
+            {
+              "name": "time_ms",
+              "schema": {
+                 "int": {
+                   "encoding": { "time": { "interval": { "milliseconds": {} } } }
+                 }
+              }
+            },
+            {
+              "name": "time_us",
+              "schema": {
+                 "int": {
+                   "encoding": { "time": { "interval": { "microseconds": {} } } }
+                 }
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

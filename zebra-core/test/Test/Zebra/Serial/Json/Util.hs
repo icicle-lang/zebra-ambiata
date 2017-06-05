@@ -1,6 +1,6 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE TemplateHaskell #-}
-module Test.Zebra.Json.Util where
+module Test.Zebra.Serial.Json.Util where
 
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString as ByteString
@@ -8,19 +8,17 @@ import qualified Data.Text as Text
 import qualified Data.Text.Encoding as Text
 
 import           Disorder.Jack (Property, Jack, forAllProperties, quickCheckWithResult, maxSuccess, stdArgs)
-import           Disorder.Jack (gamble, tripping, once, arbitrary, boundedEnum, sizedBounded)
+import           Disorder.Jack (gamble, tripping, once, arbitrary, sizedBounded)
 import           Disorder.Jack (listOf, choose, chooseChar, suchThat)
 
 import           P
 
 import           System.IO (IO)
 
-import           Zebra.Json.Util
+import           Test.Zebra.Jack
 
+import           Zebra.Serial.Json.Util
 
-jJsonVersion :: Jack JsonVersion
-jJsonVersion =
-  boundedEnum
 
 jText :: Jack Text
 jText =
@@ -32,11 +30,6 @@ jBinary =
   fmap ByteString.pack . listOf $
     choose (minBound, maxBound)
 
-prop_roundtrip_version :: Property
-prop_roundtrip_version =
-  gamble jJsonVersion $
-    tripping (encodeJson [] . ppVersion) (decodeJson pVersion)
-
 prop_roundtrip_unit :: Property
 prop_roundtrip_unit =
   once $
@@ -46,6 +39,16 @@ prop_roundtrip_int :: Property
 prop_roundtrip_int =
   gamble sizedBounded $
     tripping (encodeJson [] . ppInt) (decodeJson pInt)
+
+prop_roundtrip_date :: Property
+prop_roundtrip_date =
+  gamble jDate $
+    tripping (encodeJson [] . ppDate) (decodeJson pDate)
+
+prop_roundtrip_time :: Property
+prop_roundtrip_time =
+  gamble jTime $
+    tripping (encodeJson [] . ppTime) (decodeJson pTime)
 
 prop_roundtrip_double :: Property
 prop_roundtrip_double =

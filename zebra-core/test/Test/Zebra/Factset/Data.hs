@@ -18,7 +18,7 @@ import           Zebra.Foreign.Bindings (pattern C'ZEBRA_HASH_SEED)
 
 prop_roundtrip_day :: Property
 prop_roundtrip_day =
-  gamble jDay $
+  gamble jFactsetDay $
     tripping fromDay (Just . toDay)
 
 prop_hash_seed :: Property

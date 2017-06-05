@@ -31,6 +31,14 @@ typedef enum zebra_binary_encoding {
     ZEBRA_BINARY_UTF8
 } zebra_binary_encoding_t;
 
+typedef enum zebra_int_encoding {
+    ZEBRA_INT_NONE,
+    ZEBRA_INT_DATE,
+    ZEBRA_INT_TIME_SECONDS,
+    ZEBRA_INT_TIME_MILLISECONDS,
+    ZEBRA_INT_TIME_MICROSECONDS
+} zebra_int_encoding_t;
+
 // Forward declarations for recursive structures
 struct zebra_column;
 typedef struct zebra_column zebra_column_t;
@@ -112,6 +120,7 @@ typedef union zebra_column_variant {
     } _unit;
     struct {
         zebra_default_t default_;
+        zebra_int_encoding_t encoding;
         int64_t *values;
     } _int;
     struct {

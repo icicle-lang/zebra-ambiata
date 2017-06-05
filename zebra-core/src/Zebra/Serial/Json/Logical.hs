@@ -44,12 +44,15 @@ import           Zebra.Table.Encoding (Utf8Error)
 import qualified Zebra.Table.Encoding as Encoding
 import qualified Zebra.Table.Logical as Logical
 import qualified Zebra.Table.Schema as Schema
+import           Zebra.Time
 
 
 data JsonLogicalEncodeError =
     JsonLogicalTableSchemaMismatch !Schema.Table !Logical.Table
   | JsonLogicalValueSchemaMismatch !Schema.Column !Logical.Value
   | JsonLogicalEncodeUtf8 !Utf8Error
+  | JsonLogicalEncodeDate !TimeError
+  | JsonLogicalEncodeTime !TimeError
     deriving (Eq, Show)
 
 data JsonLogicalDecodeError =
@@ -71,6 +74,14 @@ renderJsonLogicalEncodeError = \case
   JsonLogicalEncodeUtf8 err ->
     "Error encoding UTF-8 binary: " <>
     Encoding.renderUtf8Error err
+
+  JsonLogicalEncodeDate err ->
+    "Error encoding date: " <>
+    renderTimeError err
+
+  JsonLogicalEncodeTime err ->
+    "Error encoding time: " <>
+    renderTimeError err
 
 renderJsonLogicalDecodeError :: JsonLogicalDecodeError -> Text
 renderJsonLogicalDecodeError = \case
@@ -167,8 +178,20 @@ pValue schema =
     Schema.Unit ->
       (Logical.Unit <$) . pUnit
 
-    Schema.Int _ ->
+    Schema.Int _ Encoding.Int ->
       fmap Logical.Int . pInt
+
+    Schema.Int _ Encoding.Date ->
+      fmap (Logical.Int . Encoding.encodeDate) . pDate
+
+    Schema.Int _ Encoding.TimeSeconds ->
+      fmap (Logical.Int . Encoding.encodeTimeSeconds) . pTime
+
+    Schema.Int _ Encoding.TimeMilliseconds ->
+      fmap (Logical.Int . Encoding.encodeTimeMilliseconds) . pTime
+
+    Schema.Int _ Encoding.TimeMicroseconds ->
+      fmap (Logical.Int . Encoding.encodeTimeMicroseconds) . pTime
 
     Schema.Double _ ->
       fmap Logical.Double . pDouble
@@ -209,10 +232,30 @@ ppValue schema value0 =
       ->
         pure ppUnit
 
-    Schema.Int _
+    Schema.Int _ Encoding.Int
       | Logical.Int x <- value0
       ->
         pure $ ppInt x
+
+    Schema.Int _ Encoding.Date
+      | Logical.Int x <- value0
+      ->
+        fmap ppDate . first JsonLogicalEncodeDate $ Encoding.decodeDate x
+
+    Schema.Int _ Encoding.TimeSeconds
+      | Logical.Int x <- value0
+      ->
+        fmap ppTime . first JsonLogicalEncodeTime $ Encoding.decodeTimeSeconds x
+
+    Schema.Int _ Encoding.TimeMilliseconds
+      | Logical.Int x <- value0
+      ->
+        fmap ppTime . first JsonLogicalEncodeTime $ Encoding.decodeTimeMilliseconds x
+
+    Schema.Int _ Encoding.TimeMicroseconds
+      | Logical.Int x <- value0
+      ->
+        fmap ppTime . first JsonLogicalEncodeTime $ Encoding.decodeTimeMicroseconds x
 
     Schema.Double _
       | Logical.Double x <- value0
