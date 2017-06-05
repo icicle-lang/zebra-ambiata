@@ -295,16 +295,22 @@ fromDays days =
       Left $ TimeDaysOutOfBounds days
 {-# INLINABLE fromDays #-}
 
+-- | Convert a 'Date' to days since the our epoch date, 1600-03-01.
+--
 toDays :: Date -> Days
 toDays (Date days) =
   days
 {-# INLINABLE toDays #-}
 
+-- | Construct a 'Date' from days since the modified julian epoch, 1858-11-17.
+--
 fromModifiedJulianDay :: Days -> Either TimeError Date
 fromModifiedJulianDay mjd =
   fromDays (mjd + 94493)
 {-# INLINABLE fromModifiedJulianDay #-}
 
+-- | Convert a 'Date' to days since the modified julian epoch, 1858-11-17.
+--
 toModifiedJulianDay :: Date -> Days
 toModifiedJulianDay date =
   toDays date - 94493
