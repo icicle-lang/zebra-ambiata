@@ -18,14 +18,20 @@ module Zebra.Table.Striped (
   , StripedError(..)
   , renderStripedError
 
+  -- * Summary
   , length
 
   , schema
   , schemaColumn
 
+  -- * Construction
   , empty
   , emptyColumn
 
+  , defaultTable
+  , defaultColumn
+
+  -- * Destruction
   , takeBinary
   , takeArray
   , takeMap
@@ -36,30 +42,31 @@ module Zebra.Table.Striped (
   , takeNested
   , takeReversed
 
+  -- * Conversion
   , fromLogical
   , fromValues
 
   , toLogical
   , toValues
 
+  -- * Slicing
   , splitAt
   , splitAtColumn
 
-  , merges
-  , merge
-
-  , defaultTable
-  , defaultColumn
-
+  -- * Alchemy
   , transmute
   , transmuteColumn
   , transmuteStruct
+
+  -- * Merging
+  , merges
+  , merge
 
   , unsafeConcat
   , unsafeAppend
   , unsafeAppendColumn
 
-  -- * Streaming Operations
+  -- * Streaming
   , rechunk
   ) where
 

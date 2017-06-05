@@ -15,20 +15,10 @@ module Zebra.Table.Logical (
   , LogicalSchemaError(..)
   , renderLogicalSchemaError
 
+  -- * Summary
   , length
-  , empty
 
-  , defaultTable
-  , defaultValue
-
-  , merge
-  , mergeValue
-  , mergeMap
-  , mergeMaps
-
-  , UnionStep(..)
-  , unionStep
-
+  -- * Destruction
   , takeBinary
   , takeArray
   , takeMap
@@ -39,10 +29,27 @@ module Zebra.Table.Logical (
   , takeNested
   , takeReversed
 
+  -- * Construction
   , false
   , true
   , none
   , some
+  , left
+  , right
+  , pair
+
+  , empty
+  , defaultTable
+  , defaultValue
+
+  -- * Merging
+  , merge
+  , mergeValue
+  , mergeMap
+  , mergeMaps
+
+  , UnionStep(..)
+  , unionStep
 
   -- * Internal
   , renderField
@@ -455,6 +462,21 @@ some :: Value -> Value
 some =
   Enum 1
 {-# INLINE some #-}
+
+left :: Value -> Value
+left =
+  Enum 0
+{-# INLINE left #-}
+
+right :: Value -> Value
+right =
+  Enum 1
+{-# INLINE right #-}
+
+pair :: Value -> Value -> Value
+pair x y =
+  Struct $ Cons.from2 x y
+{-# INLINE pair #-}
 
 ------------------------------------------------------------------------
 -- Ord Value

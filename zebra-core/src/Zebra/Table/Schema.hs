@@ -19,13 +19,24 @@ module Zebra.Table.Schema (
   , SchemaUnionError(..)
   , renderSchemaUnionError
 
+  -- * Construction
   , bool
   , false
   , true
   , option
   , none
   , some
+  , either
+  , left
+  , right
+  , pair
+  , first
+  , second
 
+  , withDefault
+  , withDefaultColumn
+
+  -- * Destruction
   , takeBinary
   , takeArray
   , takeMap
@@ -36,12 +47,13 @@ module Zebra.Table.Schema (
   , takeNested
   , takeReversed
   , takeOption
+  , takeEither
+  , takePair
 
   , takeDefault
   , takeDefaultColumn
-  , withDefault
-  , withDefaultColumn
 
+  -- * Merging
   , union
   , unionColumn
   , unionStruct
@@ -53,7 +65,7 @@ import qualified Data.Text as Text
 
 import           GHC.Generics (Generic)
 
-import           P hiding (bool, some)
+import           P hiding (bool, some, either, first, second)
 
 import           Text.Show.Pretty (ppShow)
 
@@ -91,8 +103,9 @@ data SchemaError =
   | SchemaExpectedStruct !Column
   | SchemaExpectedNested !Column
   | SchemaExpectedReversed !Column
-  -- FIXME Should non-primitive types really be here? /not sure
   | SchemaExpectedOption !(Cons Boxed.Vector (Variant Column))
+  | SchemaExpectedEither !(Cons Boxed.Vector (Variant Column))
+  | SchemaExpectedPair !(Cons Boxed.Vector (Field Column))
     deriving (Eq, Show)
 
 data SchemaUnionError =
@@ -124,7 +137,11 @@ renderSchemaError = \case
   SchemaExpectedReversed x ->
     "Expected Reversed, but was: " <> Text.pack (ppShow x)
   SchemaExpectedOption x ->
-    "Expected option variants (i.e. none/some), but was: " <> Text.pack (ppShow x)
+    "Expected variants for option (i.e. none/some), but was: " <> Text.pack (ppShow x)
+  SchemaExpectedEither x ->
+    "Expected variants for either (i.e. left/right), but was: " <> Text.pack (ppShow x)
+  SchemaExpectedPair x ->
+    "Expected variants for pair (i.e. first/second), but was: " <> Text.pack (ppShow x)
 
 renderSchemaUnionError :: SchemaUnionError -> Text
 renderSchemaUnionError = \case
@@ -165,11 +182,11 @@ ppPrefix prefix =
 
 false :: Variant Column
 false =
-  Variant (VariantName "false") Unit
+  Variant "false" Unit
 
 true :: Variant Column
 true =
-  Variant (VariantName "true") Unit
+  Variant "true" Unit
 
 bool :: Default -> Column
 bool def =
@@ -177,15 +194,39 @@ bool def =
 
 none :: Variant Column
 none =
-  Variant (VariantName "none") Unit
+  Variant "none" Unit
 
 some :: Column -> Variant Column
 some =
-  Variant (VariantName "some")
+  Variant "some"
 
 option :: Default -> Column -> Column
 option def =
   Enum def . Cons.from2 none . some
+
+left :: Column -> Variant Column
+left =
+  Variant "left"
+
+right :: Column -> Variant Column
+right =
+  Variant "right"
+
+either :: Default -> Column -> Column -> Column
+either def l r =
+  Enum def $ Cons.from2 (left l) (right r)
+
+first :: Column -> Field Column
+first =
+  Field "first"
+
+second :: Column -> Field Column
+second =
+  Field "second"
+
+pair :: Default -> Column -> Column -> Column
+pair def x y =
+  Struct def $ Cons.from2 (first x) (second y)
 
 ------------------------------------------------------------------------
 
@@ -272,6 +313,26 @@ takeOption x0 = do
     _ ->
       Left $ SchemaExpectedOption vs
 {-# INLINE takeOption #-}
+
+takeEither :: Column -> Either SchemaError (Default, Column, Column)
+takeEither x0 = do
+  (def, vs) <- takeEnum x0
+  case Cons.toList vs of
+    [Variant "left" l, Variant "right" r] ->
+      pure (def, l, r)
+    _ ->
+      Left $ SchemaExpectedEither vs
+{-# INLINE takeEither #-}
+
+takePair :: Column -> Either SchemaError (Default, Column, Column)
+takePair x0 = do
+  (def, fs) <- takeStruct x0
+  case Cons.toList fs of
+    [Field "first" x, Field "second" y] ->
+      pure (def, x, y)
+    _ ->
+      Left $ SchemaExpectedPair fs
+{-# INLINE takePair #-}
 
 ------------------------------------------------------------------------
 
