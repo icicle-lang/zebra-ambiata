@@ -200,19 +200,19 @@ pMergeRowsPerBlock =
 
 pOutputFormat :: Parser BinaryVersion
 pOutputFormat =
-  fromMaybe BinaryV2 <$> optional (pOutputV2 <|> pOutputV3)
+  fromMaybe BinaryV3 <$> optional (pOutputV2 <|> pOutputV3)
 
 pOutputV2 :: Parser BinaryVersion
 pOutputV2 =
   Options.flag' BinaryV2 $
     Options.long "output-v2" <>
-    Options.help "Force merge to output files in version 2 format. (default)"
+    Options.help "Force merge to output files in version 2 format."
 
 pOutputV3 :: Parser BinaryVersion
 pOutputV3 =
   Options.flag' BinaryV3 $
     Options.long "output-v3" <>
-    Options.help "Force merge to output files in version 3 format."
+    Options.help "Force merge to output files in version 3 format. (default)"
 
 pCatOptions :: Parser CatOptions
 pCatOptions =
