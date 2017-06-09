@@ -17,7 +17,7 @@
 #
 
 # Which mafia to use. Caller can set a specific one as environment variable.
-MAFIA ?= mafia
+MAFIA ?= ./mafia
 
 # Where to look for code.
 # We should be able to reuse this for other projects just by modifying these two directories.
