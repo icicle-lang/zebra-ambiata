@@ -15,10 +15,8 @@ module Zebra.Command.Export (
 import           Control.Monad.Catch (MonadCatch(..))
 import           Control.Monad.IO.Class (MonadIO(..))
 import           Control.Monad.Morph (hoist)
-import           Control.Monad.Trans.Class (lift)
 import           Control.Monad.Trans.Resource (MonadResource, ResourceT)
 
-import           Data.ByteString (ByteString)
 import qualified Data.ByteString as ByteString
 import           Data.List.NonEmpty (NonEmpty)
 import qualified Data.Text as Text
@@ -34,6 +32,7 @@ import           Zebra.Serial.Binary (BinaryLogicalDecodeError)
 import qualified Zebra.Serial.Binary as Binary
 import           Zebra.Serial.Text (TextLogicalEncodeError)
 import qualified Zebra.Serial.Text as Text
+import qualified Zebra.Table.Schema as Schema
 import           Zebra.X.ByteStream (ByteStream)
 import qualified Zebra.X.ByteStream as ByteStream
 
@@ -66,6 +65,50 @@ renderExportError = \case
   ExportTextLogicalEncodeError err ->
     Text.renderTextLogicalEncodeError err
 
+takeSchemaOutputs :: [ExportOutput] -> [Maybe FilePath]
+takeSchemaOutputs =
+  mapMaybe $ \case
+    ExportSchemaStdout ->
+      Just Nothing
+    ExportSchema x ->
+      Just (Just x)
+    _ ->
+      Nothing
+
+takeTextOutputs :: [ExportOutput] -> [Maybe FilePath]
+takeTextOutputs =
+  mapMaybe $ \case
+    ExportTextStdout ->
+      Just Nothing
+    ExportText x ->
+      Just (Just x)
+    _ ->
+      Nothing
+
+writeSchema :: (MonadIO m, MonadCatch m) => Schema.Table -> Maybe FilePath -> EitherT ExportError m ()
+writeSchema schema = \case
+  Nothing ->
+    tryEitherT ExportIOError . liftIO $
+      ByteString.hPut stdout (Text.encodeSchema schema)
+
+  Just path ->
+    tryEitherT ExportIOError . liftIO $
+      ByteString.writeFile path (Text.encodeSchema schema)
+
+writeText :: (MonadCatch m, MonadResource m) => [Maybe FilePath] -> ByteStream (EitherT ExportError m) r -> ByteStream (EitherT ExportError m) r
+writeText xs0 tables =
+  case xs0 of
+    [] ->
+      tables
+
+    Nothing : xs ->
+      writeText xs . hoist (firstJoin ExportIOError) . ByteStream.injectEitherT $
+        ByteStream.hPut stdout (ByteStream.copy tables)
+
+    Just path : xs -> do
+      writeText xs . hoist (firstJoin ExportIOError) . ByteStream.injectEitherT $
+        ByteStream.writeFile path (ByteStream.copy tables)
+
 zebraExport :: forall m. (MonadResource m, MonadCatch m) => Export -> EitherT ExportError m ()
 zebraExport export = do
   (schema, tables0) <-
@@ -75,46 +118,24 @@ zebraExport export = do
       ByteStream.readFile (exportInput export)
 
   let
-    bschema :: ByteString
-    bschema =
-      Text.encodeSchema schema
+    outputs =
+      toList $ exportOutputs export
 
-    tables1 :: ByteStream (EitherT ExportError m) ()
-    tables1 =
-      hoist (firstJoin ExportTextLogicalEncodeError) .
-        Text.encodeLogical schema .
-      hoist (firstJoin ExportBinaryLogicalDecodeError) $
-        tables0
+  traverse_ (writeSchema schema) $ takeSchemaOutputs outputs
 
-    loop ::
-         [ExportOutput]
-      -> ByteStream (EitherT ExportError m) r
-      -> ByteStream (EitherT ExportError m) r
-    loop xs0 tables =
-      case xs0 of
-        [] ->
-          tables
+  case takeTextOutputs outputs of
+    [] ->
+      pure ()
 
-        ExportTextStdout : xs ->
-          loop xs . hoist (firstJoin ExportIOError) . ByteStream.injectEitherT $
-            ByteStream.hPut stdout (ByteStream.copy tables)
-
-        ExportText path : xs -> do
-          loop xs . hoist (firstJoin ExportIOError) . ByteStream.injectEitherT $
-            ByteStream.writeFile path (ByteStream.copy tables)
-
-        -- FIXME this should not be done in this loop, causes the whole file to
-        -- FIXME be read even though we only need the schema.
-        ExportSchemaStdout : xs -> do
-          lift . tryEitherT ExportIOError . liftIO $
-            ByteString.hPut stdout bschema
-          loop xs tables
-
-        ExportSchema path : xs -> do
-          lift . tryEitherT ExportIOError . liftIO $
-            ByteString.writeFile path bschema
-          loop xs tables
-
-  ByteStream.effects $
-    loop (toList (exportOutputs export)) tables1
+    xs ->
+      let
+        tables1 :: ByteStream (EitherT ExportError m) ()
+        tables1 =
+          hoist (firstJoin ExportTextLogicalEncodeError) .
+            Text.encodeLogical schema .
+          hoist (firstJoin ExportBinaryLogicalDecodeError) $
+            tables0
+      in
+        ByteStream.effects $
+          writeText xs tables1
 {-# SPECIALIZE zebraExport :: Export -> EitherT ExportError (ResourceT IO) () #-}
