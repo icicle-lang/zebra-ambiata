@@ -406,23 +406,29 @@ fromLogical tschema collection = {-# SCC fromLogical #-}
 fromNested :: Schema.Table -> Boxed.Vector Logical.Table -> Either StripedError (Storable.Vector Int64, Table)
 fromNested tschema xss0 = {-# SCC fromNested #-}
   case tschema of
-    Schema.Binary def encoding -> do
-      bss <- first StripedLogicalSchemaError $ traverse Logical.takeBinary xss0
-      pure (
-          Storable.convert $ fmap (fromIntegral . ByteString.length) bss
-        , Binary def encoding . ByteString.concat $ Boxed.toList bss
-        )
+    Schema.Binary def encoding -> {-# SCC fromNested_Binary #-} do
+      --traceM (show $ Boxed.length xss0)
+      !bss <- {-# SCC fromNested_Binary_takeBinary #-} first StripedLogicalSchemaError $ xmapM Logical.takeBinary xss0
 
-    Schema.Array def eschema -> do
-      xss <- first StripedLogicalSchemaError $ traverse Logical.takeArray xss0
+      let
+        !xx =
+          Storable.convert $ fmap (fromIntegral . ByteString.length) bss
+
+        !yy =
+          Binary def encoding . ByteString.concat $ Boxed.toList bss
+
+      pure (xx, yy)
+
+    Schema.Array def eschema -> {-# SCC fromNested_Array #-} do
+      xss <- first StripedLogicalSchemaError $ xmapM Logical.takeArray xss0
       column <- fromValues eschema . Boxed.concat $ Boxed.toList xss
       pure (
           Storable.convert $ fmap (fromIntegral . Boxed.length) xss
         , Array def column
         )
 
-    Schema.Map def kschema vschema -> do
-      kvss <- first StripedLogicalSchemaError $ traverse Logical.takeMap xss0
+    Schema.Map def kschema vschema -> {-# SCC fromNested_Map #-} do
+      kvss <- first StripedLogicalSchemaError $ xmapM Logical.takeMap xss0
 
       let
         (ks0, vs0) =
@@ -445,18 +451,21 @@ fromValues cschema values = {-# SCC fromValues #-}
     Just values1 ->
       case cschema of
         Schema.Unit ->
+          {-# SCC fromValues_Unit #-}
           pure . Unit $ Boxed.length values
 
         Schema.Int def encoding ->
+          {-# SCC fromValues_Int #-}
           Int def encoding . Storable.convert
-            <$> traverse (first StripedLogicalSchemaError . Logical.takeInt) values
+            <$> xmapM (first StripedLogicalSchemaError . Logical.takeInt) values
 
         Schema.Double def ->
+          {-# SCC fromValues_Double #-}
           Double def . Storable.convert
-            <$> traverse (first StripedLogicalSchemaError . Logical.takeDouble) values
+            <$> xmapM (first StripedLogicalSchemaError . Logical.takeDouble) values
 
-        Schema.Enum def vs -> do
-          txs <- traverse (first StripedLogicalSchemaError . Logical.takeEnum) values
+        Schema.Enum def vs -> {-# SCC fromValues_Enum #-} do
+          txs <- xmapM (first StripedLogicalSchemaError . Logical.takeEnum) values
 
           let
             tags =
@@ -466,8 +475,8 @@ fromValues cschema values = {-# SCC fromValues #-}
             <$> pure tags
             <*> fromEnum vs txs
 
-        Schema.Struct def fs -> do
-          xss <- Cons.transpose <$> traverse (first StripedLogicalSchemaError . Logical.takeStruct) values1
+        Schema.Struct def fs -> {-# SCC fromValues_Struct #-} do
+          xss <- Cons.transpose <$> cmapM (first StripedLogicalSchemaError . Logical.takeStruct) values1
 
           when (Cons.length fs /= Cons.length xss) $
             Left $ StripedFieldCountMismatch (Cons.length xss) fs
@@ -475,13 +484,14 @@ fromValues cschema values = {-# SCC fromValues #-}
           Struct def
             <$> Cons.zipWithM fromField fs (fmap Cons.toVector xss)
 
-        Schema.Nested tschema -> do
-          xss <- traverse (first StripedLogicalSchemaError . Logical.takeNested) values
+        Schema.Nested tschema -> {-# SCC fromValues_Nested #-} do
+          xss <- xmapM (first StripedLogicalSchemaError . Logical.takeNested) values
           uncurry Nested
             <$> fromNested tschema xss
 
-        Schema.Reversed rschema -> do
-          xss <- traverse (first StripedLogicalSchemaError . Logical.takeReversed) values
+
+        Schema.Reversed rschema -> {-# SCC fromValues_Reversed #-} do
+          xss <- xmapM (first StripedLogicalSchemaError . Logical.takeReversed) values
           Reversed
             <$> fromValues rschema xss
 {-# INLINABLE fromValues #-}
@@ -568,12 +578,12 @@ toValues = {-# SCC toValues #-} \case
       tags =
         Storable.convert tags0
 
-    values <- Cons.transposeCV <$> traverse (toValues . variantData) vs0
+    values <- Cons.transposeCV <$> cmapM (toValues . variantData) vs0
 
     Boxed.zipWithM mkEnum tags values
 
   Struct _ fs ->
-    fmap Logical.Struct . Cons.transposeCV <$> traverse (toValues . fieldData) fs
+    fmap Logical.Struct . Cons.transposeCV <$> cmapM (toValues . fieldData) fs
 
   Nested ns0 t -> do
     fmap Logical.Nested <$> toNested ns0 t
@@ -679,7 +689,7 @@ merges :: Cons Boxed.Vector Table -> Either StripedError Table
 merges xss = {-# SCC merges #-} do
   s <- first StripedSchemaUnionError . Cons.fold1M' Schema.union $ fmap schema xss
 
-  vss <- Cons.mapM (bind toLogical . transmute s) xss
+  vss <- cmapM (bind toLogical . transmute s) xss
   vs <- first StripedLogicalMergeError $ Cons.fold1M' Logical.merge vss
 
   fromLogical s vs
@@ -840,7 +850,7 @@ transmuteStruct schemas columns0 = {-# SCC transmuteStruct #-}
         Just column ->
           Field name <$> transmuteColumn fschema column
   in
-    traverse lookupField schemas
+    cmapM lookupField schemas
 {-# INLINABLE transmuteStruct #-}
 
 ------------------------------------------------------------------------
