@@ -218,7 +218,7 @@ ppPrefix prefix =
 ------------------------------------------------------------------------
 
 length :: Table -> Int
-length = \case
+length = {-# SCC length #-} \case
   Binary _ _ bs ->
     ByteString.length bs
   Array _ c ->
@@ -232,7 +232,7 @@ length = \case
 {-# INLINABLE length #-}
 
 lengthColumn :: Column -> Int
-lengthColumn = \case
+lengthColumn = {-# SCC lengthColumn #-} \case
   Unit n ->
     n
   Int _ _ xs ->
@@ -250,7 +250,7 @@ lengthColumn = \case
 {-# INLINABLE lengthColumn #-}
 
 schema :: Table -> Schema.Table
-schema = \case
+schema = {-# SCC schema #-} \case
   Binary def encoding _ ->
     Schema.Binary def encoding
   Array def x ->
@@ -260,7 +260,7 @@ schema = \case
 {-# INLINABLE schema #-}
 
 schemaColumn :: Column -> Schema.Column
-schemaColumn = \case
+schemaColumn = {-# SCC schemaColumn #-} \case
   Unit _ ->
     Schema.Unit
   Int def encoding _ ->
@@ -280,7 +280,7 @@ schemaColumn = \case
 ------------------------------------------------------------------------
 
 empty :: Schema.Table -> Table
-empty = \case
+empty = {-# SCC empty #-} \case
   Schema.Binary def encoding ->
     Binary def encoding ByteString.empty
   Schema.Array def x ->
@@ -290,7 +290,7 @@ empty = \case
 {-# INLINABLE empty #-}
 
 emptyColumn :: Schema.Column -> Column
-emptyColumn = \case
+emptyColumn = {-# SCC emptyColumn #-} \case
   Schema.Unit ->
     Unit 0
   Schema.Int def encoding ->
@@ -310,7 +310,7 @@ emptyColumn = \case
 ------------------------------------------------------------------------
 
 takeBinary :: Table -> Either SchemaError (Default, Encoding.Binary, ByteString)
-takeBinary = \case
+takeBinary = {-# SCC takeBinary #-} \case
   Binary def encoding x ->
     Right (def, encoding, x)
   x ->
@@ -318,7 +318,7 @@ takeBinary = \case
 {-# INLINE takeBinary #-}
 
 takeArray :: Table -> Either SchemaError (Default, Column)
-takeArray = \case
+takeArray = {-# SCC takeArray #-} \case
   Array def x ->
     Right (def, x)
   x ->
@@ -326,7 +326,7 @@ takeArray = \case
 {-# INLINE takeArray #-}
 
 takeMap :: Table -> Either SchemaError (Default, Column, Column)
-takeMap = \case
+takeMap = {-# SCC takeMap #-} \case
   Map def k v ->
     Right (def, k, v)
   x ->
@@ -334,7 +334,7 @@ takeMap = \case
 {-# INLINE takeMap #-}
 
 takeInt :: Column -> Either SchemaError (Default, Encoding.Int, Storable.Vector Int64)
-takeInt = \case
+takeInt = {-# SCC takeInt #-} \case
   Int def encoding x ->
     Right (def, encoding, x)
   x ->
@@ -342,7 +342,7 @@ takeInt = \case
 {-# INLINE takeInt #-}
 
 takeDouble :: Column -> Either SchemaError (Default, Storable.Vector Double)
-takeDouble = \case
+takeDouble = {-# SCC takeDouble #-} \case
   Double def x ->
     Right (def, x)
   x ->
@@ -350,7 +350,7 @@ takeDouble = \case
 {-# INLINE takeDouble #-}
 
 takeEnum :: Column -> Either SchemaError (Default, Storable.Vector Tag, Cons Boxed.Vector (Variant Column))
-takeEnum = \case
+takeEnum = {-# SCC takeEnum #-} \case
   Enum def tags x ->
     Right (def, tags, x)
   x ->
@@ -358,7 +358,7 @@ takeEnum = \case
 {-# INLINE takeEnum #-}
 
 takeStruct :: Column -> Either SchemaError (Default, Cons Boxed.Vector (Field Column))
-takeStruct = \case
+takeStruct = {-# SCC takeStruct #-} \case
   Struct def x ->
     Right (def, x)
   x ->
@@ -366,7 +366,7 @@ takeStruct = \case
 {-# INLINE takeStruct #-}
 
 takeNested :: Column -> Either SchemaError (Storable.Vector Int64, Table)
-takeNested = \case
+takeNested = {-# SCC takeNested #-} \case
   Nested ns x ->
     Right (ns, x)
   x ->
@@ -374,7 +374,7 @@ takeNested = \case
 {-# INLINE takeNested #-}
 
 takeReversed :: Column -> Either SchemaError Column
-takeReversed = \case
+takeReversed = {-# SCC takeReversed #-} \case
   Reversed x ->
     Right x
   x ->
@@ -385,7 +385,7 @@ takeReversed = \case
 -- Logical -> Striped
 
 fromLogical :: Schema.Table -> Logical.Table -> Either StripedError Table
-fromLogical tschema collection =
+fromLogical tschema collection = {-# SCC fromLogical #-}
   case tschema of
     Schema.Binary def encoding ->
       Binary def encoding
@@ -404,7 +404,7 @@ fromLogical tschema collection =
 {-# INLINABLE fromLogical #-}
 
 fromNested :: Schema.Table -> Boxed.Vector Logical.Table -> Either StripedError (Storable.Vector Int64, Table)
-fromNested tschema xss0 =
+fromNested tschema xss0 = {-# SCC fromNested #-}
   case tschema of
     Schema.Binary def encoding -> do
       bss <- first StripedLogicalSchemaError $ traverse Logical.takeBinary xss0
@@ -438,7 +438,7 @@ fromNested tschema xss0 =
 {-# INLINABLE fromNested #-}
 
 fromValues :: Schema.Column -> Boxed.Vector Logical.Value -> Either StripedError Column
-fromValues cschema values =
+fromValues cschema values = {-# SCC fromValues #-}
   case Cons.fromVector values of
     Nothing ->
       pure $ emptyColumn cschema
@@ -490,14 +490,14 @@ fromEnum ::
      Cons Boxed.Vector (Variant Schema.Column)
   -> Boxed.Vector (Tag, Logical.Value)
   -> Either StripedError (Cons Boxed.Vector (Variant Column))
-fromEnum variants txs =
+fromEnum variants txs = {-# SCC fromEnum #-}
   forVariant variants $ \tag _ cschema ->
     fromValues cschema $
       Boxed.map (fromVariant cschema tag) txs
 {-# INLINABLE fromEnum #-}
 
 fromVariant :: Schema.Column -> Tag -> (Tag, Logical.Value) -> Logical.Value
-fromVariant cschema expectedTag (tag, value) =
+fromVariant cschema expectedTag (tag, value) = {-# SCC fromVariant #-}
   if expectedTag == tag then
     value
   else
@@ -505,7 +505,7 @@ fromVariant cschema expectedTag (tag, value) =
 {-# INLINABLE fromVariant #-}
 
 fromField :: Field Schema.Column -> Boxed.Vector Logical.Value -> Either StripedError (Field Column)
-fromField field =
+fromField field = {-# SCC fromField #-}
   fmap (field $>) .
   fromValues (fieldData field)
 {-# INLINABLE fromField #-}
@@ -514,7 +514,7 @@ fromField field =
 -- Striped -> Logical
 
 toLogical :: Table -> Either StripedError Logical.Table
-toLogical = \case
+toLogical = {-# SCC toLogical #-} \case
   Binary _ _ bs ->
     pure $ Logical.Binary bs
 
@@ -529,7 +529,7 @@ toLogical = \case
 {-# INLINABLE toLogical #-}
 
 toNested :: Storable.Vector Int64 -> Table -> Either StripedError (Boxed.Vector Logical.Table)
-toNested ns table =
+toNested ns table = {-# SCC toNested #-}
   case table of
     Binary _ _ bs -> do
       bss <- first (StripedNestedLengthMismatch $ schema table) $ Segment.reify ns bs
@@ -547,13 +547,13 @@ toNested ns table =
 {-# INLINABLE toNested #-}
 
 fromSorted :: Boxed.Vector (Logical.Value, Logical.Value) -> Map Logical.Value Logical.Value
-fromSorted =
+fromSorted = {-# SCC fromSorted #-}
   -- FIXME Check order and error if not sorted
   Map.fromDistinctAscList . Boxed.toList
 {-# INLINABLE fromSorted #-}
 
 toValues :: Column -> Either StripedError (Boxed.Vector Logical.Value)
-toValues = \case
+toValues = {-# SCC toValues #-} \case
   Unit n ->
     pure $ Boxed.replicate n Logical.Unit
 
@@ -583,7 +583,7 @@ toValues = \case
 {-# INLINABLE toValues #-}
 
 mkEnum :: Tag -> Cons Boxed.Vector Logical.Value -> Either StripedError Logical.Value
-mkEnum tag values =
+mkEnum tag values = {-# SCC mkEnum #-}
   case Cons.index (fromIntegral tag) values of
     Nothing ->
       Left $ StripedNoValueForEnumTag tag values
@@ -595,7 +595,7 @@ mkEnum tag values =
 -- Splitting
 
 splitAt :: Int -> Table -> (Table, Table)
-splitAt i = \case
+splitAt i = {-# SCC splitAt #-} \case
   Binary def encoding bs ->
     bimap (Binary def encoding) (Binary def encoding) $
       ByteString.splitAt i bs
@@ -611,7 +611,7 @@ splitAt i = \case
 {-# INLINABLE splitAt #-}
 
 splitAtColumn :: Int -> Column -> (Column, Column)
-splitAtColumn i = \case
+splitAtColumn i = {-# SCC splitAtColumn #-} \case
   Unit n ->
     let
       m =
@@ -676,7 +676,7 @@ splitAtColumn i = \case
 
 -- | /O(sorry)/
 merges :: Cons Boxed.Vector Table -> Either StripedError Table
-merges xss = do
+merges xss = {-# SCC merges #-} do
   s <- first StripedSchemaUnionError . Cons.fold1M' Schema.union $ fmap schema xss
 
   vss <- Cons.mapM (bind toLogical . transmute s) xss
@@ -687,7 +687,7 @@ merges xss = do
 
 -- | /O(no)/
 merge :: Table -> Table -> Either StripedError Table
-merge x0 x1 = do
+merge x0 x1 = {-# SCC merge #-} do
   s2 <- first StripedSchemaUnionError $ Schema.union (schema x0) (schema x1)
 
   c0 <- toLogical =<< transmute s2 x0
@@ -701,7 +701,7 @@ merge x0 x1 = do
 -- Default
 
 defaultTable :: Schema.Table -> Table
-defaultTable = \case
+defaultTable = {-# SCC defaultTable #-} \case
   Schema.Binary def encoding ->
     Binary def encoding ""
   Schema.Array def x ->
@@ -711,7 +711,7 @@ defaultTable = \case
 {-# INLINABLE defaultTable #-}
 
 defaultColumn :: Int -> Schema.Column -> Column
-defaultColumn n = \case
+defaultColumn n = {-# SCC defaultColumn #-} \case
   Schema.Unit ->
     Unit n
   Schema.Int def encoding ->
@@ -742,7 +742,7 @@ defaultColumn n = \case
 --   allowed to be missing columns which can be set to a default value.
 --
 transmute :: Schema.Table -> Table -> Either StripedError Table
-transmute s t =
+transmute s t = {-# SCC transmute #-}
   case (s, t) of
     (Schema.Binary def0 encoding0, Binary def1 encoding1 bs)
       | def0 == def1
@@ -773,7 +773,7 @@ transmute s t =
 {-# INLINABLE transmute #-}
 
 transmuteColumn :: Schema.Column -> Column -> Either StripedError Column
-transmuteColumn s c =
+transmuteColumn s c = {-# SCC transmuteColumn #-}
   case (s, c) of
     (Schema.Unit, Unit n) ->
       pure $ Unit n
@@ -818,7 +818,7 @@ transmuteStruct ::
      Cons Boxed.Vector (Field Schema.Column)
   -> Cons Boxed.Vector (Field Column)
   -> Either StripedError (Cons Boxed.Vector (Field Column))
-transmuteStruct schemas columns0 =
+transmuteStruct schemas columns0 = {-# SCC transmuteStruct #-}
   let
     n =
       lengthColumn . fieldData $ Cons.head columns0
@@ -852,13 +852,13 @@ transmuteStruct schemas columns0 =
 
 -- | /O(sorry)/
 unsafeConcat :: Cons Boxed.Vector Table -> Either StripedError Table
-unsafeConcat =
+unsafeConcat = {-# SCC unsafeConcat #-}
   Cons.fold1M' unsafeAppend
 {-# INLINABLE unsafeConcat #-}
 
 -- | /O(n)/
 unsafeAppend :: Table -> Table -> Either StripedError Table
-unsafeAppend x0 x1 =
+unsafeAppend x0 x1 = {-# SCC unsafeAppend #-}
   case (x0, x1) of
     (Binary def0 encoding0 bs0, Binary def1 encoding1 bs1)
       | def0 == def1
@@ -884,7 +884,7 @@ unsafeAppend x0 x1 =
 {-# INLINABLE unsafeAppend #-}
 
 unsafeAppendColumn :: Column -> Column -> Either StripedError Column
-unsafeAppendColumn x0 x1 =
+unsafeAppendColumn x0 x1 = {-# SCC unsafeAppendColumn #-}
   case (x0, x1) of
     (Unit n0, Unit n1) ->
       pure $ Unit (n0 + n1)
@@ -923,7 +923,7 @@ unsafeAppendColumn x0 x1 =
 {-# INLINABLE unsafeAppendColumn #-}
 
 unsafeAppendVariant :: Variant Column -> Variant Column -> Either StripedError (Variant Column)
-unsafeAppendVariant v0 v1 =
+unsafeAppendVariant v0 v1 = {-# SCC unsafeAppendVariant #-}
   if variantName v0 == variantName v1 then
     (v0 $>) <$> unsafeAppendColumn (variantData v0) (variantData v1)
   else
@@ -931,7 +931,7 @@ unsafeAppendVariant v0 v1 =
 {-# INLINABLE unsafeAppendVariant #-}
 
 unsafeAppendField :: Field Column -> Field Column -> Either StripedError (Field Column)
-unsafeAppendField f0 f1 =
+unsafeAppendField f0 f1 = {-# SCC unsafeAppendField #-}
   if fieldName f0 == fieldName f1 then
     (f0 $>) <$> unsafeAppendColumn (fieldData f0) (fieldData f1)
   else
@@ -964,7 +964,7 @@ rechunk ::
   => Int
   -> Stream (Of Table) m r
   -> Stream (Of Table) (EitherT StripedError m)  r
-rechunk max_n =
+rechunk max_n = {-# SCC rechunk #-}
   let
     loop :: Rechunk -> Stream (Of Table) m r -> Stream (Of Table) (EitherT StripedError m) r
     loop (Rechunk n0 emit dl) incoming0 =
@@ -1000,6 +1000,6 @@ rechunk max_n =
 {-# INLINABLE rechunk #-}
 
 unsafeFromDList :: ([Table] -> [Table]) -> [Table] -> Either StripedError Table
-unsafeFromDList dl end =
+unsafeFromDList dl end = {-# SCC unsafeFromDList #-}
   unsafeConcat . Cons.unsafeFromList $ dl end
 {-# INLINE unsafeFromDList #-}
