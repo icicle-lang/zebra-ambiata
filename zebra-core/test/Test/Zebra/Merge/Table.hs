@@ -2,7 +2,6 @@
 {-# LANGUAGE TemplateHaskell #-}
 module Test.Zebra.Merge.Table where
 
-import           Data.Functor.Identity (runIdentity)
 import           Data.List.NonEmpty (NonEmpty(..))
 import           Data.String (String)
 import qualified Data.Vector as Boxed
@@ -13,6 +12,7 @@ import           Disorder.Jack ((===), (==>), gamble, counterexample, oneOf, lis
 import           P
 
 import           System.IO (IO)
+import           System.IO.Unsafe (unsafePerformIO)
 
 import           Test.Zebra.Jack
 
@@ -79,7 +79,7 @@ unionSimple xss0 =
 
 unionList :: Cons Boxed.Vector (NonEmpty Striped.Table) -> Either String (Maybe Striped.Table)
 unionList xss0 =
-  case runIdentity . runEitherT . Stream.toList . Merge.unionStriped $ fmap Stream.each xss0 of
+  case unsafePerformIO . runEitherT . Stream.toList . Merge.unionStriped $ fmap Stream.each xss0 of
     Left (UnionLogicalMergeError _) ->
       pure Nothing
     Left err ->
