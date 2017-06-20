@@ -153,7 +153,7 @@ sortFacts = List.sortBy cmp
    = sortbits a `compare` sortbits b
   -- We are basically sorting by everything except the value
   sortbits f
-   = (factEntityHash f, factEntityId f, factAttributeId f, factTime f, negate $ factFactsetId f)
+   = (factEntityHash f, factEntityId f, factAttributeId f, factTime f, factFactsetId f)
 
 -- | Merge facts for same entity. We should not segfault
 prop_merge_1_entity_no_segfault :: Property

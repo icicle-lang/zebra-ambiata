@@ -126,6 +126,7 @@ data StripedError =
   | StripedFieldCountMismatch !Int !(Cons Boxed.Vector (Field (Schema.Column)))
   | StripedNoValueForEnumTag !Tag !(Cons Boxed.Vector Logical.Value)
   | StripedNestedLengthMismatch !Schema.Table !SegmentError
+  | StripedMapNotSorted !Logical.Value !Logical.Value
   | StripedDefaultFieldNotAllowed !(Field Schema.Column)
   | StripedSchemaUnionError !SchemaUnionError
   | StripedTransmuteMapKeyNotAllowed !Schema.Table !Schema.Table
@@ -166,6 +167,11 @@ renderStripedError = \case
   StripedDefaultFieldNotAllowed (Field name value) ->
     "Schema did not allow defaulting of struct field:" <>
     ppField (unFieldName name) value
+
+  StripedMapNotSorted prev next ->
+    "Table corrupt, found map which was not sorted:" <>
+    ppField "current-key" prev <>
+    ppField "next-key" next
 
   StripedSchemaUnionError err ->
     Schema.renderSchemaUnionError err
@@ -530,8 +536,7 @@ toLogical = \case
   Map _ k v -> do
     ks <- toValues k
     vs <- toValues v
-    pure . Logical.Map . fromSorted $
-      Boxed.zip ks vs
+    fmap Logical.Map . fromSorted $ Boxed.zip ks vs
 {-# INLINABLE toLogical #-}
 
 toNested :: Storable.Vector Int64 -> Table -> Either StripedError (Boxed.Vector Logical.Table)
@@ -548,14 +553,30 @@ toNested ns table =
 
     Map _ k v -> do
       kvs <- Generic.zip <$> toValues k <*> toValues v
-      kvss <- first (StripedNestedLengthMismatch $ schema table) $ Segment.reify ns kvs
-      pure $ fmap (Logical.Map . fromSorted) kvss
+      kvss0 <- first (StripedNestedLengthMismatch $ schema table) $ Segment.reify ns kvs
+      kvss <- traverse fromSorted kvss0
+      pure $ fmap Logical.Map kvss
 {-# INLINABLE toNested #-}
 
-fromSorted :: Boxed.Vector (Logical.Value, Logical.Value) -> Map Logical.Value Logical.Value
-fromSorted =
-  -- FIXME Check order and error if not sorted
-  Map.fromDistinctAscList . Boxed.toList
+ensureSorted :: Boxed.Vector (Logical.Value, Logical.Value) -> Either StripedError ()
+ensureSorted kvs =
+  if Boxed.null kvs then
+    pure ()
+  else
+    let
+      loop (prev, _) (next, v) =
+        if prev > next then
+          Left $ StripedMapNotSorted prev next
+        else
+          pure (next, v)
+    in
+      Boxed.fold1M'_ loop kvs
+{-# INLINABLE ensureSorted #-}
+
+fromSorted :: Boxed.Vector (Logical.Value, Logical.Value) -> Either StripedError (Map Logical.Value Logical.Value)
+fromSorted kvs = do
+  ensureSorted kvs
+  pure . Map.fromDistinctAscList $ Boxed.toList kvs
 {-# INLINABLE fromSorted #-}
 
 toValues :: Column -> Either StripedError (Boxed.Vector Logical.Value)
