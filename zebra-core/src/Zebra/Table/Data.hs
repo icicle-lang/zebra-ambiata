@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveGeneric #-}
@@ -17,18 +18,26 @@ module Zebra.Table.Data (
   , lookupVariant
   , forVariant
 
+  , xmapM
+  , ximapM
+  , cmapM
+  , cimapM
+
   , foreignOfTags
   , tagsOfForeign
   ) where
 
 import           Data.String (IsString(..))
 import qualified Data.Text as Text
+import qualified Data.Vector.Mutable as MBoxed
 
 import           Foreign.Storable (Storable)
 
 import           GHC.Generics (Generic)
 
 import           P
+
+import           System.IO.Unsafe (unsafePerformIO)
 
 import qualified X.Data.Vector as Boxed
 import           X.Data.Vector.Cons (Cons)
@@ -116,13 +125,61 @@ lookupVariant tag xs =
 {-# INLINE lookupVariant #-}
 
 forVariant ::
-     Monad m
-  => Cons Boxed.Vector (Variant a)
-  -> (Tag -> VariantName -> a -> m b)
-  -> m (Cons Boxed.Vector (Variant b))
+     Cons Boxed.Vector (Variant a)
+  -> (Tag -> VariantName -> a -> Either x b)
+  -> Either x (Cons Boxed.Vector (Variant b))
 forVariant xs f =
-  Cons.iforM xs $ \i (Variant name x) ->
+  flip cimapM xs $ \i (Variant name x) ->
     Variant name <$> f (fromIntegral i) name x
+{-# INLINE forVariant #-}
+
+xmapM :: (a -> Either x b) -> Boxed.Vector a -> Either x (Boxed.Vector b)
+xmapM f xs = {-# SCC xmapM #-}
+  ximapM (\_ x -> f x) xs
+{-# INLINE xmapM #-}
+
+ximapM :: (Int -> a -> Either x b) -> Boxed.Vector a -> Either x (Boxed.Vector b)
+ximapM f xs = {-# SCC ximapM #-}
+  unsafePerformIO $ do
+    let
+      !n =
+        Boxed.length xs
+
+    m <- MBoxed.new n
+
+    let
+      loop !i =
+        if i < n then
+          let
+            !x0 =
+              Boxed.unsafeIndex xs i
+          in
+            case f i x0 of
+              Left err ->
+                pure $! Left err
+              Right x -> do
+                MBoxed.unsafeWrite m i x
+                loop (i + 1)
+        else do
+          !ys <- Boxed.unsafeFreeze m
+          pure $! Right ys
+
+    loop 0
+{-# INLINE ximapM #-}
+
+cmapM :: (a -> Either x b) -> Cons Boxed.Vector a -> Either x (Cons Boxed.Vector b)
+cmapM f = {-# SCC cmapM #-}
+  fmap Cons.unsafeFromVector .
+  xmapM f .
+  Cons.toVector
+{-# INLINE cmapM #-}
+
+cimapM :: (Int -> a -> Either x b) -> Cons Boxed.Vector a -> Either x (Cons Boxed.Vector b)
+cimapM f = {-# SCC cimapM #-}
+  fmap Cons.unsafeFromVector .
+  ximapM f .
+  Cons.toVector
+{-# INLINE cimapM #-}
 
 ------------------------------------------------------------------------
 

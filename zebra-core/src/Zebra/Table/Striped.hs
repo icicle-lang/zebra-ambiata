@@ -407,14 +407,19 @@ fromNested :: Schema.Table -> Boxed.Vector Logical.Table -> Either StripedError 
 fromNested tschema xss0 =
   case tschema of
     Schema.Binary def encoding -> do
-      bss <- first StripedLogicalSchemaError $ traverse Logical.takeBinary xss0
-      pure (
+      !bss <- first StripedLogicalSchemaError $ xmapM Logical.takeBinary xss0
+
+      let
+        !xx =
           Storable.convert $ fmap (fromIntegral . ByteString.length) bss
-        , Binary def encoding . ByteString.concat $ Boxed.toList bss
-        )
+
+        !yy =
+          Binary def encoding . ByteString.concat $ Boxed.toList bss
+
+      pure (xx, yy)
 
     Schema.Array def eschema -> do
-      xss <- first StripedLogicalSchemaError $ traverse Logical.takeArray xss0
+      xss <- first StripedLogicalSchemaError $ xmapM Logical.takeArray xss0
       column <- fromValues eschema . Boxed.concat $ Boxed.toList xss
       pure (
           Storable.convert $ fmap (fromIntegral . Boxed.length) xss
@@ -422,7 +427,7 @@ fromNested tschema xss0 =
         )
 
     Schema.Map def kschema vschema -> do
-      kvss <- first StripedLogicalSchemaError $ traverse Logical.takeMap xss0
+      kvss <- first StripedLogicalSchemaError $ xmapM Logical.takeMap xss0
 
       let
         (ks0, vs0) =
@@ -449,14 +454,14 @@ fromValues cschema values =
 
         Schema.Int def encoding ->
           Int def encoding . Storable.convert
-            <$> traverse (first StripedLogicalSchemaError . Logical.takeInt) values
+            <$> xmapM (first StripedLogicalSchemaError . Logical.takeInt) values
 
         Schema.Double def ->
           Double def . Storable.convert
-            <$> traverse (first StripedLogicalSchemaError . Logical.takeDouble) values
+            <$> xmapM (first StripedLogicalSchemaError . Logical.takeDouble) values
 
         Schema.Enum def vs -> do
-          txs <- traverse (first StripedLogicalSchemaError . Logical.takeEnum) values
+          txs <- xmapM (first StripedLogicalSchemaError . Logical.takeEnum) values
 
           let
             tags =
@@ -467,7 +472,7 @@ fromValues cschema values =
             <*> fromEnum vs txs
 
         Schema.Struct def fs -> do
-          xss <- Cons.transpose <$> traverse (first StripedLogicalSchemaError . Logical.takeStruct) values1
+          xss <- Cons.transpose <$> cmapM (first StripedLogicalSchemaError . Logical.takeStruct) values1
 
           when (Cons.length fs /= Cons.length xss) $
             Left $ StripedFieldCountMismatch (Cons.length xss) fs
@@ -476,12 +481,13 @@ fromValues cschema values =
             <$> Cons.zipWithM fromField fs (fmap Cons.toVector xss)
 
         Schema.Nested tschema -> do
-          xss <- traverse (first StripedLogicalSchemaError . Logical.takeNested) values
+          xss <- xmapM (first StripedLogicalSchemaError . Logical.takeNested) values
           uncurry Nested
             <$> fromNested tschema xss
 
+
         Schema.Reversed rschema -> do
-          xss <- traverse (first StripedLogicalSchemaError . Logical.takeReversed) values
+          xss <- xmapM (first StripedLogicalSchemaError . Logical.takeReversed) values
           Reversed
             <$> fromValues rschema xss
 {-# INLINABLE fromValues #-}
@@ -568,12 +574,12 @@ toValues = \case
       tags =
         Storable.convert tags0
 
-    values <- Cons.transposeCV <$> traverse (toValues . variantData) vs0
+    values <- Cons.transposeCV <$> cmapM (toValues . variantData) vs0
 
     Boxed.zipWithM mkEnum tags values
 
   Struct _ fs ->
-    fmap Logical.Struct . Cons.transposeCV <$> traverse (toValues . fieldData) fs
+    fmap Logical.Struct . Cons.transposeCV <$> cmapM (toValues . fieldData) fs
 
   Nested ns0 t -> do
     fmap Logical.Nested <$> toNested ns0 t
@@ -679,7 +685,7 @@ merges :: Cons Boxed.Vector Table -> Either StripedError Table
 merges xss = do
   s <- first StripedSchemaUnionError . Cons.fold1M' Schema.union $ fmap schema xss
 
-  vss <- Cons.mapM (bind toLogical . transmute s) xss
+  vss <- cmapM (bind toLogical . transmute s) xss
   vs <- first StripedLogicalMergeError $ Cons.fold1M' Logical.merge vss
 
   fromLogical s vs
@@ -840,7 +846,7 @@ transmuteStruct schemas columns0 =
         Just column ->
           Field name <$> transmuteColumn fschema column
   in
-    traverse lookupField schemas
+    cmapM lookupField schemas
 {-# INLINABLE transmuteStruct #-}
 
 ------------------------------------------------------------------------
