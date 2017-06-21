@@ -83,7 +83,11 @@ newtype Time =
 newtype FactsetId =
   FactsetId {
       unFactsetId :: Int64
-    } deriving (Eq, Ord, Enum, Num, Real, Integral, Generic, Storable)
+    } deriving (Eq, Enum, Num, Real, Integral, Generic, Storable)
+
+instance Ord FactsetId where
+  compare (FactsetId x) (FactsetId y) =
+    compare y x
 
 data Tombstone =
     NotTombstone
