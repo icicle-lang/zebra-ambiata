@@ -28,6 +28,8 @@ library
                     , semigroups                      == 0.18.*
                     , text                            == 1.2.*
                     , transformers                    == 0.5.*
+                    , concurrent-output               >= 1.6        && < 1.11
+                    , vector                          >= 0.10       && < 0.12
 
   ghc-options:
                     -Wall
@@ -40,6 +42,7 @@ library
                     Zebra.Command.Export
                     Zebra.Command.Import
                     Zebra.Command.Merge
+                    Zebra.Command.Summary
                     Zebra.Command.Util
 
 executable zebra

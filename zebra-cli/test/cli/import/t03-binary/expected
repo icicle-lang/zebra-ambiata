@@ -16,3 +16,10 @@ products and arrays in compressed form. It achieves high compression by
 decomposing this data in to a "struct of arrays" representation on disk. zebra
 stores data in blocks so that files can be streamed without loading the entire
 file in memory.
+
+=== Summary ===
+block_count        = 1
+row_count          = 319
+max_rows_per_block = 319
+first_key          = <file is not a map>
+last_key           = <file is not a map>

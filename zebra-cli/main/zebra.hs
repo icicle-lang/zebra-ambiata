@@ -24,6 +24,7 @@ import           Zebra.Command
 import           Zebra.Command.Export
 import           Zebra.Command.Import
 import           Zebra.Command.Merge
+import           Zebra.Command.Summary
 import           Zebra.Serial.Binary (BinaryVersion(..))
 
 
@@ -34,7 +35,8 @@ main = do
   Options.cli "zebra" buildInfoVersion dependencyInfo parser run
 
 data Command =
-    ZebraImport !Import
+    ZebraSummary !Summary
+  | ZebraImport !Import
   | ZebraExport !Export
   | ZebraMerge !Merge
   -- FIXME cleanup: move to own module like above commands
@@ -54,6 +56,10 @@ cmd p name desc =
 commands :: [Mod CommandFields Command]
 commands =
   [ cmd
+      (ZebraSummary <$> pSummary)
+      "summary"
+      "Generate a summary, with statistics such as row count, for a zebra binary file."
+  , cmd
       (ZebraImport <$> pImport)
       "import"
       "Import a zebra text file into a zebra binary file."
@@ -241,6 +247,11 @@ pMergeOptions =
     <*> pOutputBlockFacts
     <*> pOutputFormat
 
+pSummary :: Parser Summary
+pSummary =
+ Summary
+   <$> pInputBinary
+
 pGCLimit :: Parser Double
 pGCLimit =
   Options.option Options.auto $
@@ -257,6 +268,10 @@ pOutputBlockFacts =
 
 run :: Command -> IO ()
 run = \case
+  ZebraSummary summary ->
+    orDie renderSummaryError . hoist runResourceT $
+      zebraSummary summary
+
   ZebraImport import_ ->
     orDie renderImportError . hoist runResourceT $
       zebraImport import_
