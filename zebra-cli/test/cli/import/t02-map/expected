@@ -52,3 +52,10 @@
 {"key":{"entity_hash":10,"entity_id":"homer"},"value":{"item":"ZHVmZg=="}}
 {"key":{"entity_hash":20,"entity_id":"marge"},"value":{"cash":45.1}}
 {"key":{"entity_hash":30,"entity_id":"lisa"},"value":{"item":"c2F4b3Bob25l"}}
+
+=== Summary ===
+block_count        = 1
+row_count          = 4
+max_rows_per_block = 4
+first_key          = {"entity_hash":10,"entity_id":"barney"}
+last_key           = {"entity_hash":30,"entity_id":"lisa"}

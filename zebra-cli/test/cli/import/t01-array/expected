@@ -49,3 +49,10 @@
 {"entity_id":"def","schleem":{"some":456}}
 {"entity_id":"ghi","schleem":{"some":789}}
 {"entity_id":"jkl","schleem":{"none":{}}}
+
+=== Summary ===
+block_count        = 1
+row_count          = 4
+max_rows_per_block = 4
+first_key          = <file is not a map>
+last_key           = <file is not a map>

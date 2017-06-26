@@ -10,3 +10,7 @@ $ZEBRA export $ZBIN --schema-stdout
 echo
 echo "=== Data ==="
 $ZEBRA export $ZBIN --output-stdout
+
+echo
+echo "=== Summary ==="
+$ZEBRA summary $ZBIN

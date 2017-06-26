@@ -101,3 +101,10 @@
 {"time_ms":"2017-03-04 14:36:37.123","value":"avocado","entity_id":"ghi","date":"2017-03-04","time_us":"2017-03-04 14:36:37.123456","attribute_id":"delicious","time_s":"2017-03-04 14:36:37"}
 {"time_ms":"1600-03-01 00:00:00","value":"wagyu","entity_id":"jkl","date":"1600-03-01","time_us":"1600-03-01 00:00:00","attribute_id":"delicious","time_s":"1600-03-01 00:00:00"}
 {"time_ms":"2999-12-31 23:59:59.999","value":"praline","entity_id":"mno","date":"2999-12-31","time_us":"2999-12-31 23:59:59.999999","attribute_id":"delicious","time_s":"2999-12-31 23:59:59"}
+
+=== Summary ===
+block_count        = 1
+row_count          = 5
+max_rows_per_block = 5
+first_key          = <file is not a map>
+last_key           = <file is not a map>
