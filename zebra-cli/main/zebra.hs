@@ -21,6 +21,7 @@ import           X.Options.Applicative (Parser, Mod, CommandFields)
 import qualified X.Options.Applicative as Options
 
 import           Zebra.Command
+import           Zebra.Command.Adapt
 import           Zebra.Command.Export
 import           Zebra.Command.Import
 import           Zebra.Command.Merge
@@ -39,6 +40,7 @@ data Command =
   | ZebraImport !Import
   | ZebraExport !Export
   | ZebraMerge !Merge
+  | ZebraAdapt !Adapt
   -- FIXME cleanup: move to own module like above commands
   | ZebraCat !(NonEmpty FilePath) !CatOptions
   | ZebraFacts !FilePath
@@ -71,6 +73,10 @@ commands =
       (ZebraMerge <$> pMerge)
       "merge"
       "Merge multiple zebra binary files together."
+  , cmd
+      (ZebraAdapt <$> pAdapt)
+      "adapt"
+      "Adapt a zebra binary file so that it uses a different, but compatible, schema."
   -- FIXME cleanup: move to own module like above commands
   , cmd
       (ZebraCat <$> some1 pInputBinary <*> pCatOptions)
@@ -252,6 +258,13 @@ pSummary =
  Summary
    <$> pInputBinary
 
+pAdapt :: Parser Adapt
+pAdapt =
+ Adapt
+   <$> pInputBinary
+   <*> pInputSchema
+   <*> ((Just <$> pOutputBinary) <|> pOutputBinaryStdout <|> pure Nothing)
+
 pGCLimit :: Parser Double
 pGCLimit =
   Options.option Options.auto $
@@ -283,6 +296,10 @@ run = \case
   ZebraMerge merge ->
     orDie renderMergeError . hoist runResourceT $
       zebraMerge merge
+
+  ZebraAdapt adapt ->
+    orDie renderAdaptError . hoist runResourceT $
+      zebraAdapt adapt
 
   -- FIXME cleanup: move to own module like above commands
 

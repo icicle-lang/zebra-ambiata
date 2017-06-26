@@ -39,6 +39,7 @@ library
 
   exposed-modules:
                     Zebra.Command
+                    Zebra.Command.Adapt
                     Zebra.Command.Export
                     Zebra.Command.Import
                     Zebra.Command.Merge
