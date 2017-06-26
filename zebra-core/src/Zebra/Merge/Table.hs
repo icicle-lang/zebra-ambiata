@@ -10,6 +10,7 @@ module Zebra.Merge.Table (
 
   , unionLogical
   , unionStriped
+  , unionStripedWith
   ) where
 
 import           Control.Monad.Morph (hoist, squash)
@@ -199,14 +200,12 @@ unionLogical schema inputs = do
     unionInput $ fmap (Input Map.empty . Just) inputs
 {-# INLINABLE unionLogical #-}
 
-unionStriped ::
+unionStripedWith ::
      Monad m
-  => Cons Boxed.Vector (Stream (Of Striped.Table) m ())
+  => Schema.Table
+  -> Cons Boxed.Vector (Stream (Of Striped.Table) m ())
   -> Stream (Of Striped.Table) (EitherT UnionTableError m) ()
-unionStriped inputs0 = do
-  (heads, inputs1) <- fmap Cons.unzip . lift $ traverse peekHead inputs0
-  schema <- lift . hoistEither . unionSchemas $ fmap Striped.schema heads
-
+unionStripedWith schema inputs0 = do
   let
     fromStriped =
       Stream.mapM (hoistEither . first UnionStripedError . Striped.toLogical) .
@@ -215,5 +214,15 @@ unionStriped inputs0 = do
 
   hoist squash .
     Stream.mapM (hoistEither . first UnionStripedError . Striped.fromLogical schema) $
-    unionLogical schema (fmap fromStriped inputs1)
+    unionLogical schema (fmap fromStriped inputs0)
+{-# INLINABLE unionStripedWith #-}
+
+unionStriped ::
+     Monad m
+  => Cons Boxed.Vector (Stream (Of Striped.Table) m ())
+  -> Stream (Of Striped.Table) (EitherT UnionTableError m) ()
+unionStriped inputs0 = do
+  (heads, inputs1) <- fmap Cons.unzip . lift $ traverse peekHead inputs0
+  schema <- lift . hoistEither . unionSchemas $ fmap Striped.schema heads
+  unionStripedWith schema inputs1
 {-# INLINABLE unionStriped #-}
