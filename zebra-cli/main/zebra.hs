@@ -137,6 +137,14 @@ pInputSchema =
     Options.metavar "INPUT_ZEBRA_SCHEMA" <>
     Options.help "Path to a schema file which describes the input file"
 
+pAdaptSchema :: Parser FilePath
+pAdaptSchema =
+  Options.option Options.str $
+    Options.short 's' <>
+    Options.long "schema" <>
+    Options.metavar "INPUT_ZEBRA_SCHEMA" <>
+    Options.help "Path to a schema file which all inputs will be adapted to before processing"
+
 pOutputBinaryStdout :: Parser (Maybe FilePath)
 pOutputBinaryStdout =
   Options.flag' Nothing $
@@ -197,6 +205,7 @@ pMerge :: Parser Merge
 pMerge =
  Merge
    <$> some1 pInputBinary
+   <*> optional pAdaptSchema
    <*> ((Just <$> pOutputBinary) <|> pOutputBinaryStdout <|> pure Nothing)
    <*> pOutputFormat
    <*> pMergeRowsPerBlock
@@ -262,7 +271,7 @@ pAdapt :: Parser Adapt
 pAdapt =
  Adapt
    <$> pInputBinary
-   <*> pInputSchema
+   <*> pAdaptSchema
    <*> ((Just <$> pOutputBinary) <|> pOutputBinaryStdout <|> pure Nothing)
 
 pGCLimit :: Parser Double
