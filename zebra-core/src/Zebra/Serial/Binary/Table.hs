@@ -17,8 +17,8 @@ import qualified Data.Text as Text
 
 import           P
 
-import qualified X.Data.Vector.Cons as Cons
-import qualified X.Data.Vector.Storable as Storable
+import qualified Neutron.Vector.Cons as Cons
+import qualified Neutron.Vector.Storable as Storable
 
 import           Zebra.Serial.Binary.Array
 import           Zebra.Serial.Binary.Data
@@ -36,9 +36,9 @@ bTable version = \case
     () <- first BinaryEncodeUtf8 $ Encoding.validateBinary encoding bs
     case version of
       BinaryV2 ->
-        pure $ bSizedByteArray bs
+        return $ bSizedByteArray bs
       BinaryV3 ->
-        pure $ bByteArray bs
+        return $ bByteArray bs
 
   Striped.Array _def x ->
     bColumn version x
@@ -54,17 +54,17 @@ bTable version = \case
 bColumn :: BinaryVersion -> Striped.Column -> Either BinaryEncodeError Builder
 bColumn version = \case
   Striped.Unit _ ->
-    pure $ mempty
+    return $ mempty
 
   Striped.Int _def _encoding xs ->
-    pure $ bIntArray xs
+    return $ bIntArray xs
 
   Striped.Double _def xs ->
-    pure $ bDoubleArray xs
+    return $ bDoubleArray xs
 
   Striped.Enum _def tags vs0 -> do
     vs <- traverse (bColumn version . variantData) vs0
-    pure $
+    return $
       bTagArray tags <>
       mconcat (Cons.toList vs)
 
@@ -93,7 +93,7 @@ getTable version n = \case
         BinaryV3 ->
           getByteArray n
 
-    pure $ Striped.Binary def encoding bs
+    return $ Striped.Binary def encoding bs
 
   Schema.Array def x ->
     Striped.Array def
@@ -112,7 +112,7 @@ validateBinary encoding bs =
       fail . Text.unpack $
         renderBinaryDecodeError (BinaryDecodeUtf8 err)
     Right () ->
-      pure bs
+      return bs
 {-# INLINABLE validateBinary #-}
 
 -- | Decode a zebra column using a row count and a schema.
@@ -120,7 +120,7 @@ validateBinary encoding bs =
 getColumn :: BinaryVersion -> Int -> Schema.Column -> Get Striped.Column
 getColumn version n = \case
   Schema.Unit ->
-    pure $ Striped.Unit n
+    return $ Striped.Unit n
 
   Schema.Int def encoding ->
     Striped.Int def encoding

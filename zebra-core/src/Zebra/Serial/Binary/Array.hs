@@ -24,19 +24,21 @@ import           Data.ByteString (ByteString)
 import qualified Data.ByteString as B
 import           Data.ByteString.Builder (Builder)
 import qualified Data.ByteString.Builder as Builder
-import qualified Data.ByteString.Builder.Prim.Internal as Prim
 import qualified Data.ByteString.Builder.Prim as Prim
+import qualified Data.ByteString.Builder.Prim.Internal as Prim
+import qualified Data.Text as Text
 import           Data.Word (Word64)
+
+import qualified Neutron.Vector.Boxed as Boxed
+import qualified Neutron.Vector.Generic as Generic
+import qualified Neutron.Vector.Storable as Storable
 
 import           P
 
 import qualified Snapper as Snappy
 
-import           X.Data.ByteString.Unsafe (unsafeSplits)
-import qualified X.Data.Vector as Boxed
-import qualified X.Data.Vector.Storable as Storable
-
 import qualified Zebra.Foreign.Serial as Foreign
+import qualified Zebra.X.Vector.Segment as Segment
 
 
 -- | Strings are encoded as a word array of lengths, followed by the bytes for
@@ -45,14 +47,12 @@ bStrings :: Boxed.Vector ByteString -> Builder
 bStrings bss =
   let
     lengths =
-      bIntArray .
-      Storable.convert $
-      fmap (fromIntegral . B.length) bss
+      bIntArray $
+        Generic.map (fromIntegral . B.length) bss
 
     bytes =
-      bSizedByteArray .
-      B.concat $
-      toList bss
+      bSizedByteArray . B.concat $
+        Generic.toList bss
   in
     lengths <>
     bytes
@@ -62,9 +62,12 @@ getStrings :: Int -> Get (Boxed.Vector ByteString)
 getStrings n = do
   lengths <- getIntArray n
   bytes <- getSizedByteArray
-  pure .
-    unsafeSplits id bytes $
-    Storable.map fromIntegral lengths
+  case Segment.reify lengths bytes of
+    Left err ->
+      fail $
+        "getStrings: " <> Text.unpack (Segment.renderSegmentError err)
+    Right x ->
+      return x
 {-# INLINABLE getStrings #-}
 
 -- | Encode a vector of bytes.
@@ -104,7 +107,7 @@ getByteArray n_expected = do
           B.length uncompressed
       in
         if n_expected == n_actual then
-          pure uncompressed
+          return uncompressed
         else
           fail $
             "decoded snappy was the wrong size: " <>
@@ -162,7 +165,7 @@ getSizedByteArray = do
 --
 bIntArray :: Storable.Vector Int64 -> Builder
 bIntArray xs =
-  let len = Storable.length xs
+  let len = Generic.length xs
       -- Worst case for size of array if packing requires full 64-bit numbers:
       -- size (4)
       -- offset (8)
@@ -180,7 +183,7 @@ getIntArray elems = do
   bytes <- Get.getByteString bufsize
   case Foreign.unpackArray bytes elems offset of
     Left err -> fail $ "Could not unpack 64-encoded words: " <> show err
-    Right xs -> pure xs
+    Right xs -> return xs
 {-# INLINABLE getIntArray #-}
 
 -- | Commutative, overflow proof integer average/midpoint:
