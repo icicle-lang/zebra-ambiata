@@ -69,9 +69,9 @@ import           P hiding (bool, some, either, first, second)
 
 import           Text.Show.Pretty (ppShow)
 
-import qualified X.Data.Vector as Boxed
-import           X.Data.Vector.Cons (Cons)
-import qualified X.Data.Vector.Cons as Cons
+import qualified Neutron.Vector.Boxed as Boxed
+import           Neutron.Vector.Cons (Cons)
+import qualified Neutron.Vector.Cons as Cons
 
 import           Zebra.Table.Data
 import qualified Zebra.Table.Encoding as Encoding
@@ -309,7 +309,7 @@ takeOption x0 = do
   (def, vs) <- takeEnum x0
   case Cons.toList vs of
     [Variant "none" Unit, Variant "some" x] ->
-      pure (def, x)
+      return (def, x)
     _ ->
       Left $ SchemaExpectedOption vs
 {-# INLINE takeOption #-}
@@ -319,7 +319,7 @@ takeEither x0 = do
   (def, vs) <- takeEnum x0
   case Cons.toList vs of
     [Variant "left" l, Variant "right" r] ->
-      pure (def, l, r)
+      return (def, l, r)
     _ ->
       Left $ SchemaExpectedEither vs
 {-# INLINE takeEither #-}
@@ -329,7 +329,7 @@ takePair x0 = do
   (def, fs) <- takeStruct x0
   case Cons.toList fs of
     [Field "first" x, Field "second" y] ->
-      pure (def, x, y)
+      return (def, x, y)
     _ ->
       Left $ SchemaExpectedPair fs
 {-# INLINE takePair #-}
@@ -401,7 +401,7 @@ union t0 t1 =
       | def0 == def1
       , encoding0 == encoding1
       ->
-        pure $ Binary def0 encoding0
+        return $ Binary def0 encoding0
 
     (Array def0 x0, Array def1 x1)
       | def0 == def1
@@ -427,22 +427,22 @@ unionColumn :: Column -> Column -> Either SchemaUnionError Column
 unionColumn c0 c1 =
   case (c0, c1) of
     (Unit, Unit) ->
-      pure Unit
+      return Unit
 
     (Int def0 encoding0, Int def1 encoding1)
       | def0 == def1
       , encoding0 == encoding1
       ->
-        pure $ Int def0 encoding0
+        return $ Int def0 encoding0
 
     (Double def0, Double def1)
       | def0 == def1
       ->
-        pure $ Double def0
+        return $ Double def0
 
     (Enum def0 vs0, Enum def1 vs1)
       | def0 == def1
-      , fmap variantName vs0 == fmap variantName vs1
+      , Cons.map variantName vs0 == Cons.map variantName vs1
       ->
         Enum def0
           <$> Cons.zipWithM (\(Variant n x) (Variant _ y) -> Variant n <$> unionColumn x y) vs0 vs1
@@ -480,7 +480,7 @@ defaultOrUnion fields field@(Field name _) =
         DenyDefault ->
           Left $ SchemaUnionDefaultNotAllowed field
         AllowDefault ->
-          pure $ Field name schema
+          return $ Field name schema
 
     Just (Both schema0 schema1) ->
       Field name <$> unionColumn schema0 schema1
@@ -496,10 +496,10 @@ defaultOrNothing fields field@(Field name _) =
         DenyDefault ->
           Left $ SchemaUnionDefaultNotAllowed field
         AllowDefault ->
-          pure . Just $ Field name schema
+          return . Just $ Field name schema
 
     Just (Both _ _) ->
-      pure Nothing
+      return Nothing
 
 fromCons :: Cons Boxed.Vector (Field Column) -> Map FieldName Column
 fromCons =
@@ -524,7 +524,7 @@ unionStruct cfields0 cfields1 = do
   xs <- traverse (defaultOrUnion fields) cfields0
   ys <- traverse (defaultOrNothing fields) cfields1
 
-  pure . Cons.unsafeFromVector $
+  return . Cons.unsafeFromVector $
     Cons.toVector xs <>
     Cons.mapMaybe id ys
 {-# INLINABLE unionStruct #-}

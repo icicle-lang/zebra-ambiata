@@ -59,6 +59,12 @@ library
                     src
 
   exposed-modules:
+                    Neutron.Unsafe
+                    Neutron.Vector.Boxed
+                    Neutron.Vector.Cons
+                    Neutron.Vector.Generic
+                    Neutron.Vector.Generic.Mutable
+
                     Zebra.Factset.Block
                     Zebra.Factset.Block.Block
                     Zebra.Factset.Block.Entity
