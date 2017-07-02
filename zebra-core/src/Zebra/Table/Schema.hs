@@ -83,6 +83,8 @@ data Table =
   | Map !Default !Column !Column
     deriving (Eq, Ord, Show, Generic)
 
+instance NFData Table
+
 data Column =
     Unit
   | Int !Default !Encoding.Int
@@ -92,6 +94,8 @@ data Column =
   | Nested !Table
   | Reversed !Column
     deriving (Eq, Ord, Show, Generic)
+
+instance NFData Column
 
 data SchemaError =
     SchemaExpectedBinary !Table

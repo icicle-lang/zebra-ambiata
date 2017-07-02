@@ -47,6 +47,8 @@ data Binary =
   | Utf8
     deriving (Eq, Ord, Show, Generic)
 
+instance NFData Binary
+
 --
 -- Potentially we want to support epochs other than 1600-03-01, and possibly
 -- even time zones, but we keep it super simple for now.
@@ -59,6 +61,8 @@ data Int =
   | TimeMilliseconds -- ^ milliseconds since 1600-03-01
   | TimeMicroseconds -- ^ microseconds since 1600-03-01
     deriving (Eq, Ord, Show, Generic)
+
+instance NFData Int
 
 data Utf8Error =
     Utf8Error !String !(Maybe Word8)

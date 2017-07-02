@@ -110,6 +110,8 @@ data Table =
   | Map !Default !Column !Column
     deriving (Eq, Ord, Show, Generic)
 
+instance NFData Table
+
 data Column =
     Unit !Int
   | Int !Default !Encoding.Int !(Storable.Vector Int64)
@@ -119,6 +121,8 @@ data Column =
   | Nested !(Storable.Vector Int64) !Table
   | Reversed !Column
     deriving (Eq, Ord, Show, Generic)
+
+instance NFData Column
 
 data StripedError =
     StripedLogicalSchemaError !LogicalSchemaError

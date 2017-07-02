@@ -215,6 +215,7 @@ unionStripedWith schema inputs0 = do
   let
     fromStriped =
       Stream.fork .
+      Stream.map force .
       Stream.mapM (hoistEither . first UnionStripedError . Striped.toLogical) .
       Stream.mapM (hoistEither . first UnionStripedError . Striped.transmute schema) .
       hoist lift
