@@ -82,6 +82,8 @@ data Table =
   | Map !(Map Value Value)
     deriving (Eq, Ord, Show, Generic)
 
+instance NFData Table
+
 data Value =
     Unit
   | Int !Int64
@@ -91,6 +93,8 @@ data Value =
   | Nested !Table
   | Reversed !Value
     deriving (Eq, Show, Generic) -- Ord defined at bottom of file.
+
+instance NFData Value
 
 data LogicalMergeError =
     LogicalCannotMergeMismatchedCollections !Table !Table
