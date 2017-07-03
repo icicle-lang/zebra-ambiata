@@ -21,7 +21,6 @@ import           Control.Monad.Morph (hoist, squash)
 import           Control.Monad.Trans.Class (lift)
 import           Control.Monad.Trans.Control
 
-import qualified Data.List as List
 import           Data.Map (Map)
 import qualified Data.Map.Strict as Map
 
