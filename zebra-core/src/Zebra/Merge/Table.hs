@@ -167,7 +167,8 @@ unionInput inputs = do
         pure ()
       else do
         Step values inputs2 <- lift $ unionStep inputs1
-        Stream.yield $ Logical.Map values
+        when (not $ Map.null values) $
+          Stream.yield $ Logical.Map values
         loop inputs2
 
   loop inputs
