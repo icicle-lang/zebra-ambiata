@@ -11,6 +11,8 @@ import           Control.Monad.Trans.Resource (runResourceT)
 import           Data.List.NonEmpty (NonEmpty(..), some1)
 import           Data.String (String)
 
+import           GHC.Conc (getNumProcessors, setNumCapabilities)
+
 import           P
 
 import           System.IO (IO, FilePath)
@@ -31,6 +33,8 @@ import           Zebra.Serial.Binary (BinaryVersion(..))
 
 main :: IO ()
 main = do
+  n <- getNumProcessors
+  setNumCapabilities (min 8 n)
   IO.hSetBuffering IO.stdout IO.LineBuffering
   IO.hSetBuffering IO.stderr IO.LineBuffering
   Options.cli "zebra" buildInfoVersion dependencyInfo parser run
