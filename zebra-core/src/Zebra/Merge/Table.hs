@@ -1,9 +1,13 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE DefaultSignatures #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DoAndIfThenElse #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TupleSections #-}
 module Zebra.Merge.Table (
     UnionTableError(..)
   , renderUnionTableError
@@ -15,17 +19,17 @@ module Zebra.Merge.Table (
 
 import           Control.Monad.Morph (hoist, squash)
 import           Control.Monad.Trans.Class (lift)
+import           Control.Monad.Trans.Control
 
-import qualified Data.List as List
 import           Data.Map (Map)
 import qualified Data.Map.Strict as Map
-import qualified Data.Vector as Boxed
-
-import           GHC.Types (SPEC(..))
 
 import           P
 
+import           System.IO (IO)
+
 import           X.Control.Monad.Trans.Either (EitherT, hoistEither, left)
+import qualified X.Data.Vector as Boxed
 import           X.Data.Vector.Cons (Cons)
 import qualified X.Data.Vector.Cons as Cons
 
@@ -38,6 +42,7 @@ import qualified Zebra.Table.Striped as Striped
 import           Zebra.X.Stream (Stream, Of)
 import qualified Zebra.X.Stream as Stream
 
+------------------------------------------------------------------------
 
 data Input m =
   Input {
@@ -141,31 +146,9 @@ updateInput input =
             pure . replaceStream tl $ replaceData values input
 {-# INLINABLE updateInput #-}
 
-yieldChunked :: Monad m => Map Logical.Value Logical.Value -> Stream (Of Logical.Table) m ()
-yieldChunked kvs0 =
-  let
-    !n =
-      Map.size kvs0
-  in
-    if n == 0 then
-      pure ()
-    else if n < 4096 then
-      Stream.yield $ Logical.Map kvs0
-    else do
-      let
-        -- FIXME use Data.Map.Strict.splitAt when we're able to upgrade to containers >= 0.5.8
-        (kvs1, kvs2) =
-          bimap Map.fromDistinctAscList Map.fromDistinctAscList .
-            List.splitAt 4096 $
-            Map.toAscList kvs0
-
-      Stream.yield $ Logical.Map kvs1
-      yieldChunked kvs2
-{-# INLINABLE yieldChunked #-}
-
 unionStep :: Monad m => Cons Boxed.Vector (Input m) -> EitherT UnionTableError m (Step m)
 unionStep inputs = do
-  step <- firstT UnionLogicalMergeError . hoistEither . Logical.unionStep $ fmap inputData inputs
+  step <- firstT UnionLogicalMergeError . hoistEither . Logical.unionStep $ Cons.map inputData inputs
   pure $
     Step
       (Logical.unionComplete step)
@@ -173,56 +156,61 @@ unionStep inputs = do
 {-# INLINABLE unionStep #-}
 
 unionInput ::
-     Monad m
+     MonadBaseControl IO m
   => Cons Boxed.Vector (Input m)
   -> Stream (Of Logical.Table) (EitherT UnionTableError m) ()
 unionInput inputs = do
   let
-    loop !_ inputs0 = do
-      inputs1 <- lift $ traverse updateInput inputs0
+    loop inputs0 = do
+      inputs1 <- lift $ Cons.mapM updateInput inputs0
       if Cons.all isClosed inputs1 then do
         pure ()
       else do
         Step values inputs2 <- lift $ unionStep inputs1
-        yieldChunked values
-        loop SPEC inputs2
+        when (not $ Map.null values) $
+          Stream.yield $ Logical.Map values
+        loop inputs2
 
-  loop SPEC inputs
+  loop inputs
 {-# INLINABLE unionInput #-}
 
 unionLogical ::
-     Monad m
+     MonadBaseControl IO m
   => Schema.Table
   -> Cons Boxed.Vector (Stream (Of Logical.Table) m ())
   -> Stream (Of Logical.Table) (EitherT UnionTableError m) ()
 unionLogical schema inputs = do
   Stream.whenEmpty (Logical.empty schema) $
-    unionInput $ fmap (Input Map.empty . Just) inputs
+    unionInput $ Cons.map (Input Map.empty . Just) inputs
 {-# INLINABLE unionLogical #-}
 
 unionStripedWith ::
-     Monad m
+     MonadBaseControl IO m
   => Schema.Table
   -> Cons Boxed.Vector (Stream (Of Striped.Table) m ())
   -> Stream (Of Striped.Table) (EitherT UnionTableError m) ()
 unionStripedWith schema inputs0 = do
   let
     fromStriped =
+      Stream.fork .
+      Stream.map force .
       Stream.mapM (hoistEither . first UnionStripedError . Striped.toLogical) .
       Stream.mapM (hoistEither . first UnionStripedError . Striped.transmute schema) .
       hoist lift
 
   hoist squash .
-    Stream.mapM (hoistEither . first UnionStripedError . Striped.fromLogical schema) $
-    unionLogical schema (fmap fromStriped inputs0)
+    Stream.mapM (hoistEither . first UnionStripedError . Striped.fromLogical schema) .
+    Stream.fork .
+    Stream.map force $
+    unionLogical schema (Cons.map fromStriped inputs0)
 {-# INLINABLE unionStripedWith #-}
 
 unionStriped ::
-     Monad m
+     MonadBaseControl IO m
   => Cons Boxed.Vector (Stream (Of Striped.Table) m ())
   -> Stream (Of Striped.Table) (EitherT UnionTableError m) ()
 unionStriped inputs0 = do
-  (heads, inputs1) <- fmap Cons.unzip . lift $ traverse peekHead inputs0
-  schema <- lift . hoistEither . unionSchemas $ fmap Striped.schema heads
+  (heads, inputs1) <- lift . fmap Cons.unzip $ Cons.mapM peekHead inputs0
+  schema <- lift . hoistEither . unionSchemas $ Cons.map Striped.schema heads
   unionStripedWith schema inputs1
 {-# INLINABLE unionStriped #-}
