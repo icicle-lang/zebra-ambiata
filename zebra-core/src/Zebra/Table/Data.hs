@@ -51,6 +51,8 @@ newtype FieldName =
       unFieldName :: Text
     } deriving (Eq, Ord, Generic)
 
+instance NFData FieldName
+
 instance Show FieldName where
   showsPrec p =
     showsPrec p . unFieldName
@@ -65,6 +67,8 @@ data Field a =
     , fieldData :: !a
     } deriving (Eq, Ord, Generic, Functor, Foldable, Traversable)
 
+instance NFData a => NFData (Field a)
+
 instance Show a => Show (Field a) where
   showsPrec =
     gshowsPrec
@@ -73,6 +77,8 @@ newtype VariantName =
   VariantName {
       unVariantName :: Text
     } deriving (Eq, Ord, Generic)
+
+instance NFData VariantName
 
 instance Show VariantName where
   showsPrec p =
@@ -88,6 +94,8 @@ data Variant a =
     , variantData :: !a
     } deriving (Eq, Ord, Generic, Functor, Foldable, Traversable)
 
+instance NFData a => NFData (Variant a)
+
 instance Show a => Show (Variant a) where
   showsPrec =
     gshowsPrec
@@ -96,6 +104,8 @@ newtype Tag =
   Tag {
       unTag :: Int64
     } deriving (Eq, Ord, Generic, Storable, Num, Enum, Real, Integral)
+
+instance NFData Tag
 
 instance Show Tag where
   showsPrec =
@@ -111,6 +121,8 @@ data Default =
     DenyDefault  -- ^ Table/column can NOT be replaced by a default value if missing.
   | AllowDefault -- ^ Table/column can be replaced by a default value if missing.
     deriving (Eq, Ord, Show, Generic)
+
+instance NFData Default
 
 ------------------------------------------------------------------------
 
