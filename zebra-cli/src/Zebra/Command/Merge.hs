@@ -1,5 +1,6 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE DoAndIfThenElse #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -17,6 +18,7 @@ module Zebra.Command.Merge (
 import           Control.Monad.Catch (MonadCatch)
 import           Control.Monad.IO.Class (liftIO)
 import           Control.Monad.Morph (hoist)
+import           Control.Monad.Trans.Control (MonadBaseControl)
 import           Control.Monad.Trans.Resource (MonadResource, ResourceT)
 
 import qualified Data.ByteString as ByteString
@@ -100,7 +102,7 @@ readSchema = \case
     fmap Just . firstT MergeTextSchemaDecodeError . hoistEither $
       Text.decodeSchema schema
 
-zebraMerge :: (MonadResource m, MonadCatch m) => Merge -> EitherT MergeError m ()
+zebraMerge :: (MonadResource m, MonadCatch m, MonadBaseControl IO m) => Merge -> EitherT MergeError m ()
 zebraMerge x = do
   mschema <- readSchema (mergeSchema x)
 

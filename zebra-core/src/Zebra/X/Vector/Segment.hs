@@ -1,3 +1,4 @@
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
@@ -15,6 +16,8 @@ module Zebra.X.Vector.Segment (
   , unsafeReify
   ) where
 
+import           Control.Monad.IO.Class (MonadIO(..))
+
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString as ByteString
 import qualified Data.Text as Text
@@ -25,10 +28,14 @@ import qualified Data.Vector.Unboxed as Unboxed
 
 import           Foreign.Storable (Storable)
 
+import qualified Neutron.Vector.Generic as Generic
+import qualified Neutron.Vector.Generic.Mutable as MGeneric
+
 import           P hiding (length, concat, empty)
 
+import           System.IO.Unsafe (unsafePerformIO)
+
 import qualified X.Data.ByteString.Unsafe as ByteString
-import qualified X.Data.Vector.Generic as Generic
 
 
 -- | Class of things that can contain segmented data.
@@ -38,7 +45,7 @@ class Segment a where
 
 instance Segment (Boxed.Vector a) where
   segmentLength =
-    Boxed.length
+    Generic.length
   {-# INLINE segmentLength #-}
 
   segmentUnsafeSlice =
@@ -47,7 +54,7 @@ instance Segment (Boxed.Vector a) where
 
 instance Unbox a => Segment (Unboxed.Vector a) where
   segmentLength =
-    Unboxed.length
+    Generic.length
   {-# INLINE segmentLength #-}
 
   segmentUnsafeSlice =
@@ -56,7 +63,7 @@ instance Unbox a => Segment (Unboxed.Vector a) where
 
 instance Storable a => Segment (Storable.Vector a) where
   segmentLength =
-    Storable.length
+    Generic.length
   {-# INLINE segmentLength #-}
 
   segmentUnsafeSlice =
@@ -122,18 +129,31 @@ reify ns xs =
       pure $ unsafeReify ns xs
 {-# INLINE reify #-}
 
-data IdxOff =
-  IdxOff !Int !Int
+unsafeReify :: forall a v. (Segment a, Generic.Vector v Int64) => v Int64 -> a -> Boxed.Vector a
+unsafeReify ns xs0 =
+  unsafePerformIO $ do
+    let
+      !ns_len =
+        Generic.length ns
 
-unsafeReify :: (Segment a, Generic.Vector v Int64) => v Int64 -> a -> Boxed.Vector a
-unsafeReify ns xs =
-  let
-    loop (IdxOff idx off) =
-      let
-        !len =
-          fromIntegral (Generic.unsafeIndex ns idx)
-      in
-        Just (unsafeSlice off len xs, IdxOff (idx + 1) (off + len))
-  in
-    Generic.unfoldrN (Generic.length ns) loop (IdxOff 0 0)
+    !dst <-
+      liftIO $ MGeneric.unsafeNew ns_len
+
+    let
+      loop !i !off =
+        if i >= ns_len then
+          liftIO $ Generic.unsafeFreeze dst
+
+        else do
+          let
+            !len =
+              fromIntegral (Generic.unsafeIndex i ns)
+
+            !xs =
+              unsafeSlice off len xs0
+
+          liftIO $ MGeneric.unsafeWrite dst i xs
+          loop (i + 1) (off + len)
+
+    loop 0 0
 {-# INLINE unsafeReify #-}

@@ -32,6 +32,8 @@ library
                     , exceptions                      >= 0.6        && < 0.9
                     , ghc-prim                        >= 0.4        && < 0.6
                     , lens                            >= 4.7        && < 4.15
+                    , lifted-base                     == 0.2.*
+                    , monad-control                   == 1.0.*
                     , mmorph                          == 1.0.*
                     , mtl                             == 2.2.*
                     , old-locale                      == 1.0.*
@@ -57,6 +59,12 @@ library
                     src
 
   exposed-modules:
+                    Neutron.Unsafe
+                    Neutron.Vector.Boxed
+                    Neutron.Vector.Cons
+                    Neutron.Vector.Generic
+                    Neutron.Vector.Generic.Mutable
+
                     Zebra.Factset.Block
                     Zebra.Factset.Block.Block
                     Zebra.Factset.Block.Entity
