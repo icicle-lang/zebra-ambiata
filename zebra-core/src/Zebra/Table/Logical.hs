@@ -56,6 +56,8 @@ module Zebra.Table.Logical (
   , renderField
   ) where
 
+import           Control.Parallel.Strategies (withStrategy, parTuple2, rdeepseq)
+
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString as ByteString
 import           Data.Map (Map)
@@ -103,7 +105,9 @@ data LogicalMergeError =
   | LogicalCannotMergeInt !Int64 !Int64
   | LogicalCannotMergeDouble !Double !Double
   | LogicalCannotMergeEnum !(Tag, Value) !(Tag, Value)
-    deriving (Eq, Show)
+    deriving (Eq, Show, Generic)
+
+instance NFData LogicalMergeError
 
 data LogicalSchemaError =
     LogicalExpectedBinary !Table
@@ -256,8 +260,13 @@ mergeMaps kvss =
         (kvss0, kvss1) =
           Boxed.splitAt (n `div` 2) kvss
 
-      kvs0 <- mergeMaps kvss0
-      kvs1 <- mergeMaps kvss1
+        (ekvs0, ekvs1) =
+          withStrategy
+            (parTuple2 rdeepseq rdeepseq)
+            (mergeMaps kvss0, mergeMaps kvss1)
+
+      kvs0 <- ekvs0
+      kvs1 <- ekvs1
 
       mergeMap kvs0 kvs1
 {-# INLINABLE mergeMaps #-}
