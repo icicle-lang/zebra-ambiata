@@ -147,28 +147,6 @@ updateInput input =
             pure . replaceStream tl $ replaceData values input
 {-# INLINABLE updateInput #-}
 
-yieldChunked :: Monad m => Map Logical.Value Logical.Value -> Stream (Of Logical.Table) m ()
-yieldChunked kvs0 =
-  let
-    !n =
-      Map.size kvs0
-  in
-    if n == 0 then
-      pure ()
-    else if n < 4096 then
-      Stream.yield $ Logical.Map kvs0
-    else do
-      let
-        -- FIXME use Data.Map.Strict.splitAt when we're able to upgrade to containers >= 0.5.8
-        (kvs1, kvs2) =
-          bimap Map.fromDistinctAscList Map.fromDistinctAscList .
-            List.splitAt 4096 $
-            Map.toAscList kvs0
-
-      Stream.yield $ Logical.Map kvs1
-      yieldChunked kvs2
-{-# INLINABLE yieldChunked #-}
-
 unionStep :: Monad m => Cons Boxed.Vector (Input m) -> EitherT UnionTableError m (Step m)
 unionStep inputs = do
   step <- firstT UnionLogicalMergeError . hoistEither . Logical.unionStep $ Cons.map inputData inputs
@@ -190,7 +168,7 @@ unionInput inputs = do
         pure ()
       else do
         Step values inputs2 <- lift $ unionStep inputs1
-        yieldChunked values
+        Stream.yield $ Logical.Map values
         loop inputs2
 
   loop inputs
@@ -221,7 +199,9 @@ unionStripedWith schema inputs0 = do
       hoist lift
 
   hoist squash .
-    Stream.mapM (hoistEither . first UnionStripedError . Striped.fromLogical schema) $
+    Stream.mapM (hoistEither . first UnionStripedError . Striped.fromLogical schema) .
+    Stream.fork .
+    Stream.map force $
     unionLogical schema (Cons.map fromStriped inputs0)
 {-# INLINABLE unionStripedWith #-}
 
