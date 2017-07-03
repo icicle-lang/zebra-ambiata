@@ -16,12 +16,9 @@ module Zebra.Merge.Table (
 import           Control.Monad.Morph (hoist, squash)
 import           Control.Monad.Trans.Class (lift)
 
-import qualified Data.List as List
 import           Data.Map (Map)
 import qualified Data.Map.Strict as Map
 import qualified Data.Vector as Boxed
-
-import           GHC.Types (SPEC(..))
 
 import           P
 
@@ -141,28 +138,6 @@ updateInput input =
             pure . replaceStream tl $ replaceData values input
 {-# INLINABLE updateInput #-}
 
-yieldChunked :: Monad m => Map Logical.Value Logical.Value -> Stream (Of Logical.Table) m ()
-yieldChunked kvs0 =
-  let
-    !n =
-      Map.size kvs0
-  in
-    if n == 0 then
-      pure ()
-    else if n < 4096 then
-      Stream.yield $ Logical.Map kvs0
-    else do
-      let
-        -- FIXME use Data.Map.Strict.splitAt when we're able to upgrade to containers >= 0.5.8
-        (kvs1, kvs2) =
-          bimap Map.fromDistinctAscList Map.fromDistinctAscList .
-            List.splitAt 4096 $
-            Map.toAscList kvs0
-
-      Stream.yield $ Logical.Map kvs1
-      yieldChunked kvs2
-{-# INLINABLE yieldChunked #-}
-
 unionStep :: Monad m => Cons Boxed.Vector (Input m) -> EitherT UnionTableError m (Step m)
 unionStep inputs = do
   step <- firstT UnionLogicalMergeError . hoistEither . Logical.unionStep $ fmap inputData inputs
@@ -176,18 +151,15 @@ unionInput ::
      Monad m
   => Cons Boxed.Vector (Input m)
   -> Stream (Of Logical.Table) (EitherT UnionTableError m) ()
-unionInput inputs = do
-  let
-    loop !_ inputs0 = do
-      inputs1 <- lift $ traverse updateInput inputs0
-      if Cons.all isClosed inputs1 then do
-        pure ()
-      else do
-        Step values inputs2 <- lift $ unionStep inputs1
-        yieldChunked values
-        loop SPEC inputs2
-
-  loop SPEC inputs
+unionInput inputs0 = do
+  inputs1 <- lift $ traverse updateInput inputs0
+  if Cons.all isClosed inputs1 then do
+    pure ()
+  else do
+    Step values inputs2 <- lift $ unionStep inputs1
+    when (not $ Map.null values) .
+      Stream.yield $ Logical.Map values
+    unionInput inputs2
 {-# INLINABLE unionInput #-}
 
 unionLogical ::
