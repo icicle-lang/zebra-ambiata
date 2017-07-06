@@ -86,7 +86,7 @@ decodeJson p =
 
 standardConfig :: [Text] -> Aeson.Config
 standardConfig keyOrder =
-  Aeson.Config {
+  Aeson.defConfig {
       Aeson.confIndent =
         Aeson.Spaces 0
     , Aeson.confCompare =
@@ -98,7 +98,7 @@ standardConfig keyOrder =
 
 indentConfig :: [Text] -> Aeson.Config
 indentConfig keyOrder =
-  Aeson.Config {
+  Aeson.defConfig {
       Aeson.confIndent =
         Aeson.Spaces 2
     , Aeson.confCompare =
