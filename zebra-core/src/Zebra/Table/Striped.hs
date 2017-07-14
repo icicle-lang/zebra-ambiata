@@ -136,6 +136,7 @@ data StripedError =
   | StripedTransmuteMapKeyNotAllowed !Schema.Table !Schema.Table
   | StripedTransmuteTableMismatch !Schema.Table !Schema.Table
   | StripedTransmuteColumnMismatch !Schema.Column !Schema.Column
+  | StripedTransmuteIntMismatch !Encoding.Int !Encoding.Int
   | StripedAppendTableMismatch !Schema.Table !Schema.Table
   | StripedAppendColumnMismatch !Schema.Column !Schema.Column
   | StripedAppendVariantMismatch !(Variant Schema.Column) !(Variant Schema.Column)
@@ -192,6 +193,11 @@ renderStripedError = \case
 
   StripedTransmuteColumnMismatch x y ->
     "Cannot transmute column from actual schema to desired schema:" <>
+    ppField "actual" x <>
+    ppField "desired" y
+
+  StripedTransmuteIntMismatch x y ->
+    "Cannot transmute column from actual encoding to desired encoding:" <>
     ppField "actual" x <>
     ppField "desired" y
 
@@ -803,6 +809,81 @@ transmute s t =
       Left $ StripedTransmuteTableMismatch (schema t) s
 {-# INLINABLE transmute #-}
 
+transmuteFromDate :: Encoding.Int -> Either StripedError (Storable.Vector Int64 -> Storable.Vector Int64)
+transmuteFromDate = \case
+  Encoding.Int ->
+    Left $ StripedTransmuteIntMismatch Encoding.Date Encoding.Int
+  Encoding.Date ->
+    pure id
+  Encoding.TimeSeconds ->
+    pure $ Storable.map (* 86400)
+  Encoding.TimeMilliseconds ->
+    pure $ Storable.map (* 86400000)
+  Encoding.TimeMicroseconds ->
+    pure $ Storable.map (* 86400000000)
+{-# INLINABLE transmuteFromDate #-}
+
+transmuteFromTimeSeconds :: Encoding.Int -> Either StripedError (Storable.Vector Int64 -> Storable.Vector Int64)
+transmuteFromTimeSeconds = \case
+  Encoding.Int ->
+    Left $ StripedTransmuteIntMismatch Encoding.Date Encoding.Int
+  Encoding.Date ->
+    pure $ Storable.map (`quot` 86400)
+  Encoding.TimeSeconds ->
+    pure id
+  Encoding.TimeMilliseconds ->
+    pure $ Storable.map (* 1000)
+  Encoding.TimeMicroseconds ->
+    pure $ Storable.map (* 1000000)
+{-# INLINABLE transmuteFromTimeSeconds #-}
+
+transmuteFromTimeMilliseconds :: Encoding.Int -> Either StripedError (Storable.Vector Int64 -> Storable.Vector Int64)
+transmuteFromTimeMilliseconds = \case
+  Encoding.Int ->
+    Left $ StripedTransmuteIntMismatch Encoding.Date Encoding.Int
+  Encoding.Date ->
+    pure $ Storable.map (`quot` 86400000)
+  Encoding.TimeSeconds ->
+    pure $ Storable.map (`quot` 1000)
+  Encoding.TimeMilliseconds ->
+    pure id
+  Encoding.TimeMicroseconds ->
+    pure $ Storable.map (* 1000)
+{-# INLINABLE transmuteFromTimeMilliseconds #-}
+
+transmuteFromTimeMicroseconds :: Encoding.Int -> Either StripedError (Storable.Vector Int64 -> Storable.Vector Int64)
+transmuteFromTimeMicroseconds = \case
+  Encoding.Int ->
+    Left $ StripedTransmuteIntMismatch Encoding.Date Encoding.Int
+  Encoding.Date ->
+    pure $ Storable.map (`quot` 86400000000)
+  Encoding.TimeSeconds ->
+    pure $ Storable.map (`quot` 1000000)
+  Encoding.TimeMilliseconds ->
+    pure $ Storable.map (`quot` 1000)
+  Encoding.TimeMicroseconds ->
+    pure id
+{-# INLINABLE transmuteFromTimeMicroseconds #-}
+
+transmuteInt :: Encoding.Int -> Encoding.Int -> Either StripedError (Storable.Vector Int64 -> Storable.Vector Int64)
+transmuteInt to from =
+  case from of
+    Encoding.Int ->
+      case to of
+        Encoding.Int ->
+          pure id
+        _ ->
+          Left $ StripedTransmuteIntMismatch from to
+    Encoding.Date ->
+      transmuteFromDate to
+    Encoding.TimeSeconds ->
+      transmuteFromTimeSeconds to
+    Encoding.TimeMilliseconds ->
+      transmuteFromTimeMilliseconds to
+    Encoding.TimeMicroseconds ->
+      transmuteFromTimeMicroseconds to
+{-# INLINABLE transmuteInt #-}
+
 transmuteColumn :: Schema.Column -> Column -> Either StripedError Column
 transmuteColumn s c =
   case (s, c) of
@@ -811,9 +892,9 @@ transmuteColumn s c =
 
     (Schema.Int def0 encoding0, Int def1 encoding1 xs)
       | def0 == def1
-      , encoding0 == encoding1
-      ->
-        pure $ Int def1 encoding1 xs
+      -> do
+        convert <- transmuteInt encoding0 encoding1
+        pure $ Int def0 encoding0 (convert xs)
 
     (Schema.Double def0, Double def1 xs)
       | def0 == def1
