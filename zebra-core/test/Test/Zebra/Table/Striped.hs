@@ -18,6 +18,8 @@ import           Test.Zebra.Jack
 
 import           Text.Show.Pretty (ppShow)
 
+import qualified Viking.Stream as Stream
+
 import           X.Control.Monad.Trans.Either (runEitherT)
 import qualified X.Data.Vector as Boxed
 import qualified X.Data.Vector.Cons as Cons
@@ -26,7 +28,6 @@ import           Zebra.Table.Data
 import qualified Zebra.Table.Logical as Logical
 import qualified Zebra.Table.Schema as Schema
 import qualified Zebra.Table.Striped as Striped
-import qualified Zebra.X.Stream as Stream
 
 
 prop_roundtrip_values :: Property

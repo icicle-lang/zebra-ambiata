@@ -24,6 +24,10 @@ import           P
 import           System.IO (IO, FilePath)
 import           System.IO.Error (IOError)
 
+import           Viking (Stream, Of(..))
+import qualified Viking.ByteStream as ByteStream
+import qualified Viking.Stream as Stream
+
 import           X.Control.Monad.Trans.Either (EitherT, firstJoin, hoistEither)
 
 import           Zebra.Command.Util
@@ -34,9 +38,6 @@ import qualified Zebra.Serial.Text as Text
 import qualified Zebra.Table.Schema as Schema
 import           Zebra.Table.Striped (StripedError)
 import qualified Zebra.Table.Striped as Striped
-import qualified Zebra.X.ByteStream as ByteStream
-import           Zebra.X.Stream (Stream, Of(..))
-import qualified Zebra.X.Stream as Stream
 
 
 data Adapt =

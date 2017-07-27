@@ -18,6 +18,9 @@ import           Test.Zebra.Jack
 
 import           Text.Show.Pretty (ppShow)
 
+import           Viking.Stream (Of(..))
+import qualified Viking.Stream as Stream
+
 import           X.Control.Monad.Trans.Either (runEitherT)
 import           X.Data.Vector.Cons (Cons)
 import qualified X.Data.Vector.Cons as Cons
@@ -27,8 +30,6 @@ import qualified Zebra.Merge.Table as Merge
 import qualified Zebra.Table.Schema as Schema
 import           Zebra.Table.Striped (StripedError(..))
 import qualified Zebra.Table.Striped as Striped
-import           Zebra.X.Stream (Of(..))
-import qualified Zebra.X.Stream as Stream
 
 jFileTable :: Schema.Table -> Jack Striped.Table
 jFileTable schema = do

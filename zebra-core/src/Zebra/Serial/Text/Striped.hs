@@ -22,15 +22,15 @@ import           Data.ByteString (ByteString)
 
 import           P
 
+import           Viking (ByteStream, Stream, Of(..))
+import qualified Viking.Stream as Stream
+
 import           X.Control.Monad.Trans.Either (EitherT, hoistEither, firstJoin)
 
 import           Zebra.Serial.Text.Logical
 import qualified Zebra.Table.Schema as Schema
 import           Zebra.Table.Striped (StripedError)
 import qualified Zebra.Table.Striped as Striped
-import           Zebra.X.ByteStream (ByteStream)
-import           Zebra.X.Stream (Stream, Of(..))
-import qualified Zebra.X.Stream as Stream
 
 
 data TextStripedEncodeError =

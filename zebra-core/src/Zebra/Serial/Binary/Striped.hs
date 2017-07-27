@@ -18,6 +18,12 @@ import           Control.Monad.Trans.Class (lift)
 
 import           P
 
+import           Viking (ByteStream, Stream, Of(..))
+import qualified Viking.ByteStream as ByteStream
+import qualified Viking.Stream as Stream
+import           Viking.Stream.Binary (BinaryError, renderBinaryError)
+import qualified Viking.Stream.Binary as Stream
+
 import           X.Control.Monad.Trans.Either (EitherT, left, hoistEither)
 
 import           Zebra.Factset.Table
@@ -25,12 +31,6 @@ import           Zebra.Serial.Binary.Block
 import           Zebra.Serial.Binary.Data
 import           Zebra.Serial.Binary.Header
 import qualified Zebra.Table.Striped as Striped
-import           Zebra.X.ByteStream (ByteStream)
-import qualified Zebra.X.ByteStream as ByteStream
-import           Zebra.X.Stream (Stream, Of(..))
-import qualified Zebra.X.Stream as Stream
-import           Zebra.X.Stream.Get (GetError, renderGetError)
-import qualified Zebra.X.Stream.Get as Stream
 
 
 data BinaryStripedEncodeError =
@@ -40,8 +40,8 @@ data BinaryStripedEncodeError =
     deriving (Eq, Show)
 
 data BinaryStripedDecodeError =
-    BinaryStripedDecodeHeaderError !GetError
-  | BinaryStripedDecodeBlockError !GetError
+    BinaryStripedDecodeHeaderError !BinaryError
+  | BinaryStripedDecodeBlockError !BinaryError
     deriving (Eq, Show)
 
 renderBinaryStripedEncodeError :: BinaryStripedEncodeError -> Text
@@ -56,9 +56,9 @@ renderBinaryStripedEncodeError = \case
 renderBinaryStripedDecodeError :: BinaryStripedDecodeError -> Text
 renderBinaryStripedDecodeError = \case
   BinaryStripedDecodeHeaderError err ->
-    "Error decoding header: " <> renderGetError err
+    "Error decoding header: " <> renderBinaryError err
   BinaryStripedDecodeBlockError err ->
-    "Error decoding block: " <> renderGetError err
+    "Error decoding block: " <> renderBinaryError err
 
 encodeStriped ::
      Monad m
@@ -97,5 +97,5 @@ decodeStriped bss0 = do
     Stream.runGet getHeader bss0
 
   hoist (firstT BinaryStripedDecodeBlockError) $
-    Stream.runGetAll (getBlockTable header) bss1
+    Stream.runGetSome (getBlockTable header) bss1
 {-# INLINABLE decodeStriped #-}

@@ -35,6 +35,11 @@ import qualified Data.Vector as Boxed
 
 import           P
 
+import           Viking (ByteStream, Stream, Of(..))
+import qualified Viking.ByteStream as ByteStream
+import qualified Viking.Char8Stream as Char8Stream
+import qualified Viking.Stream as Stream
+
 import           X.Control.Monad.Trans.Either (EitherT, hoistEither)
 
 import           Zebra.Serial.Json.Logical (JsonLogicalEncodeError, renderJsonLogicalEncodeError)
@@ -44,11 +49,6 @@ import           Zebra.Table.Encoding (Utf8Error)
 import qualified Zebra.Table.Encoding as Encoding
 import qualified Zebra.Table.Logical as Logical
 import qualified Zebra.Table.Schema as Schema
-import           Zebra.X.ByteStream (ByteStream)
-import qualified Zebra.X.ByteStream as ByteStream
-import qualified Zebra.X.ByteStream.Char8 as CharStream
-import           Zebra.X.Stream (Stream, Of(..))
-import qualified Zebra.X.Stream as Stream
 
 
 data TextLogicalEncodeError =
@@ -163,7 +163,7 @@ needsAlignment = \case
 alignChunks :: Monad m => Schema.Table -> ByteStream m a -> ByteStream m a
 alignChunks schema =
   if needsAlignment schema then
-    CharStream.rechunkLineEnd
+    Char8Stream.rechunkLineEnd
   else
     id
 {-# INLINABLE alignChunks #-}
