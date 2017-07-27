@@ -1,5 +1,4 @@
 {-# LANGUAGE DoAndIfThenElse #-}
-{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 module Zebra.Command.Util (
     getBinaryStdout
