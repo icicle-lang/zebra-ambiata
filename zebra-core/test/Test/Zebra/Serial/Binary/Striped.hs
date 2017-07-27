@@ -11,9 +11,10 @@ import           System.IO (IO)
 
 import           Test.Zebra.Jack
 
+import qualified Viking.ByteStream as ByteStream
+
 import           Zebra.Serial.Binary.Striped
 import qualified Zebra.Table.Striped as Striped
-import qualified Zebra.X.ByteStream as ByteStream
 
 
 data BinaryError =

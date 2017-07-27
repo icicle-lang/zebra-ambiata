@@ -15,6 +15,7 @@ library
                       base                            >= 3          && < 5
                     , ambiata-anemone
                     , ambiata-p
+                    , ambiata-viking
                     , ambiata-x-eithert
                     , ambiata-x-vector
                     , ambiata-zebra-core

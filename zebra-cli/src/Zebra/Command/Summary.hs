@@ -27,6 +27,10 @@ import qualified System.Console.Regions as Concurrent
 import           System.IO (IO, FilePath)
 import           System.IO.Error (IOError)
 
+import           Viking (Of(..))
+import qualified Viking.ByteStream as ByteStream
+import qualified Viking.Stream as Stream
+
 import           X.Control.Monad.Trans.Either (EitherT, pattern EitherT, runEitherT, firstJoin)
 
 import           Zebra.Serial.Binary (BinaryStripedDecodeError)
@@ -35,9 +39,6 @@ import qualified Zebra.Serial.Json as Json
 import qualified Zebra.Table.Logical as Logical
 import qualified Zebra.Table.Schema as Schema
 import qualified Zebra.Table.Striped as Striped
-import qualified Zebra.X.ByteStream as ByteStream
-import           Zebra.X.Stream (Of(..))
-import qualified Zebra.X.Stream as Stream
 
 
 data Summary =

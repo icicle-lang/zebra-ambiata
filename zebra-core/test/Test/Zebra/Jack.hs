@@ -105,6 +105,9 @@ import           Test.QuickCheck.Instances ()
 import           Text.Printf (printf)
 import           Text.Show.Pretty (ppShow)
 
+import           Viking (Stream, Of)
+import qualified Viking.Stream as Stream
+
 import           X.Control.Monad.Trans.Either (EitherT, runEitherT)
 import           X.Data.Vector.Cons (Cons)
 import qualified X.Data.Vector.Cons as Cons
@@ -120,8 +123,6 @@ import qualified Zebra.Table.Logical as Logical
 import qualified Zebra.Table.Schema as Schema
 import qualified Zebra.Table.Striped as Striped
 import           Zebra.Time
-import           Zebra.X.Stream (Stream, Of)
-import qualified Zebra.X.Stream as Stream
 
 ------------------------------------------------------------------------
 

@@ -19,6 +19,9 @@ import           Control.Monad.Trans.Class (lift)
 
 import           P
 
+import           Viking (ByteStream, Stream, Of(..))
+import qualified Viking.Stream as Stream
+
 import           X.Control.Monad.Trans.Either (EitherT, left, hoistEither, firstJoin)
 
 import           Zebra.Serial.Binary.Data
@@ -27,9 +30,6 @@ import qualified Zebra.Table.Logical as Logical
 import qualified Zebra.Table.Schema as Schema
 import           Zebra.Table.Striped (StripedError)
 import qualified Zebra.Table.Striped as Striped
-import           Zebra.X.ByteStream (ByteStream)
-import           Zebra.X.Stream (Stream, Of(..))
-import qualified Zebra.X.Stream as Stream
 
 
 data BinaryLogicalEncodeError =

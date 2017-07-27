@@ -24,6 +24,8 @@ import           P
 import           System.IO (IO, FilePath)
 import           System.IO.Error (IOError)
 
+import qualified Viking.ByteStream as ByteStream
+
 import           X.Control.Monad.Trans.Either (EitherT, hoistEither, firstJoin)
 
 import           Zebra.Command.Util
@@ -31,7 +33,6 @@ import           Zebra.Serial.Binary (BinaryStripedEncodeError)
 import qualified Zebra.Serial.Binary as Binary
 import           Zebra.Serial.Text (TextSchemaDecodeError, TextStripedDecodeError)
 import qualified Zebra.Serial.Text as Text
-import qualified Zebra.X.ByteStream as ByteStream
 
 
 data Import =

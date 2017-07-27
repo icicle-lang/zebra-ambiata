@@ -1,8 +1,9 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE PatternSynonyms #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module Zebra.Command.Export (
     Export(..)
   , ExportOutput(..)
@@ -26,6 +27,9 @@ import           P
 import           System.IO (IO, FilePath, stdout)
 import           System.IO.Error (IOError)
 
+import           Viking (ByteStream)
+import qualified Viking.ByteStream as ByteStream
+
 import           X.Control.Monad.Trans.Either (EitherT, tryEitherT, firstJoin)
 
 import           Zebra.Serial.Binary (BinaryLogicalDecodeError)
@@ -33,8 +37,6 @@ import qualified Zebra.Serial.Binary as Binary
 import           Zebra.Serial.Text (TextLogicalEncodeError)
 import qualified Zebra.Serial.Text as Text
 import qualified Zebra.Table.Schema as Schema
-import           Zebra.X.ByteStream (ByteStream)
-import qualified Zebra.X.ByteStream as ByteStream
 
 
 data Export =

@@ -22,6 +22,9 @@ import qualified Data.Vector as Boxed
 
 import           P
 
+import           Viking (Stream, Of)
+import qualified Viking.Stream as Stream
+
 import           X.Control.Monad.Trans.Either (EitherT, hoistEither, left)
 import           X.Data.Vector.Cons (Cons)
 import qualified X.Data.Vector.Cons as Cons
@@ -32,8 +35,6 @@ import           Zebra.Table.Schema (SchemaUnionError)
 import qualified Zebra.Table.Schema as Schema
 import           Zebra.Table.Striped (StripedError)
 import qualified Zebra.Table.Striped as Striped
-import           Zebra.X.Stream (Stream, Of)
-import qualified Zebra.X.Stream as Stream
 
 
 data Input m =

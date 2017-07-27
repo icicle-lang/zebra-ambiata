@@ -1,4 +1,5 @@
 {-# LANGUAGE DoAndIfThenElse #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 module Zebra.Command.Util (
     getBinaryStdout
@@ -17,10 +18,10 @@ import           System.IO (FilePath, Handle, getLine, putStr)
 import           System.IO (stdout, hIsTerminalDevice, hFlush)
 import           System.IO.Error (IOError)
 
-import           X.Control.Monad.Trans.Either (EitherT)
+import           Viking (ByteStream)
+import qualified Viking.ByteStream as ByteStream
 
-import           Zebra.X.ByteStream (ByteStream)
-import qualified Zebra.X.ByteStream as ByteStream
+import           X.Control.Monad.Trans.Either (EitherT)
 
 
 getBinaryStdout :: MonadIO m => m (Maybe Handle)

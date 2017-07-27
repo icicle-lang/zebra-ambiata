@@ -11,8 +11,9 @@ import           System.IO (IO)
 
 import           Test.Zebra.Jack
 
+import qualified Viking.ByteStream as ByteStream
+
 import           Zebra.Serial.Text.Logical
-import qualified Zebra.X.ByteStream as ByteStream
 
 
 data TextError =

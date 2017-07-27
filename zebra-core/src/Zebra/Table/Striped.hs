@@ -85,6 +85,9 @@ import           P hiding (empty, concat, splitAt, length)
 
 import           Text.Show.Pretty (ppShow)
 
+import           Viking (Stream, Of)
+import qualified Viking.Stream as Stream
+
 import           X.Control.Monad.Trans.Either (EitherT, hoistEither)
 import qualified X.Data.Vector as Boxed
 import           X.Data.Vector.Cons (Cons)
@@ -97,8 +100,6 @@ import           Zebra.Table.Logical (LogicalSchemaError, LogicalMergeError)
 import qualified Zebra.Table.Logical as Logical
 import           Zebra.Table.Schema (SchemaError(..), SchemaUnionError)
 import qualified Zebra.Table.Schema as Schema
-import           Zebra.X.Stream (Stream, Of)
-import qualified Zebra.X.Stream as Stream
 import           Zebra.X.Vector.Segment (SegmentError)
 import qualified Zebra.X.Vector.Segment as Segment
 import qualified Zebra.X.Vector.Storable as Storable
