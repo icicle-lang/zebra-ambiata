@@ -11,6 +11,7 @@ library
                     , ambiata-disorder-corpus
                     , ambiata-disorder-jack
                     , ambiata-p
+                    , ambiata-viking
                     , ambiata-x-eithert
                     , ambiata-x-vector
                     , ambiata-zebra-core
