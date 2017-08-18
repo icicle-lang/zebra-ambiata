@@ -31,6 +31,7 @@ module Zebra.Time (
   , toMilliseconds
   , toMicroseconds
   , parseTime
+  , parseTimeSep
   , renderTime
 
   , CalendarTime(..)
@@ -47,6 +48,7 @@ module Zebra.Time (
   , toCalendarDate
   , fromTimeOfDay
   , toTimeOfDay
+  , parseTimeOfDay
 
   , TimeError(..)
   , renderTimeError
@@ -399,7 +401,12 @@ toMicroseconds (Time us) =
 {-# INLINABLE toMicroseconds #-}
 
 parseTime :: ByteString -> Either TimeError Time
-parseTime bs0 =
+parseTime =
+  parseTimeSep $ \d -> d == upperT || d == space
+{-# INLINABLE parseTime #-}
+
+parseTimeSep :: (Word8 -> Bool) -> ByteString -> Either TimeError Time
+parseTimeSep sep bs0 =
   case Anemone.parseDay bs0 of
     Left err ->
       Left $ TimeDateParseError err
@@ -417,12 +424,12 @@ parseTime bs0 =
           !d0 =
             ByteString.unsafeIndex bs 0
         in
-          if d0 == upperT || d0 == space then do
+          if sep d0 then do
             us <- fromTimeOfDay <$> parseTimeOfDay (ByteString.drop 1 bs)
             fromMicroseconds $ us_days + us
           else
             Left $ TimeInvalidDateTimeSeparator (Char.chr $ fromIntegral d0) bs0
-{-# INLINABLE parseTime #-}
+{-# INLINABLE parseTimeSep #-}
 
 renderTime :: Time -> ByteString
 renderTime =
