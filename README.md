@@ -5,7 +5,7 @@ zebra
 Column-oriented binary format for immutable datasets
 ```
 
-<img src="https://github.com/ambiata/zebra/raw/master/doc/zebra.jpg" width="700" align="right"/>
+<img src="https://github.com/ambiata/zebra/raw/master/doc/zebra.jpg" width="350" align="right"/>
 
 Overview
 --------
