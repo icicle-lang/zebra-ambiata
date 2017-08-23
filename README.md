@@ -5,10 +5,10 @@ zebra
 Column-oriented binary format for immutable datasets
 ```
 
-<img src="https://github.com/ambiata/zebra/raw/master/doc/zebra.jpg" width="350" align="right"/>
-
 Overview
 --------
+
+<img src="https://github.com/ambiata/zebra/raw/master/doc/zebra.jpg" width="350" align="right"/>
 
 `zebra` is a typed data format for storing arbitrary combinations of
 sums, products and arrays in compressed form. It achieves high
