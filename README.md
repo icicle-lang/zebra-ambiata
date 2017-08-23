@@ -31,6 +31,46 @@ compression as similar data is grouped together. One notable difference
 that Zebra has from Dremel and Parquet is that Zebra supports full sum
 types (i.e. Rust-like enums) rather than just optional fields.
 
+What this looks like on disk can be hard to visualise, here are a number
+of examples which show how logical types and data are flattened into
+the physical column oriented representation which is used on disk. You
+can see in the examples that arrays which exist in adjacent rows are
+simply concatenated and a segment descriptor with the array lengths is
+stored to keep track of which values belong to which row. Sum types use
+a tag to indicate which variant is relevant for a given row.
+
+### Example 1
+
+#### Type
+<img src="https://github.com/ambiata/zebra/raw/master/doc/layout1-types.png" width="960" align="center"/>
+
+#### Data
+<img src="https://github.com/ambiata/zebra/raw/master/doc/layout1-data.png" width="960" align="center"/>
+
+### Example 2
+
+#### Type
+<img src="https://github.com/ambiata/zebra/raw/master/doc/layout2-types.png" width="960" align="center"/>
+
+#### Data
+<img src="https://github.com/ambiata/zebra/raw/master/doc/layout2-data.png" width="960" align="center"/>
+
+### Example 3
+
+#### Type
+<img src="https://github.com/ambiata/zebra/raw/master/doc/layout3-types.png" width="960" align="center"/>
+
+#### Data
+<img src="https://github.com/ambiata/zebra/raw/master/doc/layout3-data.png" width="960" align="center"/>
+
+### Example 4
+
+#### Type
+<img src="https://github.com/ambiata/zebra/raw/master/doc/layout4-types.png" width="960" align="center"/>
+
+#### Data
+<img src="https://github.com/ambiata/zebra/raw/master/doc/layout4-data.png" width="960" align="center"/>
+
 Compression
 -----------
 
