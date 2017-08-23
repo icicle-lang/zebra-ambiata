@@ -5,10 +5,10 @@ zebra
 Column-oriented binary format for immutable datasets
 ```
 
-<img src="https://github.com/ambiata/zebra/raw/master/doc/zebra.jpg" width="350" align="right"/>
-
 Overview
 --------
+
+<img src="https://github.com/ambiata/zebra/raw/master/doc/zebra.jpg" width="350" align="right"/>
 
 `zebra` is a typed data format for storing arbitrary combinations of
 sums, products and arrays in compressed form. It achieves high
@@ -41,7 +41,7 @@ decoded.
 When compressing integers, Zebra uses three techniques stacked on top of
 each other. First, it uses a frame of reference encoding which offsets
 each value in the column by the midpoint of the minimum and the maximum
-so that big numbers because small numbers.
+so that big numbers become small numbers.
 
 <img src="https://github.com/ambiata/zebra/raw/master/doc/frame-of-reference.png" width="767" align="center"/>
 
