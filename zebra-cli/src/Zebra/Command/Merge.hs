@@ -63,7 +63,7 @@ newtype MergeRowsPerBlock =
 
 data MergeError =
     MergeIOError !IOError
-  | MergeBinaryStripedDecodeError !BinaryStripedDecodeError
+  | MergeBinaryStripedDecodeError !FilePath !BinaryStripedDecodeError
   | MergeBinaryStripedEncodeError !BinaryStripedEncodeError
   | MergeTextSchemaDecodeError !TextSchemaDecodeError
   | MergeStripedError !StripedError
@@ -74,7 +74,8 @@ renderMergeError :: MergeError -> Text
 renderMergeError = \case
   MergeIOError err ->
     Text.pack (show err)
-  MergeBinaryStripedDecodeError err ->
+  MergeBinaryStripedDecodeError path err ->
+    "Error decoding: " <> Text.pack path <> "\n" <>
     Binary.renderBinaryStripedDecodeError err
   MergeBinaryStripedEncodeError err ->
     Binary.renderBinaryStripedEncodeError err
@@ -87,7 +88,7 @@ renderMergeError = \case
 
 readStriped :: (MonadResource m, MonadCatch m) => FilePath -> Stream (Of Striped.Table) (EitherT MergeError m) ()
 readStriped path =
-  hoist (firstJoin MergeBinaryStripedDecodeError) .
+  hoist (firstJoin (MergeBinaryStripedDecodeError path)) .
     Binary.decodeStriped .
   hoist (firstT MergeIOError) $
     ByteStream.readFile path
