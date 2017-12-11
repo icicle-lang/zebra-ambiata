@@ -62,6 +62,7 @@ data CatOptions =
     , catBlockSummary :: !Bool
     , catEntities :: !Bool
     , catEntityDetails :: !Bool
+    , catEntityDetailsCursor :: !(Maybe Core.EntityId)
     , catEntitySummary :: !Bool
     , catSummary :: !Bool
     } deriving (Eq, Show)
@@ -239,7 +240,7 @@ catEntity :: MonadIO m => CatOptions -> Entity.Entity -> EitherT Text m ()
 catEntity opts entity = liftIO $ do
   IO.putStrLn ("    " <> show (Entity.entityId entity) <> " (" <> show (Entity.entityHash entity) <> ")")
 
-  when (catEntityDetails opts) $ catEntityFacts entity
+  when (catEntityDetails opts) $ catEntityFacts opts entity
 
   let facts' = Boxed.filter ((>0) . Storable.length . Entity.attributeTime)
              $ Entity.entityAttributes entity
@@ -260,13 +261,14 @@ catEntity opts entity = liftIO $ do
    | otherwise
    = showf (Boxed.minimum inps) <> "..." <> showf (Boxed.maximum inps)
 
-catEntityFacts :: Entity.Entity -> IO ()
-catEntityFacts entity = do
-  IO.putStrLn ("      Values:")
-  let facts' = Boxed.filter ((>0) . Storable.length . Entity.attributeTime . snd)
-             $ Boxed.indexed
-             $ Entity.entityAttributes entity
-  mapM_ (\(ix,attr) -> putIndented 8 (show ix <> ": " <> ppShow attr)) facts'
+catEntityFacts :: CatOptions -> Entity.Entity -> IO ()
+catEntityFacts opts entity =
+  when (catEntityDetailsCursor opts == Nothing || catEntityDetailsCursor opts == Just (Entity.entityId entity)) $ do
+    IO.putStrLn ("      Values:")
+    let facts' = Boxed.filter ((>0) . Storable.length . Entity.attributeTime . snd)
+               $ Boxed.indexed
+               $ Entity.entityAttributes entity
+    mapM_ (\(ix,attr) -> putIndented 8 (show ix <> ": " <> ppShow attr)) facts'
 
 putIndented :: Int -> String -> IO ()
 putIndented indents str =
