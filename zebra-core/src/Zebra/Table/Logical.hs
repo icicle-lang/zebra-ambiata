@@ -17,6 +17,8 @@ module Zebra.Table.Logical (
 
   -- * Summary
   , length
+  , size
+  , sizeValue
 
   -- * Destruction
   , takeBinary
@@ -214,6 +216,36 @@ length = \case
 
 ------------------------------------------------------------------------
 
+size :: Table -> Int64
+size = \case
+  Binary bs ->
+    fromIntegral $ ByteString.length bs
+  Array xs ->
+    Boxed.sum $ Boxed.map sizeValue xs
+  Map kvs ->
+    sum . fmap (\(k, v) -> sizeValue k + sizeValue v) $ Map.toList kvs
+{-# INLINABLE size #-}
+
+sizeValue :: Value -> Int64
+sizeValue = \case
+  Unit ->
+    8
+  Int _ ->
+    8
+  Double _ ->
+    8
+  Enum _ x ->
+    8 + sizeValue x
+  Struct fields ->
+    sum $ Cons.map sizeValue fields
+  Nested xs ->
+    size xs
+  Reversed xs ->
+    sizeValue xs
+{-# INLINABLE sizeValue #-}
+
+------------------------------------------------------------------------
+
 merge :: Table -> Table -> Either LogicalMergeError Table
 merge x0 x1 =
   case (x0, x1) of
@@ -318,8 +350,7 @@ unionStep kvss =
         key =
           Boxed.minimum maximums
 
-        -- brexit --
-        (leaves0, nonvoters, remains) =
+        (done0, done1, incomplete) =
           Cons.unzip3 $ fmap (Map.splitLookup key) kvss
 
         insert = \case
@@ -328,12 +359,12 @@ unionStep kvss =
           Just x ->
             Map.insert key x
 
-        leaves =
-          Cons.zipWith insert nonvoters leaves0
+        dones =
+          Cons.zipWith insert done1 done0
 
-      leave <- mergeMaps $ Cons.toVector leaves
+      done <- mergeMaps $ Cons.toVector dones
 
-      pure $ UnionStep leave remains
+      pure $ UnionStep done incomplete
 {-# INLINABLE unionStep #-}
 
 ------------------------------------------------------------------------
