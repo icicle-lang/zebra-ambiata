@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MagicHash #-}
@@ -60,17 +61,18 @@ import qualified Data.ByteString as ByteString
 import           Data.Map (Map)
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as Text
-import qualified Data.Vector as Boxed
 
 import           GHC.Generics (Generic)
 import           GHC.Prim ((>#), tagToEnum#, dataToTag#)
 
+import qualified Neutron.Vector.Boxed as Boxed
+import           Neutron.Vector.Cons (Cons)
+import qualified Neutron.Vector.Cons as Cons
+import qualified Neutron.Vector.Generic as Generic
+
 import           P hiding (empty, some, length)
 
 import           Text.Show.Pretty (ppShow)
-
-import           X.Data.Vector.Cons (Cons)
-import qualified X.Data.Vector.Cons as Cons
 
 import           Zebra.Table.Data
 import qualified Zebra.Table.Schema as Schema
@@ -117,7 +119,7 @@ data LogicalSchemaError =
     deriving (Eq, Show)
 
 renderLogicalMergeError :: LogicalMergeError -> Text
-renderLogicalMergeError = \case
+renderLogicalMergeError = {-# SCC renderLogicalMergeError #-} \case
   LogicalCannotMergeMismatchedCollections x y ->
     "Cannot merge mismatched collections:" <>
     renderField "first" x <>
@@ -144,7 +146,7 @@ renderLogicalMergeError = \case
     renderField "second" y
 
 renderLogicalSchemaError :: LogicalSchemaError -> Text
-renderLogicalSchemaError = \case
+renderLogicalSchemaError = {-# SCC renderLogicalSchemaError #-} \case
   LogicalExpectedBinary x ->
     "Expected binary, but was: " <> ppTableSchema x
   LogicalExpectedArray x ->
@@ -165,17 +167,17 @@ renderLogicalSchemaError = \case
     "Expected reversed, but was: " <> ppColumnSchema x
 
 renderField :: Show a => Text -> a -> Text
-renderField name x =
+renderField name x = {-# SCC renderField #-}
   "\n" <>
   "\n  " <> name <> " =" <>
   ppPrefix "\n    " x
 
 ppPrefix :: Show a => Text -> a -> Text
-ppPrefix prefix =
+ppPrefix prefix = {-# SCC ppPrefix #-}
   Text.concat . fmap (prefix <>) . Text.lines . Text.pack . ppShow
 
 ppTableSchema :: Table -> Text
-ppTableSchema = \case
+ppTableSchema = {-# SCC ppTableSchema #-} \case
   Binary _ ->
     "binary"
   Array _ ->
@@ -184,7 +186,7 @@ ppTableSchema = \case
     "map"
 
 ppColumnSchema :: Value -> Text
-ppColumnSchema = \case
+ppColumnSchema = {-# SCC ppColumnSchema #-} \case
   Unit ->
     "unit"
   Int _ ->
@@ -203,11 +205,11 @@ ppColumnSchema = \case
 ------------------------------------------------------------------------
 
 length :: Table -> Int
-length = \case
+length = {-# SCC length #-} \case
   Binary bs ->
     ByteString.length bs
   Array xs ->
-    Boxed.length xs
+    Generic.length xs
   Map kvs ->
     Map.size kvs
 {-# INLINABLE length #-}
@@ -215,13 +217,13 @@ length = \case
 ------------------------------------------------------------------------
 
 merge :: Table -> Table -> Either LogicalMergeError Table
-merge x0 x1 =
+merge !x0 !x1 = {-# SCC merge #-}
   case (x0, x1) of
     (Binary bs0, Binary bs1) ->
-      pure $ Binary (bs0 <> bs1)
+      return $ Binary (bs0 <> bs1)
 
     (Array xs0, Array xs1) ->
-      pure $ Array (xs0 <> xs1)
+      return $ Array (xs0 <> xs1)
 
     (Map kvs0, Map kvs1) ->
       Map <$> mergeMap kvs0 kvs1
@@ -231,62 +233,73 @@ merge x0 x1 =
 {-# INLINABLE merge #-}
 
 mergeMap :: Map Value Value -> Map Value Value -> Either LogicalMergeError (Map Value Value)
-mergeMap xs0 xs1 =
-  sequenceA $
-    Map.mergeWithKey (\_ x y -> Just (mergeValue x y)) (fmap pure) (fmap pure) xs0 xs1
+mergeMap !xs0 !xs1 = {-# SCC mergeMap #-}
+  if Map.null xs0 then
+    Right xs1
+  else if Map.null xs1 then
+    Right xs0
+  else
+    sequenceA $
+      Map.mergeWithKey (\_ x y -> Just (mergeValue x y)) (Map.map Right) (Map.map Right) xs0 xs1
 {-# INLINABLE mergeMap #-}
 
 mergeMaps :: Boxed.Vector (Map Value Value) -> Either LogicalMergeError (Map Value Value)
-mergeMaps kvss =
-  case Boxed.length kvss of
+mergeMaps kvss = {-# SCC mergeMaps #-}
+  case Generic.length kvss of
     0 ->
-      pure $ Map.empty
+      return $! Map.empty
 
     1 ->
-      pure $ kvss Boxed.! 0
+      return $! Generic.unsafeIndex 0 kvss
 
     2 ->
       mergeMap
-        (kvss Boxed.! 0)
-        (kvss Boxed.! 1)
+        (Generic.unsafeIndex 0 kvss)
+        (Generic.unsafeIndex 1 kvss)
 
     n -> do
       let
         (kvss0, kvss1) =
-          Boxed.splitAt (n `div` 2) kvss
+          Generic.splitAt (n `div` 2) kvss
 
-      kvs0 <- mergeMaps kvss0
-      kvs1 <- mergeMaps kvss1
+        ekvs0 =
+          mergeMaps kvss0
+
+        ekvs1 =
+          mergeMaps kvss1
+
+      !kvs0 <- ekvs0
+      !kvs1 <- ekvs1
 
       mergeMap kvs0 kvs1
 {-# INLINABLE mergeMaps #-}
 
 mergeValue :: Value -> Value -> Either LogicalMergeError Value
-mergeValue x0 x1 =
+mergeValue x0 x1 = {-# SCC mergeValue #-}
   case (x0, x1) of
     (Unit, Unit) ->
-      pure Unit
+      return Unit
 
     (Int v0, Int v1) ->
-      Left $ LogicalCannotMergeInt v0 v1
+      Left $! LogicalCannotMergeInt v0 v1
 
     (Double v0, Double v1) ->
-      Left $ LogicalCannotMergeDouble v0 v1
+      Left $! LogicalCannotMergeDouble v0 v1
 
     (Enum tag0 v0, Enum tag1 v1) ->
-      Left $ LogicalCannotMergeEnum (tag0, v0) (tag1, v1)
+      Left $! LogicalCannotMergeEnum (tag0, v0) (tag1, v1)
 
     (Struct fs0, Struct fs1) ->
-      Struct <$> Cons.zipWithM mergeValue fs0 fs1
+      Struct <$!> Cons.zipWithM mergeValue fs0 fs1
 
     (Nested xs0, Nested xs1) ->
-      Nested <$> merge xs0 xs1
+      Nested <$!> merge xs0 xs1
 
     (Reversed v0, Reversed v1) ->
-      Reversed <$> mergeValue v0 v1
+      Reversed <$!> mergeValue v0 v1
 
     _ ->
-      Left $ LogicalCannotMergeMismatchedValues x0 x1
+      Left $! LogicalCannotMergeMismatchedValues x0 x1
 {-# INLINABLE mergeValue #-}
 
 ------------------------------------------------------------------------
@@ -298,63 +311,60 @@ data UnionStep =
     } deriving (Eq, Ord, Show)
 
 maximumKey :: Map Value Value -> Maybe Value
-maximumKey kvs =
+maximumKey kvs = {-# SCC maximumKey #-}
   if Map.null kvs then
     Nothing
   else
-    pure . fst $ Map.findMax kvs
+    return . fst $ Map.findMax kvs
 {-# INLINABLE maximumKey #-}
 
 unionStep :: Cons Boxed.Vector (Map Value Value) -> Either LogicalMergeError UnionStep
-unionStep kvss =
+unionStep kvss = {-# SCC unionStep #-}
   let
-    maximums =
+    !maximums =
       Cons.mapMaybe maximumKey kvss
   in
-    if Boxed.null maximums then
-      pure $ UnionStep Map.empty kvss
-    else do
-      let
-        key =
-          Boxed.minimum maximums
+    case Generic.minimum maximums of
+      Nothing ->
+        return $ UnionStep Map.empty kvss
+      Just key -> do
+        let
+          (!ready, !remains) =
+            flip Cons.unzipWith kvss $ \kvs ->
+              let
+                (!kvs0, !m, !kvs1) =
+                  Map.splitLookup key kvs
+              in
+                case m of
+                  Nothing ->
+                    (kvs0, kvs1)
+                  Just v ->
+                    (Map.insert key v kvs0, kvs1)
 
-        -- brexit --
-        (leaves0, nonvoters, remains) =
-          Cons.unzip3 $ fmap (Map.splitLookup key) kvss
+        !merged <- mergeMaps $ Cons.toVector ready
 
-        insert = \case
-          Nothing ->
-            id
-          Just x ->
-            Map.insert key x
-
-        leaves =
-          Cons.zipWith insert nonvoters leaves0
-
-      leave <- mergeMaps $ Cons.toVector leaves
-
-      pure $ UnionStep leave remains
+        return $ UnionStep merged remains
 {-# INLINABLE unionStep #-}
 
 ------------------------------------------------------------------------
 
 empty :: Schema.Table -> Table
-empty = \case
+empty = {-# SCC empty #-} \case
   Schema.Binary _ _ ->
     Binary ByteString.empty
   Schema.Array _ _ ->
-    Array Boxed.empty
+    Array Generic.empty
   Schema.Map _ _ _ ->
     Map Map.empty
 {-# INLINABLE empty #-}
 
 defaultTable :: Schema.Table -> Table
-defaultTable =
+defaultTable = {-# SCC defaultTable #-}
   empty
 {-# INLINABLE defaultTable #-}
 
 defaultValue :: Schema.Column -> Value
-defaultValue = \case
+defaultValue = {-# SCC defaultValue #-} \case
   Schema.Unit ->
     Unit
   Schema.Int _ _ ->
@@ -364,7 +374,7 @@ defaultValue = \case
   Schema.Enum _ vs ->
     Enum 0 . defaultValue . variantData $ Cons.head vs
   Schema.Struct _ fs ->
-    Struct $ fmap (defaultValue . fieldData) fs
+    Struct $ Cons.map (defaultValue . fieldData) fs
   Schema.Nested s ->
     Nested $ defaultTable s
   Schema.Reversed s ->
@@ -374,7 +384,7 @@ defaultValue = \case
 ------------------------------------------------------------------------
 
 takeBinary :: Table -> Either LogicalSchemaError ByteString
-takeBinary = \case
+takeBinary = {-# SCC takeBinary #-} \case
   Binary x ->
     Right x
   x ->
@@ -382,7 +392,7 @@ takeBinary = \case
 {-# INLINE takeBinary #-}
 
 takeArray :: Table -> Either LogicalSchemaError (Boxed.Vector Value)
-takeArray = \case
+takeArray = {-# SCC takeArray #-} \case
   Array x ->
     Right x
   x ->
@@ -390,7 +400,7 @@ takeArray = \case
 {-# INLINE takeArray #-}
 
 takeMap :: Table -> Either LogicalSchemaError (Map Value Value)
-takeMap = \case
+takeMap = {-# SCC takeMap #-} \case
   Map x ->
     Right x
   x ->
@@ -398,7 +408,7 @@ takeMap = \case
 {-# INLINE takeMap #-}
 
 takeInt :: Value -> Either LogicalSchemaError Int64
-takeInt = \case
+takeInt = {-# SCC takeInt #-} \case
   Int x ->
     Right x
   x ->
@@ -406,7 +416,7 @@ takeInt = \case
 {-# INLINE takeInt #-}
 
 takeDouble :: Value -> Either LogicalSchemaError Double
-takeDouble = \case
+takeDouble = {-# SCC takeDouble #-} \case
   Double x ->
     Right x
   x ->
@@ -414,7 +424,7 @@ takeDouble = \case
 {-# INLINE takeDouble #-}
 
 takeEnum :: Value -> Either LogicalSchemaError (Tag, Value)
-takeEnum = \case
+takeEnum = {-# SCC takeEnum #-} \case
   Enum tag x ->
     Right (tag, x)
   x ->
@@ -422,7 +432,7 @@ takeEnum = \case
 {-# INLINE takeEnum #-}
 
 takeStruct :: Value -> Either LogicalSchemaError (Cons Boxed.Vector Value)
-takeStruct = \case
+takeStruct = {-# SCC takeStruct #-} \case
   Struct x ->
     Right x
   x ->
@@ -430,7 +440,7 @@ takeStruct = \case
 {-# INLINE takeStruct #-}
 
 takeNested :: Value -> Either LogicalSchemaError Table
-takeNested = \case
+takeNested = {-# SCC takeNested #-} \case
   Nested x ->
     Right x
   x ->
@@ -438,7 +448,7 @@ takeNested = \case
 {-# INLINE takeNested #-}
 
 takeReversed :: Value -> Either LogicalSchemaError Value
-takeReversed = \case
+takeReversed = {-# SCC takeReversed #-} \case
   Reversed x ->
     Right x
   x ->
@@ -448,37 +458,37 @@ takeReversed = \case
 ------------------------------------------------------------------------
 
 false :: Value
-false =
+false = {-# SCC false #-}
   Enum 0 Unit
 {-# INLINE false #-}
 
 true :: Value
-true =
+true = {-# SCC true #-}
   Enum 1 Unit
 {-# INLINE true #-}
 
 none :: Value
-none =
+none = {-# SCC none #-}
   Enum 0 Unit
 {-# INLINE none #-}
 
 some :: Value -> Value
-some =
+some = {-# SCC some #-}
   Enum 1
 {-# INLINE some #-}
 
 left :: Value -> Value
-left =
+left = {-# SCC left #-}
   Enum 0
 {-# INLINE left #-}
 
 right :: Value -> Value
-right =
+right = {-# SCC right #-}
   Enum 1
 {-# INLINE right #-}
 
 pair :: Value -> Value -> Value
-pair x y =
+pair x y = {-# SCC pair #-}
   Struct $ Cons.from2 x y
 {-# INLINE pair #-}
 
@@ -531,7 +541,7 @@ instance Ord Value where
   {-# INLINABLE compare #-}
 
 compareTag :: a -> a -> Ordering
-compareTag x y =
+compareTag x y = {-# SCC compareTag #-}
   if tagToEnum# (dataToTag# x ># dataToTag# y) then
     GT
   else
