@@ -8,6 +8,7 @@ import           DependencyInfo_ambiata_zebra_cli
 import           Control.Monad.Morph (hoist)
 import           Control.Monad.Trans.Resource (runResourceT)
 
+import qualified Data.ByteString.Char8 as Char8
 import           Data.List.NonEmpty (NonEmpty(..), some1)
 import           Data.String (String)
 
@@ -28,6 +29,7 @@ import           Zebra.Command.Export
 import           Zebra.Command.Import
 import           Zebra.Command.Merge
 import           Zebra.Command.Summary
+import           Zebra.Factset.Data (EntityId(..))
 import           Zebra.Serial.Binary (BinaryVersion(..))
 
 
@@ -248,6 +250,7 @@ pCatOptions =
       <*> Options.switch (Options.long "block-summary")
       <*> Options.switch (Options.long "entities")
       <*> Options.switch (Options.long "entity-details")
+      <*> optional (Options.option (fmap (EntityId . Char8.pack) Options.str) (Options.long "entity-cursor"))
       <*> Options.switch (Options.long "entity-summary")
       <*> Options.switch (Options.long "summary")
 
