@@ -78,9 +78,12 @@ unionSimple xss0 =
     Right x ->
       pure $ pure x
 
-unionList :: Cons Boxed.Vector (NonEmpty Striped.Table) -> Either String (Maybe Striped.Table)
-unionList xss0 =
-  case runIdentity . runEitherT . Stream.toList . Merge.unionStriped $ fmap Stream.each xss0 of
+unionList ::
+      Maybe Merge.MaximumRowSize
+   -> Cons Boxed.Vector (NonEmpty Striped.Table)
+   -> Either String (Maybe Striped.Table)
+unionList msize xss0 =
+  case runIdentity . runEitherT . Stream.toList . Merge.unionStriped msize $ fmap Stream.each xss0 of
     Left (UnionLogicalMergeError _) ->
       pure Nothing
     Left err ->
@@ -109,7 +112,7 @@ prop_union_identity =
         Striped.unsafeConcat $
         Cons.fromNonEmpty file0
 
-    x <- first ppShow $ unionList files
+    x <- first ppShow $ unionList Nothing files
     pure $
       Just (normalizeStriped file)
       ===
@@ -121,11 +124,20 @@ prop_union_files_same_schema =
   gamble (Cons.unsafeFromList <$> listOfN 1 10 (jFile schema)) $ \files ->
   either (flip counterexample False) id $ do
     x <- first ppShow $ unionSimple files
-    y <- first ppShow $ unionList files
+    y <- first ppShow $ unionList Nothing files
     pure $
       fmap normalizeStriped x
       ===
       fmap normalizeStriped y
+
+prop_union_files_empty :: Property
+prop_union_files_empty =
+  gamble jMapSchema $ \schema ->
+  gamble (Cons.unsafeFromList <$> listOfN 1 10 (jFile schema)) $ \files ->
+  either (flip counterexample False) id $ do
+    x <- first ppShow $ unionList (Just (Merge.MaximumRowSize (-1))) files
+    pure $
+      Just (Striped.empty schema) === x
 
 prop_union_files_diff_schema :: Property
 prop_union_files_diff_schema =
@@ -138,7 +150,7 @@ prop_union_files_diff_schema =
   gamble (traverse jFile schemas) $ \files ->
   either (flip counterexample False) id $ do
     x <- first ppShow $ unionSimple files
-    y <- first ppShow $ unionList files
+    y <- first ppShow $ unionList Nothing files
     pure $
       fmap normalizeStriped x
       ===
