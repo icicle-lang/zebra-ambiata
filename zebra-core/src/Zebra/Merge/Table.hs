@@ -5,7 +5,9 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 module Zebra.Merge.Table (
-    UnionTableError(..)
+    MaximumRowSize(..)
+
+  , UnionTableError(..)
   , renderUnionTableError
 
   , unionLogical
@@ -15,6 +17,7 @@ module Zebra.Merge.Table (
 
 import           Control.Monad.Morph (hoist, squash)
 import           Control.Monad.Trans.Class (lift)
+import           Control.Monad.Trans.State.Strict (StateT, runStateT, modify)
 
 import           Data.Map (Map)
 import qualified Data.Map.Strict as Map
@@ -36,6 +39,11 @@ import qualified Zebra.Table.Schema as Schema
 import           Zebra.Table.Striped (StripedError)
 import qualified Zebra.Table.Striped as Striped
 
+
+newtype MaximumRowSize =
+  MaximumRowSize {
+      unMaximumRowSize :: Int64
+    } deriving (Eq, Ord, Show)
 
 data Input m =
   Input {
@@ -96,14 +104,24 @@ hasData =
 replaceData :: Map Logical.Value Logical.Value -> Input m -> Input m
 replaceData values input =
   input {
-      inputData = values
+      inputData =
+        values
     }
 {-# INLINABLE replaceData #-}
+
+dropData :: Map Logical.Value a -> Input m -> Input m
+dropData drops input =
+  input {
+      inputData =
+        inputData input `Map.difference` drops
+    }
+{-# INLINABLE dropData #-}
 
 replaceStream :: Stream (Of Logical.Table) m () ->  Input m -> Input m
 replaceStream stream input =
   input {
-      inputStream = Just stream
+      inputStream =
+        Just stream
     }
 {-# INLINABLE replaceStream #-}
 
@@ -115,11 +133,15 @@ isClosed =
 closeStream :: Input m -> Input m
 closeStream input =
   input {
-      inputStream = Nothing
+      inputStream =
+        Nothing
     }
 {-# INLINABLE closeStream #-}
 
-updateInput :: Monad m => Input m -> EitherT UnionTableError m (Input m)
+updateInput ::
+     Monad m
+  => Input m
+  -> StateT (Map Logical.Value Int64) (EitherT UnionTableError m) (Input m)
 updateInput input =
   case inputStream input of
     Nothing ->
@@ -128,16 +150,25 @@ updateInput input =
       if hasData input then
         pure input
       else do
-        e <- lift $ Stream.next stream
+        e <- lift . lift $ Stream.next stream
         case e of
           Left () ->
             pure $
               closeStream input
 
           Right (hd, tl) -> do
-            values <- firstT UnionLogicalSchemaError . hoistEither $ Logical.takeMap hd
+            values <- lift . firstT UnionLogicalSchemaError . hoistEither $ Logical.takeMap hd
+            modify $ Map.unionWith (+) (Map.map Logical.sizeValue values)
             pure . replaceStream tl $ replaceData values input
 {-# INLINABLE updateInput #-}
+
+takeExcessiveValues :: Maybe MaximumRowSize -> Map Logical.Value Int64 -> Map Logical.Value Int64
+takeExcessiveValues = \case
+  Nothing ->
+    const Map.empty
+  Just size ->
+    Map.filter (> unMaximumRowSize size)
+{-# INLINABLE takeExcessiveValues #-}
 
 unionStep :: Monad m => Cons Boxed.Vector (Input m) -> EitherT UnionTableError m (Step m)
 unionStep inputs = do
@@ -150,35 +181,50 @@ unionStep inputs = do
 
 unionInput ::
      Monad m
-  => Cons Boxed.Vector (Input m)
+  => Maybe MaximumRowSize
+  -> Cons Boxed.Vector (Input m)
+  -> Map Logical.Value Int64
   -> Stream (Of Logical.Table) (EitherT UnionTableError m) ()
-unionInput inputs0 = do
-  inputs1 <- lift $ traverse updateInput inputs0
-  if Cons.all isClosed inputs1 then do
+unionInput msize inputs0 sizes0 = do
+  (inputs1, sizes1) <- lift $ runStateT (traverse updateInput inputs0) sizes0
+
+  let
+    drops =
+      takeExcessiveValues msize sizes1
+
+    inputs2 =
+      fmap (dropData drops) inputs1
+
+  if Cons.all isClosed inputs2 then do
     pure ()
   else do
-    Step values inputs2 <- lift $ unionStep inputs1
-    when (not $ Map.null values) .
+    Step values inputs3 <- lift $ unionStep inputs2
+
+    if Map.null values then
+      unionInput msize inputs3 sizes1
+    else do
       Stream.yield $ Logical.Map values
-    unionInput inputs2
+      unionInput msize inputs3 sizes1
 {-# INLINABLE unionInput #-}
 
 unionLogical ::
      Monad m
   => Schema.Table
+  -> Maybe MaximumRowSize
   -> Cons Boxed.Vector (Stream (Of Logical.Table) m ())
   -> Stream (Of Logical.Table) (EitherT UnionTableError m) ()
-unionLogical schema inputs = do
+unionLogical schema msize inputs = do
   Stream.whenEmpty (Logical.empty schema) $
-    unionInput $ fmap (Input Map.empty . Just) inputs
+    unionInput msize (fmap (Input Map.empty . Just) inputs) Map.empty
 {-# INLINABLE unionLogical #-}
 
 unionStripedWith ::
      Monad m
   => Schema.Table
+  -> Maybe MaximumRowSize
   -> Cons Boxed.Vector (Stream (Of Striped.Table) m ())
   -> Stream (Of Striped.Table) (EitherT UnionTableError m) ()
-unionStripedWith schema inputs0 = do
+unionStripedWith schema msize inputs0 = do
   let
     fromStriped =
       Stream.mapM (hoistEither . first UnionStripedError . Striped.toLogical) .
@@ -187,15 +233,16 @@ unionStripedWith schema inputs0 = do
 
   hoist squash .
     Stream.mapM (hoistEither . first UnionStripedError . Striped.fromLogical schema) $
-    unionLogical schema (fmap fromStriped inputs0)
+    unionLogical schema msize (fmap fromStriped inputs0)
 {-# INLINABLE unionStripedWith #-}
 
 unionStriped ::
      Monad m
-  => Cons Boxed.Vector (Stream (Of Striped.Table) m ())
+  => Maybe MaximumRowSize
+  -> Cons Boxed.Vector (Stream (Of Striped.Table) m ())
   -> Stream (Of Striped.Table) (EitherT UnionTableError m) ()
-unionStriped inputs0 = do
+unionStriped msize inputs0 = do
   (heads, inputs1) <- fmap Cons.unzip . lift $ traverse peekHead inputs0
   schema <- lift . hoistEither . unionSchemas $ fmap Striped.schema heads
-  unionStripedWith schema inputs1
+  unionStripedWith schema msize inputs1
 {-# INLINABLE unionStriped #-}

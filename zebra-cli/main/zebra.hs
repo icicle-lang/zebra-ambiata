@@ -213,6 +213,7 @@ pMerge =
    <*> ((Just <$> pOutputBinary) <|> pOutputBinaryStdout <|> pure Nothing)
    <*> pOutputFormat
    <*> pMergeRowsPerBlock
+   <*> optional pMergeMaximumRowSize
 
 pMergeRowsPerBlock :: Parser MergeRowsPerBlock
 pMergeRowsPerBlock =
@@ -223,6 +224,15 @@ pMergeRowsPerBlock =
     Options.long "rows-per-block" <>
     Options.metavar "ROWS_PER_BLOCK" <>
     Options.help "The maximum numbers of rows to include in each block. (defaults to 256)"
+
+pMergeMaximumRowSize :: Parser MergeMaximumRowSize
+pMergeMaximumRowSize =
+  fmap MergeMaximumRowSize .
+  Options.option Options.auto $
+    Options.short 'm' <>
+    Options.long "maximum-row-size" <>
+    Options.metavar "MAXIMUM_ROW_SIZE_BYTES" <>
+    Options.help "Rows which are larger than this size will be dropped."
 
 pOutputFormat :: Parser BinaryVersion
 pOutputFormat =
