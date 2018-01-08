@@ -83,7 +83,7 @@ unionList ::
    -> Cons Boxed.Vector (NonEmpty Striped.Table)
    -> Either String (Maybe Striped.Table)
 unionList msize xss0 =
-  case runIdentity . runEitherT . Stream.toList . Merge.unionStriped msize $ fmap Stream.each xss0 of
+  case runIdentity . runEitherT . Stream.toList . Merge.unionStriped Merge.valueMonoid msize $ fmap Stream.each xss0 of
     Left (UnionLogicalMergeError _) ->
       pure Nothing
     Left err ->

@@ -9,6 +9,7 @@ module Zebra.Command.Merge (
     Merge(..)
   , MergeRowsPerBlock(..)
   , MergeMaximumRowSize(..)
+  , MergeMode(..)
   , zebraMerge
 
   , MergeError(..)
@@ -56,7 +57,13 @@ data Merge =
     , mergeVersion :: !BinaryVersion
     , mergeRowsPerChunk :: !MergeRowsPerBlock
     , mergeMaximumRowSize :: !(Maybe MergeMaximumRowSize)
+    , mergeMode :: MergeMode
     } deriving (Eq, Ord, Show)
+
+data MergeMode =
+    MergeValue
+  | MergeMeasure
+  deriving (Eq, Ord, Show)
 
 newtype MergeRowsPerBlock =
   MergeRowsPerBlock {
@@ -121,7 +128,11 @@ zebraMerge x = do
       fmap (Merge.MaximumRowSize . unMergeMaximumRowSize) $ mergeMaximumRowSize x
 
     union =
-      maybe Merge.unionStriped Merge.unionStripedWith mschema
+      case mergeMode x of
+        MergeValue ->
+          maybe (Merge.unionStriped Merge.valueMonoid) (Merge.unionStripedWith Merge.valueMonoid) mschema
+        MergeMeasure ->
+          maybe (Merge.unionStriped Merge.measureMonoid) (Merge.unionStripedWith Merge.measureMonoid) mschema
 
   firstJoin MergeIOError .
       writeFileOrStdout (mergeOutput x) .

@@ -13,6 +13,10 @@ module Zebra.Merge.Table (
   , unionLogical
   , unionStriped
   , unionStripedWith
+
+  , Monoidal(..)
+  , valueMonoid
+  , measureMonoid
   ) where
 
 import           Control.Monad.Morph (hoist, squash)
@@ -32,6 +36,8 @@ import           X.Control.Monad.Trans.Either (EitherT, hoistEither, left)
 import           X.Data.Vector.Cons (Cons)
 import qualified X.Data.Vector.Cons as Cons
 
+import           Zebra.Table.Data
+import qualified Zebra.Table.Encoding as Encoding
 import           Zebra.Table.Logical (LogicalSchemaError, LogicalMergeError)
 import qualified Zebra.Table.Logical as Logical
 import           Zebra.Table.Schema (SchemaUnionError)
@@ -45,17 +51,41 @@ newtype MaximumRowSize =
       unMaximumRowSize :: Int64
     } deriving (Eq, Ord, Show)
 
-data Input m =
+data Input m a =
   Input {
-      inputData :: !(Map Logical.Value Logical.Value)
+      inputData :: !(Map Logical.Value a)
     , inputStream :: !(Maybe (Stream (Of Logical.Table) m ()))
     }
 
-data Step m =
+data Step m a =
   Step {
-      _stepComplete :: !(Map Logical.Value Logical.Value)
-    , _stepRemaining :: !(Cons Boxed.Vector (Input m))
+      _stepComplete :: !(Map Logical.Value a)
+    , _stepRemaining :: !(Cons Boxed.Vector (Input m a))
     }
+
+data Monoidal a =
+  Monoidal {
+      monoidFromValue :: Logical.Value -> a
+    , monoidToValue :: a -> Logical.Value
+    , monoidSchema :: Schema.Table -> Either UnionTableError Schema.Table
+    , monoidOp :: a -> a -> Either LogicalMergeError a
+    }
+
+valueMonoid :: Monoidal Logical.Value
+valueMonoid =
+  Monoidal id id (pure . id) Logical.mergeValue
+
+measureMonoid :: Monoidal Int64
+measureMonoid =
+  Monoidal Logical.sizeValue Logical.Int
+    (\schema ->
+       case schema of
+         Schema.Map def k _ ->
+           pure $ Schema.Map def k (Schema.Int DenyDefault Encoding.Int)
+         t0 ->
+           Left $ UnionTableMonoidNotDefined t0
+    )
+    (\x0 x1 -> pure $ x0 + x1)
 
 data UnionTableError =
     UnionEmptyInput
@@ -63,6 +93,7 @@ data UnionTableError =
   | UnionLogicalSchemaError !LogicalSchemaError
   | UnionLogicalMergeError !LogicalMergeError
   | UnionSchemaError !SchemaUnionError
+  | UnionTableMonoidNotDefined !Schema.Table
     deriving (Eq, Show)
 
 renderUnionTableError :: UnionTableError -> Text
@@ -77,6 +108,8 @@ renderUnionTableError = \case
     Logical.renderLogicalMergeError err
   UnionSchemaError err ->
     Schema.renderSchemaUnionError err
+  UnionTableMonoidNotDefined _ ->
+    "Monoid not defined for schema of this shape."
 
 ------------------------------------------------------------------------
 -- General
@@ -96,12 +129,12 @@ peekHead input = do
       pure (hd, Stream.cons hd tl)
 {-# INLINABLE peekHead #-}
 
-hasData :: Input m -> Bool
+hasData :: Input m a -> Bool
 hasData =
   not . Map.null . inputData
 {-# INLINABLE hasData #-}
 
-replaceData :: Map Logical.Value Logical.Value -> Input m -> Input m
+replaceData :: Map Logical.Value a -> Input m a -> Input m a
 replaceData values input =
   input {
       inputData =
@@ -109,7 +142,7 @@ replaceData values input =
     }
 {-# INLINABLE replaceData #-}
 
-dropData :: Map Logical.Value a -> Input m -> Input m
+dropData :: Map Logical.Value b -> Input m a -> Input m a
 dropData drops input =
   input {
       inputData =
@@ -117,7 +150,7 @@ dropData drops input =
     }
 {-# INLINABLE dropData #-}
 
-replaceStream :: Stream (Of Logical.Table) m () ->  Input m -> Input m
+replaceStream :: Stream (Of Logical.Table) m () ->  Input m a -> Input m a
 replaceStream stream input =
   input {
       inputStream =
@@ -125,12 +158,12 @@ replaceStream stream input =
     }
 {-# INLINABLE replaceStream #-}
 
-isClosed :: Input m -> Bool
+isClosed :: Input m a -> Bool
 isClosed =
   isNothing . inputStream
 {-# INLINABLE isClosed #-}
 
-closeStream :: Input m -> Input m
+closeStream :: Input m a -> Input m a
 closeStream input =
   input {
       inputStream =
@@ -140,9 +173,10 @@ closeStream input =
 
 updateInput ::
      Monad m
-  => Input m
-  -> StateT (Map Logical.Value Int64) (EitherT UnionTableError m) (Input m)
-updateInput input =
+  => (Logical.Value -> a)
+  -> Input m a
+  -> StateT (Map Logical.Value Int64) (EitherT UnionTableError m) (Input m a)
+updateInput f input =
   case inputStream input of
     Nothing ->
       pure input
@@ -159,7 +193,7 @@ updateInput input =
           Right (hd, tl) -> do
             values <- lift . firstT UnionLogicalSchemaError . hoistEither $ Logical.takeMap hd
             modify $ Map.unionWith (+) (Map.map Logical.sizeValue values)
-            pure . replaceStream tl $ replaceData values input
+            pure . replaceStream tl $ replaceData (fmap f values) input
 {-# INLINABLE updateInput #-}
 
 takeExcessiveValues :: Maybe MaximumRowSize -> Map Logical.Value Int64 -> Map Logical.Value Int64
@@ -170,23 +204,28 @@ takeExcessiveValues = \case
     Map.filter (> unMaximumRowSize size)
 {-# INLINABLE takeExcessiveValues #-}
 
-unionStep :: Monad m => Cons Boxed.Vector (Input m) -> EitherT UnionTableError m (Step m)
-unionStep inputs = do
-  step <- firstT UnionLogicalMergeError . hoistEither . Logical.unionStep $ fmap inputData inputs
+unionStep ::
+     Monad m
+  => (a -> a -> Either LogicalMergeError a)
+  -> Cons Boxed.Vector (Input m a)
+  -> EitherT UnionTableError m (Step m a)
+unionStep f inputs = do
+  step <- firstT UnionLogicalMergeError . hoistEither . Logical.unionStep f $ fmap inputData inputs
   pure $
     Step
       (Logical.unionComplete step)
-      (Cons.zipWith replaceData (Logical.unionRemaining step) inputs)
+      (Cons.zipWith replaceData(Logical.unionRemaining step) inputs)
 {-# INLINABLE unionStep #-}
 
 unionInput ::
      Monad m
-  => Maybe MaximumRowSize
-  -> Cons Boxed.Vector (Input m)
+  => Monoidal a
+  -> Maybe MaximumRowSize
+  -> Cons Boxed.Vector (Input m a)
   -> Map Logical.Value Int64
   -> Stream (Of Logical.Table) (EitherT UnionTableError m) ()
-unionInput msize inputs0 sizes0 = do
-  (inputs1, sizes1) <- lift $ runStateT (traverse updateInput inputs0) sizes0
+unionInput m msize inputs0 sizes0 = do
+  (inputs1, sizes1) <- lift $ runStateT (traverse (updateInput (monoidFromValue m)) inputs0) sizes0
 
   let
     drops =
@@ -198,51 +237,56 @@ unionInput msize inputs0 sizes0 = do
   if Cons.all isClosed inputs2 then do
     pure ()
   else do
-    Step values inputs3 <- lift $ unionStep inputs2
+    Step values inputs3 <- lift $ unionStep (monoidOp m) inputs2
 
     if Map.null values then
-      unionInput msize inputs3 sizes1
+      unionInput m msize inputs3 sizes1
     else do
-      Stream.yield $ Logical.Map values
-      unionInput msize inputs3 sizes1
+      Stream.yield . Logical.Map . fmap (monoidToValue m) $ values
+      unionInput m msize inputs3 sizes1
 {-# INLINABLE unionInput #-}
 
 unionLogical ::
      Monad m
-  => Schema.Table
+  => Monoidal a
+  -> Schema.Table
   -> Maybe MaximumRowSize
   -> Cons Boxed.Vector (Stream (Of Logical.Table) m ())
   -> Stream (Of Logical.Table) (EitherT UnionTableError m) ()
-unionLogical schema msize inputs = do
+unionLogical m schema msize inputs = do
   Stream.whenEmpty (Logical.empty schema) $
-    unionInput msize (fmap (Input Map.empty . Just) inputs) Map.empty
+    unionInput m msize (fmap (Input Map.empty . Just) inputs) Map.empty
 {-# INLINABLE unionLogical #-}
 
 unionStripedWith ::
      Monad m
-  => Schema.Table
+  => Monoidal a
+  -> Schema.Table
   -> Maybe MaximumRowSize
   -> Cons Boxed.Vector (Stream (Of Striped.Table) m ())
   -> Stream (Of Striped.Table) (EitherT UnionTableError m) ()
-unionStripedWith schema msize inputs0 = do
+unionStripedWith m schema0 msize inputs0 = do
   let
     fromStriped =
       Stream.mapM (hoistEither . first UnionStripedError . Striped.toLogical) .
-      Stream.mapM (hoistEither . first UnionStripedError . Striped.transmute schema) .
+      Stream.mapM (hoistEither . first UnionStripedError . Striped.transmute schema0) .
       hoist lift
 
+  schema1 <- lift . hoistEither $ monoidSchema m schema0
+
   hoist squash .
-    Stream.mapM (hoistEither . first UnionStripedError . Striped.fromLogical schema) $
-    unionLogical schema msize (fmap fromStriped inputs0)
+    Stream.mapM (hoistEither . first UnionStripedError . Striped.fromLogical schema1) $
+    unionLogical m schema0 msize (fmap fromStriped inputs0)
 {-# INLINABLE unionStripedWith #-}
 
 unionStriped ::
      Monad m
-  => Maybe MaximumRowSize
+  => Monoidal a
+  -> Maybe MaximumRowSize
   -> Cons Boxed.Vector (Stream (Of Striped.Table) m ())
   -> Stream (Of Striped.Table) (EitherT UnionTableError m) ()
-unionStriped msize inputs0 = do
+unionStriped m msize inputs0 = do
   (heads, inputs1) <- fmap Cons.unzip . lift $ traverse peekHead inputs0
   schema <- lift . hoistEither . unionSchemas $ fmap Striped.schema heads
-  unionStripedWith schema msize inputs1
+  unionStripedWith m schema msize inputs1
 {-# INLINABLE unionStriped #-}

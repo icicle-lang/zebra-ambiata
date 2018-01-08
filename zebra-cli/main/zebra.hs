@@ -214,6 +214,23 @@ pMerge =
    <*> pOutputFormat
    <*> pMergeRowsPerBlock
    <*> optional pMergeMaximumRowSize
+   <*> pMergeMode
+
+pMergeMode :: Parser MergeMode
+pMergeMode =
+  fromMaybe MergeValue <$> optional (pMergeValue <|> pMergeMeasure)
+
+pMergeValue :: Parser MergeMode
+pMergeValue =
+  Options.flag' MergeValue $
+    Options.long "value" <>
+    Options.help "Standard merge of input values. Each key needs to fit wholly in memory."
+
+pMergeMeasure :: Parser MergeMode
+pMergeMeasure =
+  Options.flag' MergeMeasure $
+    Options.long "measure" <>
+    Options.help "Merge by measuring the size of input values."
 
 pMergeRowsPerBlock :: Parser MergeRowsPerBlock
 pMergeRowsPerBlock =

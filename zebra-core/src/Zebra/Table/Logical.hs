@@ -256,20 +256,27 @@ merge x0 x1 =
       pure $ Array (xs0 <> xs1)
 
     (Map kvs0, Map kvs1) ->
-      Map <$> mergeMap kvs0 kvs1
+      Map <$> mergeMap mergeValue kvs0 kvs1
 
     _ ->
       Left $ LogicalCannotMergeMismatchedCollections x0 x1
 {-# INLINABLE merge #-}
 
-mergeMap :: Map Value Value -> Map Value Value -> Either LogicalMergeError (Map Value Value)
-mergeMap xs0 xs1 =
+mergeMap ::
+     (a -> a -> Either LogicalMergeError a)
+  -> Map Value a
+  -> Map Value a
+  -> Either LogicalMergeError (Map Value a)
+mergeMap f xs0 xs1 =
   sequenceA $
-    Map.mergeWithKey (\_ x y -> Just (mergeValue x y)) (fmap pure) (fmap pure) xs0 xs1
+    Map.mergeWithKey (\_ x y -> Just (f x y)) (fmap pure) (fmap pure) xs0 xs1
 {-# INLINABLE mergeMap #-}
 
-mergeMaps :: Boxed.Vector (Map Value Value) -> Either LogicalMergeError (Map Value Value)
-mergeMaps kvss =
+mergeMaps ::
+     (a -> a -> Either LogicalMergeError a)
+  -> Boxed.Vector (Map Value a)
+  -> Either LogicalMergeError (Map Value a)
+mergeMaps f kvss =
   case Boxed.length kvss of
     0 ->
       pure $ Map.empty
@@ -278,7 +285,7 @@ mergeMaps kvss =
       pure $ kvss Boxed.! 0
 
     2 ->
-      mergeMap
+      mergeMap f
         (kvss Boxed.! 0)
         (kvss Boxed.! 1)
 
@@ -287,10 +294,10 @@ mergeMaps kvss =
         (kvss0, kvss1) =
           Boxed.splitAt (n `div` 2) kvss
 
-      kvs0 <- mergeMaps kvss0
-      kvs1 <- mergeMaps kvss1
+      kvs0 <- mergeMaps f kvss0
+      kvs1 <- mergeMaps f kvss1
 
-      mergeMap kvs0 kvs1
+      mergeMap f kvs0 kvs1
 {-# INLINABLE mergeMaps #-}
 
 mergeValue :: Value -> Value -> Either LogicalMergeError Value
@@ -323,13 +330,13 @@ mergeValue x0 x1 =
 
 ------------------------------------------------------------------------
 
-data UnionStep =
+data UnionStep a =
   UnionStep {
-      unionComplete :: !(Map Value Value)
-    , unionRemaining :: !(Cons Boxed.Vector (Map Value Value))
+      unionComplete :: !(Map Value a)
+    , unionRemaining :: !(Cons Boxed.Vector (Map Value a))
     } deriving (Eq, Ord, Show)
 
-maximumKey :: Map Value Value -> Maybe Value
+maximumKey :: Map Value a -> Maybe Value
 maximumKey kvs =
   if Map.null kvs then
     Nothing
@@ -337,8 +344,11 @@ maximumKey kvs =
     pure . fst $ Map.findMax kvs
 {-# INLINABLE maximumKey #-}
 
-unionStep :: Cons Boxed.Vector (Map Value Value) -> Either LogicalMergeError UnionStep
-unionStep kvss =
+unionStep ::
+     (a -> a -> Either LogicalMergeError a)
+  -> Cons Boxed.Vector (Map Value a)
+  -> Either LogicalMergeError (UnionStep a)
+unionStep f kvss =
   let
     maximums =
       Cons.mapMaybe maximumKey kvss
@@ -362,7 +372,7 @@ unionStep kvss =
         dones =
           Cons.zipWith insert done1 done0
 
-      done <- mergeMaps $ Cons.toVector dones
+      done <- mergeMaps f $ Cons.toVector dones
 
       pure $ UnionStep done incomplete
 {-# INLINABLE unionStep #-}
