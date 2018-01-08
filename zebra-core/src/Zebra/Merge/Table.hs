@@ -17,6 +17,7 @@ module Zebra.Merge.Table (
   , Monoidal(..)
   , valueMonoid
   , measureMonoid
+  , summationMonoid
   ) where
 
 import           Control.Monad.Morph (hoist, squash)
@@ -86,6 +87,10 @@ measureMonoid =
            Left $ UnionTableMonoidNotDefined t0
     )
     (\x0 x1 -> pure $ x0 + x1)
+
+summationMonoid :: Monoidal Logical.Value
+summationMonoid =
+  Monoidal id id (pure . id) Logical.sumValue
 
 data UnionTableError =
     UnionEmptyInput

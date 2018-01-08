@@ -53,6 +53,8 @@ module Zebra.Table.Logical (
   , UnionStep(..)
   , unionStep
 
+  , sumValue
+
   -- * Internal
   , renderField
   ) where
@@ -327,6 +329,34 @@ mergeValue x0 x1 =
     _ ->
       Left $ LogicalCannotMergeMismatchedValues x0 x1
 {-# INLINABLE mergeValue #-}
+
+sumValue :: Value -> Value -> Either LogicalMergeError Value
+sumValue x0 x1 =
+  case (x0, x1) of
+    (Unit, Unit) ->
+      pure Unit
+
+    (Int v0, Int v1) ->
+      pure . Int $ v0 + v1
+
+    (Double v0, Double v1) ->
+      pure . Double $ v0 + v1
+
+    (Enum tag0 v0, Enum tag1 v1) ->
+      Left $ LogicalCannotMergeEnum (tag0, v0) (tag1, v1)
+
+    (Struct fs0, Struct fs1) ->
+      Struct <$> Cons.zipWithM sumValue fs0 fs1
+
+    (Nested xs0, Nested xs1) ->
+      Nested <$> merge xs0 xs1
+
+    (Reversed v0, Reversed v1) ->
+      Reversed <$> sumValue v0 v1
+
+    _ ->
+      Left $ LogicalCannotMergeMismatchedValues x0 x1
+{-# INLINABLE sumValue #-}
 
 ------------------------------------------------------------------------
 

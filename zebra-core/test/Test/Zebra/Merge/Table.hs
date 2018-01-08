@@ -79,11 +79,12 @@ unionSimple xss0 =
       pure $ pure x
 
 unionList ::
-      Maybe Merge.MaximumRowSize
+      Merge.Monoidal a
+   -> Maybe Merge.MaximumRowSize
    -> Cons Boxed.Vector (NonEmpty Striped.Table)
    -> Either String (Maybe Striped.Table)
-unionList msize xss0 =
-  case runIdentity . runEitherT . Stream.toList . Merge.unionStriped Merge.valueMonoid msize $ fmap Stream.each xss0 of
+unionList m msize xss0 =
+  case runIdentity . runEitherT . Stream.toList . Merge.unionStriped m msize $ fmap Stream.each xss0 of
     Left (UnionLogicalMergeError _) ->
       pure Nothing
     Left err ->
@@ -112,7 +113,7 @@ prop_union_identity =
         Striped.unsafeConcat $
         Cons.fromNonEmpty file0
 
-    x <- first ppShow $ unionList Nothing files
+    x <- first ppShow $ unionList Merge.valueMonoid Nothing files
     pure $
       Just (normalizeStriped file)
       ===
@@ -124,7 +125,7 @@ prop_union_files_same_schema =
   gamble (Cons.unsafeFromList <$> listOfN 1 10 (jFile schema)) $ \files ->
   either (flip counterexample False) id $ do
     x <- first ppShow $ unionSimple files
-    y <- first ppShow $ unionList Nothing files
+    y <- first ppShow $ unionList Merge.valueMonoid Nothing files
     pure $
       fmap normalizeStriped x
       ===
@@ -135,7 +136,7 @@ prop_union_files_empty =
   gamble jMapSchema $ \schema ->
   gamble (Cons.unsafeFromList <$> listOfN 1 10 (jFile schema)) $ \files ->
   either (flip counterexample False) id $ do
-    x <- first ppShow $ unionList (Just (Merge.MaximumRowSize (-1))) files
+    x <- first ppShow $ unionList Merge.valueMonoid (Just (Merge.MaximumRowSize (-1))) files
     pure $
       Just (Striped.empty schema) === x
 
@@ -150,11 +151,84 @@ prop_union_files_diff_schema =
   gamble (traverse jFile schemas) $ \files ->
   either (flip counterexample False) id $ do
     x <- first ppShow $ unionSimple files
-    y <- first ppShow $ unionList Nothing files
+    y <- first ppShow $ unionList Merge.valueMonoid Nothing files
     pure $
       fmap normalizeStriped x
       ===
       fmap normalizeStriped y
+
+prop_measure_empty :: Property
+prop_measure_empty =
+  gamble jMapSchema $ \schema ->
+  gamble (Cons.unsafeFromList <$> listOfN 1 10 (jFile schema)) $ \files ->
+  either (flip counterexample False) id $ do
+    x <- first ppShow $ unionList Merge.measureMonoid (Just (Merge.MaximumRowSize (-1))) files
+    let
+      Right schema0 =
+        Merge.monoidSchema Merge.measureMonoid schema
+    pure $
+      Just (Striped.empty schema0) === x
+
+prop_measure_commutative :: Property
+prop_measure_commutative =
+  gamble jMapSchema $ \schema ->
+  gamble (jFile schema) $ \file0 ->
+  gamble (jFile schema) $ \file1 ->
+  either (flip counterexample False) id $ do
+    let
+      files0 =
+        Cons.from2 file0 file1
+
+      files1 =
+        Cons.from2 file1 file0
+
+    x0 <- first ppShow $ unionList Merge.measureMonoid Nothing files0
+    x1 <- first ppShow $ unionList Merge.measureMonoid Nothing files1
+
+    pure $
+      x0
+      ===
+      x1
+
+prop_measure_associative :: Property
+prop_measure_associative =
+  gamble jMapSchema $ \schema ->
+  gamble (jFile schema) $ \file0 ->
+  gamble (jFile schema) $ \file1 ->
+  gamble (jFile schema) $ \file2 ->
+  either (flip counterexample False) id $ do
+    let
+      files01 =
+        Cons.from2 file0 file1
+
+      files2 =
+        Cons.from2 file2 (Striped.empty schema :| [])
+
+      files12 =
+        Cons.from2 file1 file2
+
+      files0 =
+        Cons.from2 file0 (Striped.empty schema :| [])
+
+    Just x01 <- first ppShow $ unionList Merge.measureMonoid Nothing files01
+    Just x2  <- first ppShow $ unionList Merge.measureMonoid Nothing files2
+    Just x12 <- first ppShow $ unionList Merge.measureMonoid Nothing files12
+    Just x0  <- first ppShow $ unionList Merge.measureMonoid Nothing files0
+
+    let
+      y0 =
+        Cons.from2 (x01 :| []) (x2 :| [])
+
+      y1 =
+        Cons.from2 (x0 :| []) (x12 :| [])
+
+    measure0 <- first ppShow $ unionList Merge.summationMonoid Nothing y0
+    measure1 <- first ppShow $ unionList Merge.summationMonoid Nothing y1
+
+    pure $
+      measure0
+      ===
+      measure1
 
 return []
 tests :: IO Bool
