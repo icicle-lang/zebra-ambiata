@@ -18,6 +18,10 @@ module Zebra.Merge.Table (
   , valueMonoid
   , measureMonoid
   , summationMonoid
+
+  , Extract(..)
+  , identityExtraction
+  , minimumExtraction
   ) where
 
 import           Control.Monad.Morph (hoist, squash)
@@ -63,6 +67,19 @@ data Step m a =
       _stepComplete :: !(Map Logical.Value a)
     , _stepRemaining :: !(Cons Boxed.Vector (Input m a))
     }
+
+data Extract a =
+  Extract {
+      extractResult :: Map Logical.Value a -> Map Logical.Value a
+    }
+
+identityExtraction :: Extract a
+identityExtraction =
+  Extract id
+
+minimumExtraction :: Int64 -> Extract Int64
+minimumExtraction x =
+  Extract $ Map.filter (> x)
 
 data Monoidal a =
   Monoidal {
@@ -212,24 +229,26 @@ takeExcessiveValues = \case
 unionStep ::
      Monad m
   => (a -> a -> Either LogicalMergeError a)
+  -> (Map Logical.Value a -> Map Logical.Value a)
   -> Cons Boxed.Vector (Input m a)
   -> EitherT UnionTableError m (Step m a)
-unionStep f inputs = do
+unionStep f g inputs = do
   step <- firstT UnionLogicalMergeError . hoistEither . Logical.unionStep f $ fmap inputData inputs
   pure $
     Step
-      (Logical.unionComplete step)
+      (g $ Logical.unionComplete step)
       (Cons.zipWith replaceData(Logical.unionRemaining step) inputs)
 {-# INLINABLE unionStep #-}
 
 unionInput ::
      Monad m
   => Monoidal a
+  -> Extract a
   -> Maybe MaximumRowSize
   -> Cons Boxed.Vector (Input m a)
   -> Map Logical.Value Int64
   -> Stream (Of Logical.Table) (EitherT UnionTableError m) ()
-unionInput m msize inputs0 sizes0 = do
+unionInput m e msize inputs0 sizes0 = do
   (inputs1, sizes1) <- lift $ runStateT (traverse (updateInput (monoidFromValue m)) inputs0) sizes0
 
   let
@@ -242,35 +261,37 @@ unionInput m msize inputs0 sizes0 = do
   if Cons.all isClosed inputs2 then do
     pure ()
   else do
-    Step values inputs3 <- lift $ unionStep (monoidOp m) inputs2
+    Step values inputs3 <- lift $ unionStep (monoidOp m) (extractResult e) inputs2
 
     if Map.null values then
-      unionInput m msize inputs3 sizes1
+      unionInput m e msize inputs3 sizes1
     else do
       Stream.yield . Logical.Map . fmap (monoidToValue m) $ values
-      unionInput m msize inputs3 sizes1
+      unionInput m e msize inputs3 sizes1
 {-# INLINABLE unionInput #-}
 
 unionLogical ::
      Monad m
   => Monoidal a
+  -> Extract a
   -> Schema.Table
   -> Maybe MaximumRowSize
   -> Cons Boxed.Vector (Stream (Of Logical.Table) m ())
   -> Stream (Of Logical.Table) (EitherT UnionTableError m) ()
-unionLogical m schema msize inputs = do
+unionLogical m e schema msize inputs = do
   Stream.whenEmpty (Logical.empty schema) $
-    unionInput m msize (fmap (Input Map.empty . Just) inputs) Map.empty
+    unionInput m e msize (fmap (Input Map.empty . Just) inputs) Map.empty
 {-# INLINABLE unionLogical #-}
 
 unionStripedWith ::
      Monad m
   => Monoidal a
+  -> Extract a
   -> Schema.Table
   -> Maybe MaximumRowSize
   -> Cons Boxed.Vector (Stream (Of Striped.Table) m ())
   -> Stream (Of Striped.Table) (EitherT UnionTableError m) ()
-unionStripedWith m schema0 msize inputs0 = do
+unionStripedWith m e schema0 msize inputs0 = do
   let
     fromStriped =
       Stream.mapM (hoistEither . first UnionStripedError . Striped.toLogical) .
@@ -281,17 +302,18 @@ unionStripedWith m schema0 msize inputs0 = do
 
   hoist squash .
     Stream.mapM (hoistEither . first UnionStripedError . Striped.fromLogical schema1) $
-    unionLogical m schema0 msize (fmap fromStriped inputs0)
+    unionLogical m e schema0 msize (fmap fromStriped inputs0)
 {-# INLINABLE unionStripedWith #-}
 
 unionStriped ::
      Monad m
   => Monoidal a
+  -> Extract a
   -> Maybe MaximumRowSize
   -> Cons Boxed.Vector (Stream (Of Striped.Table) m ())
   -> Stream (Of Striped.Table) (EitherT UnionTableError m) ()
-unionStriped m msize inputs0 = do
+unionStriped m e msize inputs0 = do
   (heads, inputs1) <- fmap Cons.unzip . lift $ traverse peekHead inputs0
   schema <- lift . hoistEither . unionSchemas $ fmap Striped.schema heads
-  unionStripedWith m schema msize inputs1
+  unionStripedWith m e schema msize inputs1
 {-# INLINABLE unionStriped #-}

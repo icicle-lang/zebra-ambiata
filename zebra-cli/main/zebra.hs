@@ -218,7 +218,7 @@ pMerge =
 
 pMergeMode :: Parser MergeMode
 pMergeMode =
-  fromMaybe MergeValue <$> optional (pMergeValue <|> pMergeMeasure)
+  fromMaybe MergeValue <$> optional (pMergeValue <|> pMergeMeasure <|> pMergeMeasureGreaterThan)
 
 pMergeValue :: Parser MergeMode
 pMergeValue =
@@ -231,6 +231,13 @@ pMergeMeasure =
   Options.flag' MergeMeasure $
     Options.long "measure" <>
     Options.help "Merge by measuring the size of input values."
+
+pMergeMeasureGreaterThan :: Parser MergeMode
+pMergeMeasureGreaterThan =
+  fmap MergeMeasureGreaterThanMegabytes .
+  Options.option Options.auto $
+    Options.long "measure-greater-than-megabytes" <>
+    Options.help "Merge by measuring the size of input values, only output keys whose size is greater than the specified number in megabytes."
 
 pMergeRowsPerBlock :: Parser MergeRowsPerBlock
 pMergeRowsPerBlock =
