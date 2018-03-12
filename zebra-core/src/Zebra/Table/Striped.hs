@@ -79,6 +79,8 @@ import           Data.Map (Map)
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as Text
 
+import qualified Debug.Trace as Debug
+
 import           GHC.Generics (Generic)
 
 import           P hiding (empty, concat, splitAt, length)
@@ -570,10 +572,13 @@ ensureSorted kvs =
   else
     let
       loop (prev, _) (next, v) =
-        if prev > next then
-          Left $ StripedMapNotSorted prev next
-        else
-          pure (next, v)
+        if prev > next
+          then
+            Debug.traceStack
+              (Text.unpack . renderStripedError $ (StripedMapNotSorted prev next))
+              (Left $ StripedMapNotSorted prev next)
+          else
+            pure (next, v)
     in
       Boxed.fold1M'_ loop kvs
 {-# INLINABLE ensureSorted #-}

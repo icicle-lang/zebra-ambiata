@@ -23,6 +23,8 @@ import           Data.Map (Map)
 import qualified Data.Map.Strict as Map
 import qualified Data.Vector as Boxed
 
+import qualified Debug.Trace as Debug
+
 import           P
 
 import           Viking (Stream, Of)
@@ -244,5 +246,6 @@ unionStriped ::
 unionStriped msize inputs0 = do
   (heads, inputs1) <- fmap Cons.unzip . lift $ traverse peekHead inputs0
   schema <- lift . hoistEither . unionSchemas $ fmap Striped.schema heads
+  Debug.traceM $ show schema
   unionStripedWith schema msize inputs1
 {-# INLINABLE unionStriped #-}
