@@ -131,6 +131,7 @@ data StripedError =
   | StripedFieldCountMismatch !Int !(Cons Boxed.Vector (Field (Schema.Column)))
   | StripedNoValueForEnumTag !Tag !(Cons Boxed.Vector Logical.Value)
   | StripedNestedLengthMismatch !Schema.Table !SegmentError
+  | StripedMapDuplicateKeys !Logical.Value
   | StripedMapNotSorted !Logical.Value !Logical.Value
   | StripedDefaultFieldNotAllowed !(Field Schema.Column)
   | StripedSchemaUnionError !SchemaUnionError
@@ -172,6 +173,10 @@ renderStripedError = \case
   StripedDefaultFieldNotAllowed (Field name value) ->
     "Schema did not allow defaulting of struct field:" <>
     ppField (unFieldName name) value
+
+  StripedMapDuplicateKeys k ->
+    "Table corrupt, found map which has duplicated, adjacent, keys:" <>
+    ppField "duplicate-key" k
 
   StripedMapNotSorted prev next ->
     "Table corrupt, found map which was not sorted:" <>
@@ -570,10 +575,10 @@ ensureSorted kvs =
   else
     let
       loop (prev, _) (next, v) =
-        if prev > next then
-          Left $ StripedMapNotSorted prev next
-        else
-          pure (next, v)
+        case compare prev next of
+          LT -> pure (next, v)
+          EQ -> Left $ StripedMapDuplicateKeys prev
+          GT -> Left $ StripedMapNotSorted prev next
     in
       Boxed.fold1M'_ loop kvs
 {-# INLINABLE ensureSorted #-}
