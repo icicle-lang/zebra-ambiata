@@ -581,7 +581,7 @@ ensureSorted kvs =
 fromSorted :: Boxed.Vector (Logical.Value, Logical.Value) -> Either StripedError (Map Logical.Value Logical.Value)
 fromSorted kvs = do
   ensureSorted kvs
-  pure . Map.fromDistinctAscList $ Boxed.toList kvs
+  pure . Map.fromAscList $ Boxed.toList kvs
 {-# INLINABLE fromSorted #-}
 
 toValues :: Column -> Either StripedError (Boxed.Vector Logical.Value)
