@@ -589,8 +589,15 @@ fromSorted kvs = do
   case is of
     True ->
       pure . Map.fromAscList $ Boxed.toList kvs
-    False -> do
-      Unsafe.unsafePerformIO (IO.putStrLn $ "Dropping map in `fromSorted'" <> (show (Boxed.map fst kvs))) `seq` pure Map.empty
+    False ->
+      let
+        msg =
+          "Table corrupt, found map which was not sorted\n" <>
+          ppField "keys" (Boxed.map fst kvs) <>
+          ppField "values" (Boxed.map snd kvs) <>
+          "\n Attempting to recover.\n"
+      in
+        Unsafe.unsafePerformIO (IO.putStrLn msg) `seq` Map.fromList $ Boxed.toList kvs
 {-# INLINABLE fromSorted #-}
 
 toValues :: Column -> Either StripedError (Boxed.Vector Logical.Value)
