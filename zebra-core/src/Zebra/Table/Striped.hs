@@ -83,6 +83,9 @@ import           GHC.Generics (Generic)
 
 import           P hiding (empty, concat, splitAt, length)
 
+import qualified System.IO as IO
+import qualified System.IO.Unsafe as Unsafe
+
 import           Text.Show.Pretty (ppShow)
 
 import           Viking (Stream, Of)
