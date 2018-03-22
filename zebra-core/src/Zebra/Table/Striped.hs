@@ -78,12 +78,12 @@ import           Data.ByteString.Internal (ByteString(..))
 import           Data.Map (Map)
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as Text
+import qualified Data.Text.IO as IO
 
 import           GHC.Generics (Generic)
 
 import           P hiding (empty, concat, splitAt, length)
 
-import qualified System.IO as IO
 import qualified System.IO.Unsafe as Unsafe
 
 import           Text.Show.Pretty (ppShow)
@@ -597,7 +597,7 @@ fromSorted kvs = do
           ppField "values" (Boxed.map snd kvs) <>
           "\n Attempting to recover.\n"
       in
-        Unsafe.unsafePerformIO (IO.putStrLn msg) `seq` Map.fromList $ Boxed.toList kvs
+        Unsafe.unsafePerformIO (IO.putStrLn msg) `seq` pure . Map.fromList $ Boxed.toList kvs
 {-# INLINABLE fromSorted #-}
 
 toValues :: Column -> Either StripedError (Boxed.Vector Logical.Value)
