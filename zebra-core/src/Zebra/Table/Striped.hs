@@ -594,7 +594,6 @@ fromSorted kvs = do
         msg =
           "Table corrupt, found map which was not sorted\n" <>
           ppField "keys" (Boxed.map fst kvs) <>
-          ppField "values" (Boxed.map snd kvs) <>
           "\n Attempting to recover.\n"
       in
         Unsafe.unsafePerformIO (IO.putStrLn msg) `seq` pure . Map.fromList $ Boxed.toList kvs
