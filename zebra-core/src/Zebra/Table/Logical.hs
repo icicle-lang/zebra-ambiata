@@ -584,6 +584,8 @@ valid = \case
 
   Map kvs ->
     let
+      -- Test to ensure the Data.Map is
+      -- internally consistent.
       m = Map.valid kvs
       k = all validValue $ Map.keys kvs
       v = all validValue $ Map.elems kvs
