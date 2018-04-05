@@ -23,6 +23,7 @@ import           Text.Show.Pretty (ppShow)
 import           Zebra.Factset.Block
 import           Zebra.Factset.Data
 import           Zebra.Factset.Table
+import qualified Zebra.Table.Logical as Logical
 import qualified Zebra.Table.Striped as Striped
 
 
@@ -61,6 +62,23 @@ prop_roundtrip_attribute_schemas =
       List.zipWith mkAttr [0..] attrs0
   in
     trippingBoth (pure . tableSchemaOfAttributes) attributesOfTableSchema attrs
+
+prop_logical_from_block_is_valid :: Property
+prop_logical_from_block_is_valid  =
+  gamble jBlock $ \block ->
+  let
+    names =
+      fmap (AttributeName . Text.pack . ("attribute_" <>) . show)
+        [0..Boxed.length (blockTables block) - 1]
+  in
+    either (flip counterexample False) id $ do
+      striped0 <- first ppShow $ tableOfBlock (Boxed.fromList names) block
+
+      logical <- first (\x -> ppShow striped0 <> "\n" <> ppShow x) $
+        Striped.toLogical striped0
+
+      pure . counterexample (ppShow logical) $
+        Logical.valid logical
 
 prop_logical_from_block :: Property
 prop_logical_from_block =
