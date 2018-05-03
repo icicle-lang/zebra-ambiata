@@ -266,8 +266,17 @@ merge x0 x1 =
 
 mergeMap :: Map Value Value -> Map Value Value -> Either LogicalMergeError (Map Value Value)
 mergeMap xs0 xs1 =
-  sequenceA $
-    Map.mergeWithKey (\_ x y -> Just (mergeValue x y)) (fmap pure) (fmap pure) xs0 xs1
+  -- /Note/
+  -- Using typeclass functionaliy on a Data.Map is lazy.
+  -- So using sequenceA as one normally would would not
+  -- force the Map, as it internally relies on
+  -- Data.Map.Lazy.traverseWithKey.
+  let
+    sequenceA' =
+      Map.traverseWithKey (const id)
+  in
+    sequenceA' $
+      Map.mergeWithKey (\_ x y -> Just (mergeValue x y)) (fmap pure) (fmap pure) xs0 xs1
 {-# INLINABLE mergeMap #-}
 
 mergeMaps :: Boxed.Vector (Map Value Value) -> Either LogicalMergeError (Map Value Value)
