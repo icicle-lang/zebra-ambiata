@@ -128,19 +128,18 @@ takeRowCounts aid =
 {-# INLINE takeRowCounts #-}
 
 distributeIndices ::
-     (Unboxed.Vector BlockIndex -> Unboxed.Vector Int64 -> Striped.Column -> a)
-  -> Boxed.Vector BlockEntity
+     Boxed.Vector BlockEntity
   -> Unboxed.Vector BlockIndex
   -> Cons Boxed.Vector (Field Striped.Column)
-  -> Cons Boxed.Vector (Field a)
-distributeIndices done0 entities indices columns =
+  -> Cons Boxed.Vector (Field Striped.Column)
+distributeIndices entities indices columns =
   Cons.ifor columns $ \needle0 field0 ->
     let
       needle =
         AttributeId $ fromIntegral needle0
 
       done ixs =
-        fmap (done0 ixs (takeRowCounts needle entities)) field0
+        fmap (attributeTable ixs (takeRowCounts needle entities)) field0
     in
       done .
       Unboxed.map snd .
@@ -175,9 +174,11 @@ fromTombstone = \case
 attributeTable :: Unboxed.Vector BlockIndex -> Unboxed.Vector Int64 -> Striped.Column -> Striped.Column
 attributeTable indices0 counts values =
   let
+    timeAndFactset (BlockIndex t f _) = (t, f)
+
     (key_counts, (value_counts, indices)) =
       second Unboxed.unzip $
-        Generic.segmentedGroup (Unboxed.map fromIntegral counts) indices0
+        Generic.segmentedGroupOn timeAndFactset (Unboxed.map fromIntegral counts) indices0
 
     key =
       Striped.Struct DenyDefault $ Cons.from2
@@ -242,7 +243,7 @@ tableOfBlock names block = do
     Just fields ->
       pure $ Striped.Map DenyDefault
         (entityColumn entities)
-        (Striped.Struct DenyDefault $ distributeIndices attributeTable entities indices fields)
+        (Striped.Struct DenyDefault $ distributeIndices entities indices fields)
 
 ------------------------------------------------------------------------
 -- Table -> Block

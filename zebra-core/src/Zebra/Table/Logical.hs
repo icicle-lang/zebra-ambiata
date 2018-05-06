@@ -55,6 +55,8 @@ module Zebra.Table.Logical (
 
   -- * Internal
   , renderField
+  , valid
+  , validValue
   ) where
 
 import           Data.ByteString (ByteString)
@@ -568,3 +570,55 @@ compareTag x y =
   else
     LT
 {-# INLINE compareTag #-}
+
+
+------------------------------------------------------------------------
+
+valid :: Table -> Bool
+valid = \case
+  Binary _ ->
+    True
+
+  Array xs ->
+    all validValue xs
+
+  Map kvs ->
+    let
+      -- Test to ensure the Data.Map is
+      -- internally consistent.
+      m = Map.valid kvs
+      k = all validValue $ Map.keys kvs
+      v = all validValue $ Map.elems kvs
+    in
+      and [m, k, v]
+
+{-# INLINABLE valid #-}
+
+validValue :: Value -> Bool
+validValue = \case
+  Unit ->
+    True
+
+  Int _ ->
+    True
+
+  Double _ ->
+    True
+
+  Enum _ v ->
+    validValue v
+
+  Struct fs ->
+    Cons.all validValue fs
+
+  Nested xs ->
+    valid xs
+
+  Reversed v ->
+    validValue v
+
+{-# INLINABLE validValue #-}
+
+------------------------------------------------------------------------
+
+

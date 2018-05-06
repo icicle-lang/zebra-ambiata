@@ -6,6 +6,7 @@
 module Zebra.X.Vector.Generic (
     group
   , segmentedGroup
+  , segmentedGroupOn
 
   , module Generic
   ) where
@@ -27,7 +28,22 @@ segmentedGroup ::
   => v Int
   -> v a
   -> (v Int, v (Int, a))
-segmentedGroup ns xs =
+segmentedGroup = segmentedGroupOn id
+{-# INLINE segmentedGroup #-}
+
+-- | Run-length encode a segmented vector.
+segmentedGroupOn ::
+     Eq b
+  => Vector v a
+  => Vector v Int
+  => Vector v (Int, a)
+  => Vector v (Int, (Int, a))
+  => Vector v (Int, Int)
+  => (a -> b)
+  -> v Int
+  -> v a
+  -> (v Int, v (Int, a))
+segmentedGroupOn f ns xs =
   let
     indices =
       concatMap (uncurry $ flip replicate) (indexed ns)
@@ -38,21 +54,27 @@ segmentedGroup ns xs =
     first (rezero ns . map fst . group) .
     unzip .
     map rotate $
-    group (zip indices xs)
-{-# INLINE segmentedGroup #-}
+    groupOn (second f) (zip indices xs)
+{-# INLINE segmentedGroupOn #-}
 
 -- | Run-length encode a vector.
 group :: (Eq a, Vector v a, Vector v (Int, a)) => v a -> v (Int, a)
 group =
-  Stream.vectorOfStream . groupStream . Stream.streamOfVector
+  groupOn id
 {-# INLINE group #-}
+
+-- | Run-length encode a vector.
+groupOn :: (Eq b, Vector v a, Vector v (Int, a)) => (a -> b) -> v a -> v (Int, a)
+groupOn f =
+  Stream.vectorOfStream . groupStreamOn f . Stream.streamOfVector
+{-# INLINE groupOn #-}
 
 data Run a =
     None
   | Run !Int !a
 
-groupStream :: (Monad m, Eq a) => Stream m a -> Stream m (Int, a)
-groupStream (Stream step sinit) =
+groupStreamOn :: (Monad m, Eq b) => (a -> b) -> Stream m a -> Stream m (Int, a)
+groupStreamOn f (Stream step sinit) =
   let
     loop = \case
       Nothing ->
@@ -77,7 +99,7 @@ groupStream (Stream step sinit) =
                 pure . Skip $
                   Just (s, Run 1 x)
               Run n y ->
-                if x == y then
+                if f x == f y then
                   pure . Skip $
                     Just (s, Run (n + 1) x)
                 else
@@ -86,7 +108,7 @@ groupStream (Stream step sinit) =
     {-# INLINE [0] loop #-}
   in
     Stream loop (Just (sinit, None))
-{-# INLINE [1] groupStream #-}
+{-# INLINE [1] groupStreamOn #-}
 
 -- | Re-insert zeros that have been lost from a segement descriptor:
 --
