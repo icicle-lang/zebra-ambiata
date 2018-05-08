@@ -9,6 +9,7 @@ module Zebra.Command.Merge (
     Merge(..)
   , MergeRowsPerBlock(..)
   , MergeMaximumRowSize(..)
+  , MergeMode(..)
   , zebraMerge
 
   , MergeError(..)
@@ -56,7 +57,14 @@ data Merge =
     , mergeVersion :: !BinaryVersion
     , mergeRowsPerChunk :: !MergeRowsPerBlock
     , mergeMaximumRowSize :: !(Maybe MergeMaximumRowSize)
+    , mergeMode :: MergeMode
     } deriving (Eq, Ord, Show)
+
+data MergeMode =
+    MergeValue
+  | MergeMeasure
+  | MergeMeasureGreaterThanMegabytes Int64
+  deriving (Eq, Ord, Show)
 
 newtype MergeRowsPerBlock =
   MergeRowsPerBlock {
@@ -121,7 +129,25 @@ zebraMerge x = do
       fmap (Merge.MaximumRowSize . unMergeMaximumRowSize) $ mergeMaximumRowSize x
 
     union =
-      maybe Merge.unionStriped Merge.unionStripedWith mschema
+      case mergeMode x of
+        MergeValue ->
+          maybe
+            (Merge.unionStriped Merge.valueMonoid Merge.identityExtraction)
+            (Merge.unionStripedWith Merge.valueMonoid Merge.identityExtraction)
+
+        MergeMeasure ->
+          maybe
+            (Merge.unionStriped Merge.measureMonoid Merge.identityExtraction)
+            (Merge.unionStripedWith Merge.measureMonoid Merge.identityExtraction)
+
+        MergeMeasureGreaterThanMegabytes m ->
+          let
+            b =
+              m * 1024 * 1024
+          in
+            maybe
+              (Merge.unionStriped Merge.measureMonoid (Merge.minimumExtraction b))
+              (Merge.unionStripedWith Merge.measureMonoid (Merge.minimumExtraction b))
 
   firstJoin MergeIOError .
       writeFileOrStdout (mergeOutput x) .
@@ -130,5 +156,5 @@ zebraMerge x = do
     hoist (firstJoin MergeStripedError) .
       Striped.rechunk (unMergeRowsPerBlock $ mergeRowsPerChunk x) .
     hoist (firstJoin MergeUnionTableError) $
-      union msize inputs
+      union mschema msize inputs
 {-# SPECIALIZE zebraMerge :: Merge -> EitherT MergeError (ResourceT IO) () #-}

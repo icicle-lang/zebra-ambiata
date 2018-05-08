@@ -214,6 +214,30 @@ pMerge =
    <*> pOutputFormat
    <*> pMergeRowsPerBlock
    <*> optional pMergeMaximumRowSize
+   <*> pMergeMode
+
+pMergeMode :: Parser MergeMode
+pMergeMode =
+  fromMaybe MergeValue <$> optional (pMergeValue <|> pMergeMeasure <|> pMergeMeasureGreaterThan)
+
+pMergeValue :: Parser MergeMode
+pMergeValue =
+  Options.flag' MergeValue $
+    Options.long "value" <>
+    Options.help "Standard merge of input values. Each key needs to fit wholly in memory."
+
+pMergeMeasure :: Parser MergeMode
+pMergeMeasure =
+  Options.flag' MergeMeasure $
+    Options.long "measure" <>
+    Options.help "Merge by measuring the size of input values."
+
+pMergeMeasureGreaterThan :: Parser MergeMode
+pMergeMeasureGreaterThan =
+  fmap MergeMeasureGreaterThanMegabytes .
+  Options.option Options.auto $
+    Options.long "measure-greater-than-megabytes" <>
+    Options.help "Merge by measuring the size of input values, only output keys whose size is greater than the specified number in megabytes."
 
 pMergeRowsPerBlock :: Parser MergeRowsPerBlock
 pMergeRowsPerBlock =
