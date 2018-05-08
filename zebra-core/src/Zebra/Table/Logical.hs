@@ -223,9 +223,9 @@ size = \case
   Binary bs ->
     fromIntegral $ ByteString.length bs
   Array xs ->
-    Boxed.sum $ Boxed.map sizeValue xs
+    Boxed.foldl' (\acc x -> acc + sizeValue x) 0 xs
   Map kvs ->
-    sum . fmap (\(k, v) -> sizeValue k + sizeValue v) $ Map.toList kvs
+    Map.foldlWithKey' (\acc k v -> acc + sizeValue k + sizeValue v) 0 kvs
 {-# INLINABLE size #-}
 
 sizeValue :: Value -> Int64
