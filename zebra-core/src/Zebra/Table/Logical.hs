@@ -59,6 +59,8 @@ module Zebra.Table.Logical (
   , validValue
   ) where
 
+import           Control.Parallel.Strategies
+
 import           Data.ByteString (ByteString)
 import qualified Data.ByteString as ByteString
 import           Data.Map (Map)
@@ -298,8 +300,11 @@ mergeMaps kvss =
         (kvss0, kvss1) =
           Boxed.splitAt (n `div` 2) kvss
 
-      kvs0 <- mergeMaps kvss0
-      kvs1 <- mergeMaps kvss1
+      (kvs0, kvs1) <- runEval $ do
+        a <- rpar $ mergeMaps kvss0
+        b <- rseq $ mergeMaps kvss1
+        _ <- rseq a
+        pure ((,) <$> a <*> b)
 
       mergeMap kvs0 kvs1
 {-# INLINABLE mergeMaps #-}

@@ -36,6 +36,7 @@ library
                     , mmorph                          == 1.0.*
                     , mtl                             == 2.2.*
                     , old-locale                      == 1.0.*
+                    , parallel
                     , pretty-show                     == 1.6.*
                     , primitive                       == 0.6.*
                     , random                          == 1.1.*
