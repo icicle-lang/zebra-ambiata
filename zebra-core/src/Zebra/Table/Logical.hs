@@ -225,7 +225,7 @@ size = \case
   Array xs ->
     Boxed.sum $ Boxed.map sizeValue xs
   Map kvs ->
-    sum . fmap (\(k, v) -> sizeValue k + sizeValue v) $ Map.toList kvs
+    Map.foldlWithKey' (\acc k v -> acc + sizeValue k + sizeValue v) 0 kvs
 {-# INLINABLE size #-}
 
 sizeValue :: Value -> Int64
