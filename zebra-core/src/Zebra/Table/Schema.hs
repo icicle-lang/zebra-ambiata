@@ -101,6 +101,7 @@ data SchemaError =
     SchemaExpectedBinary !Table
   | SchemaExpectedArray !Table
   | SchemaExpectedMap !Table
+  | SchemaExpectedUnit !Column
   | SchemaExpectedInt !Column
   | SchemaExpectedDouble !Column
   | SchemaExpectedEnum !Column
@@ -128,6 +129,8 @@ renderSchemaError = \case
     "Expected Array, but was: " <> Text.pack (ppShow x)
   SchemaExpectedMap x ->
     "Expected Map, but was: " <> Text.pack (ppShow x)
+  SchemaExpectedUnit x ->
+    "Expected Unit, but was: " <> Text.pack (ppShow x)
   SchemaExpectedInt x ->
     "Expected Int, but was: " <> Text.pack (ppShow x)
   SchemaExpectedDouble x ->

@@ -35,6 +35,7 @@ module Zebra.Table.Striped (
   , takeBinary
   , takeArray
   , takeMap
+  , takeUnit
   , takeInt
   , takeDouble
   , takeEnum
@@ -50,8 +51,11 @@ module Zebra.Table.Striped (
   , toValues
 
   -- * Slicing
+  , index
   , splitAt
   , splitAtColumn
+  , slice
+  , sliceColumn
 
   -- * Alchemy
   , transmute
@@ -344,6 +348,13 @@ takeMap = \case
     Left $ SchemaExpectedMap (schema x)
 {-# INLINE takeMap #-}
 
+takeUnit :: Column -> Either SchemaError Int
+takeUnit = \case
+  Unit i ->
+    Right i
+  x ->
+    Left $ SchemaExpectedUnit (schemaColumn x)
+
 takeInt :: Column -> Either SchemaError (Default, Encoding.Int, Storable.Vector Int64)
 takeInt = \case
   Int def encoding x ->
@@ -624,6 +635,44 @@ mkEnum tag values =
 {-# INLINABLE mkEnum #-}
 
 ------------------------------------------------------------------------
+-- Indexing
+
+index :: Int -> Column -> Maybe Logical.Value
+index i = \case
+  Unit n | i < n     -> pure Logical.Unit
+         | otherwise -> Nothing
+
+  Int _ _ xs ->
+    fmap Logical.Int $ xs Storable.!? i
+
+  Double _ xs ->
+    fmap Logical.Double $ xs Storable.!? i
+
+  Enum _ tags0 vs0 -> do
+    tag   <- tags0 Storable.!? i
+    value <- index i . variantData =<< Cons.index (fromIntegral tag) vs0
+    pure   $ Logical.Enum tag value
+
+  Struct _ fs ->
+    Logical.Struct <$> traverse (index i . fieldData) fs
+
+  Nested ns t -> do
+    let
+      offset = fromIntegral $ Storable.sum (Storable.take i ns)
+
+    size    <- fromIntegral <$> ns Storable.!? i
+
+    let
+      portion =
+        slice offset size t
+
+    table   <- either (const Nothing) Just $ toLogical portion
+    pure     $ Logical.Nested table
+
+  Reversed c ->
+    Logical.Reversed <$> index i c
+
+------------------------------------------------------------------------
 -- Splitting
 
 splitAt :: Int -> Table -> (Table, Table)
@@ -702,6 +751,79 @@ splitAtColumn i = \case
     bimap Reversed Reversed
       (splitAtColumn i column)
 {-# INLINABLE splitAtColumn #-}
+
+------------------------------------------------------------------------
+-- Slicing
+
+slice :: Int -> Int -> Table -> Table
+slice i n = \case
+  Binary def encoding bs ->
+    Binary def encoding $
+      -- Doesn't seem to be a builtin slice
+      -- for Bytestring.
+      ByteString.take n . ByteString.drop i $ bs
+
+  Array def x ->
+    Array def $
+      sliceColumn i n x
+
+  Map def k v ->
+    Map def
+      (sliceColumn i n k)
+      (sliceColumn i n v)
+{-# INLINABLE slice #-}
+
+sliceColumn :: Int -> Int -> Column -> Column
+sliceColumn i n = \case
+  Unit _ ->
+    Unit n
+
+  Int def encoding xs ->
+    Int def encoding $
+      Storable.slice i n xs
+
+  Double def xs ->
+    Double def $
+      Storable.slice i n xs
+
+  Enum def tags0 variants0 ->
+    let
+      tags =
+        Storable.slice i n tags0
+
+      variants =
+        fmap (fmap (sliceColumn i n)) variants0
+    in
+      Enum def tags variants
+
+  Struct def fields0 ->
+    let
+      fields =
+        fmap (fmap (sliceColumn i n)) fields0
+    in
+      Struct def fields
+
+  Nested ns table0 ->
+    let
+      n0 =
+        Storable.slice i n ns
+
+      ni =
+        fromIntegral $ Storable.sum (Storable.slice 0 i ns)
+
+      nn =
+        fromIntegral $ Storable.sum n0
+
+      table =
+        slice ni nn table0
+
+    in
+      Nested n0 table
+
+  Reversed column ->
+    Reversed $
+      sliceColumn i n column
+{-# INLINABLE sliceColumn #-}
 
 ------------------------------------------------------------------------
 -- Merge

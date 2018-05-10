@@ -242,3 +242,4 @@ unionStriped msize inputs0 = do
   schema <- lift . hoistEither . unionSchemas $ fmap Striped.schema heads
   unionStripedWith schema msize inputs1
 {-# INLINABLE unionStriped #-}
+

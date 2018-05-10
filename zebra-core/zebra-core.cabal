@@ -79,6 +79,7 @@ library
                     Zebra.Merge.Block
                     Zebra.Merge.BlockC
                     Zebra.Merge.Entity
+                    Zebra.Merge.Mutable
                     Zebra.Merge.Puller.File
                     Zebra.Merge.Puller.List
                     Zebra.Merge.Table
@@ -107,11 +108,13 @@ library
                     Zebra.Table.Data
                     Zebra.Table.Encoding
                     Zebra.Table.Logical
+                    Zebra.Table.Mutable
                     Zebra.Table.Schema
                     Zebra.Table.Striped
 
                     Zebra.Time
 
+                    Zebra.X.Either
                     Zebra.X.Vector.Generic
                     Zebra.X.Vector.Segment
                     Zebra.X.Vector.Storable

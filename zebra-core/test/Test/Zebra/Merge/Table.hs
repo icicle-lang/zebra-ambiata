@@ -2,6 +2,8 @@
 {-# LANGUAGE TemplateHaskell #-}
 module Test.Zebra.Merge.Table where
 
+import           Control.Monad.ST (runST)
+
 import           Data.Functor.Identity (runIdentity)
 import           Data.List.NonEmpty (NonEmpty(..))
 import           Data.String (String)
@@ -25,8 +27,10 @@ import           X.Control.Monad.Trans.Either (runEitherT)
 import           X.Data.Vector.Cons (Cons)
 import qualified X.Data.Vector.Cons as Cons
 
+import           Zebra.X.Either (hoistWith)
 import           Zebra.Merge.Table (UnionTableError(..))
 import qualified Zebra.Merge.Table as Merge
+import qualified Zebra.Table.Mutable as Mutable
 import qualified Zebra.Table.Schema as Schema
 import           Zebra.Table.Striped (StripedError(..))
 import qualified Zebra.Table.Striped as Striped
@@ -99,6 +103,22 @@ unionList msize xss0 =
             Right x ->
               pure $ pure x
 
+unionMutable :: Schema.Table -> Cons Boxed.Vector (NonEmpty Striped.Table) -> Either String (Maybe Striped.Table)
+unionMutable schema tables =
+  let
+    merged = runST $ runEitherT $ do
+      long <- hoistWith Mutable.MutableStripedError $ for tables (Striped.unsafeConcat . Cons.fromNonEmpty)
+      t    <- Mutable.empty 256 schema
+      Mutable.merges t long
+      Mutable.unsafeFreeze t
+  in case merged of
+    Left Mutable.MutableLogicalMergeError ->
+      pure Nothing
+    Left _ ->
+      Left "shit"
+    Right x ->
+      pure $ pure x
+
 prop_union_identity :: Property
 prop_union_identity =
   gamble jMapSchema $ \schema ->
@@ -125,6 +145,18 @@ prop_union_files_same_schema =
   either (flip counterexample False) id $ do
     x <- first ppShow $ unionSimple files
     y <- first ppShow $ unionList Nothing files
+    pure $
+      fmap normalizeStriped x
+      ===
+      fmap normalizeStriped y
+
+prop_union_mutable_same_schema :: Property
+prop_union_mutable_same_schema =
+  gamble jMapSchema $ \schema ->
+  gamble (Cons.unsafeFromList <$> listOfN 1 10 (jFile schema)) $ \files ->
+  either (flip counterexample False) id $ do
+    x <- first ppShow $ unionSimple files
+    y <- first ppShow $ unionMutable schema files
     pure $
       fmap normalizeStriped x
       ===

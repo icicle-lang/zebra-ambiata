@@ -36,8 +36,8 @@ import           X.Control.Monad.Trans.Either (EitherT, firstJoin, hoistEither)
 import qualified X.Data.Vector.Cons as Cons
 
 import           Zebra.Command.Util
-import           Zebra.Merge.Table (UnionTableError)
-import qualified Zebra.Merge.Table as Merge
+import           Zebra.Merge.Mutable (UnionTableError)
+import qualified Zebra.Merge.Mutable as Merge
 import           Zebra.Serial.Binary (BinaryStripedEncodeError, BinaryStripedDecodeError)
 import           Zebra.Serial.Binary (BinaryVersion(..))
 import qualified Zebra.Serial.Binary as Binary
@@ -117,9 +117,6 @@ zebraMerge x = do
     inputs =
       fmap readStriped . Cons.fromNonEmpty $ mergeInputs x
 
-    msize =
-      fmap (Merge.MaximumRowSize . unMergeMaximumRowSize) $ mergeMaximumRowSize x
-
     union =
       maybe Merge.unionStriped Merge.unionStripedWith mschema
 
@@ -130,5 +127,5 @@ zebraMerge x = do
     hoist (firstJoin MergeStripedError) .
       Striped.rechunk (unMergeRowsPerBlock $ mergeRowsPerChunk x) .
     hoist (firstJoin MergeUnionTableError) $
-      union msize inputs
+      union inputs
 {-# SPECIALIZE zebraMerge :: Merge -> EitherT MergeError (ResourceT IO) () #-}
