@@ -142,7 +142,7 @@ unionStep (Mutable.Map _ mk mv) inputs = do
     maximumKey :: Input xx -> Maybe Logical.Value
     maximumKey (OpenInput (OpenInput' lk _ _ _ _))
       | not (Boxed.null lk)
-      = Just (Boxed.maximum lk)
+      = Just (Boxed.unsafeLast lk)
     maximumKey _
       = Nothing
 
