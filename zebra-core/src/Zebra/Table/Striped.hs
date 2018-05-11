@@ -78,10 +78,13 @@ import           Data.ByteString.Internal (ByteString(..))
 import           Data.Map (Map)
 import qualified Data.Map.Strict as Map
 import qualified Data.Text as Text
+import qualified Data.Text.IO as IO
 
 import           GHC.Generics (Generic)
 
 import           P hiding (empty, concat, splitAt, length)
+
+import qualified System.IO.Unsafe as Unsafe
 
 import           Text.Show.Pretty (ppShow)
 
@@ -563,25 +566,37 @@ toNested ns table =
       pure $ fmap Logical.Map kvss
 {-# INLINABLE toNested #-}
 
-ensureSorted :: Boxed.Vector (Logical.Value, Logical.Value) -> Either StripedError ()
-ensureSorted kvs =
+isSorted :: Boxed.Vector (Logical.Value, Logical.Value) -> Either StripedError Bool
+isSorted kvs =
   if Boxed.null kvs then
-    pure ()
+    pure True
   else
     let
-      loop (prev, _) (next, v) =
-        if prev > next then
-          Left $ StripedMapNotSorted prev next
-        else
-          pure (next, v)
-    in
-      Boxed.fold1M'_ loop kvs
-{-# INLINABLE ensureSorted #-}
+      kbs =
+        Boxed.zip (Boxed.map fst kvs) (Boxed.replicate (Boxed.length kvs) True)
+      loop (prev, acc) (next, _) =
+        if prev > next
+          then pure $ (next, False)
+          else pure $ (next, acc && True)
+    in do
+      (_, rv) <- Boxed.fold1M' loop kbs
+      pure rv
+{-# INLINABLE isSorted #-}
 
 fromSorted :: Boxed.Vector (Logical.Value, Logical.Value) -> Either StripedError (Map Logical.Value Logical.Value)
 fromSorted kvs = do
-  ensureSorted kvs
-  pure . Map.fromDistinctAscList $ Boxed.toList kvs
+  is <- isSorted kvs
+  case is of
+    True ->
+      pure . Map.fromAscList $ Boxed.toList kvs
+    False ->
+      let
+        msg =
+          "Table corrupt, found map which was not sorted\n" <>
+          ppField "keys" (Boxed.map fst kvs) <>
+          "\n Attempting to recover.\n"
+      in
+        Unsafe.unsafePerformIO (IO.putStrLn msg) `seq` pure . Map.fromList $ Boxed.toList kvs
 {-# INLINABLE fromSorted #-}
 
 toValues :: Column -> Either StripedError (Boxed.Vector Logical.Value)
