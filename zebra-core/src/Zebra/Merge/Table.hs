@@ -17,7 +17,7 @@ module Zebra.Merge.Table (
 
 import           Control.Monad.Morph (hoist, squash)
 import           Control.Monad.Trans.Class (lift)
-import           Control.Monad.Trans.State.Strict (StateT, runStateT, modify)
+import           Control.Monad.Trans.State.Strict (StateT, runStateT, modify')
 
 import           Data.Map (Map)
 import qualified Data.Map.Strict as Map
@@ -117,14 +117,6 @@ dropData drops input =
     }
 {-# INLINABLE dropData #-}
 
-replaceStream :: Stream (Of Logical.Table) m () ->  Input m -> Input m
-replaceStream stream input =
-  input {
-      inputStream =
-        Just stream
-    }
-{-# INLINABLE replaceStream #-}
-
 isClosed :: Input m -> Bool
 isClosed =
   isNothing . inputStream
@@ -156,10 +148,10 @@ updateInput input =
             pure $
               closeStream input
 
-          Right (hd, tl) -> do
-            values <- lift . firstT UnionLogicalSchemaError . hoistEither $ Logical.takeMap hd
-            modify $ Map.unionWith (+) (Map.map Logical.sizeValue values)
-            pure . replaceStream tl $ replaceData values input
+          Right (table, remaining) -> do
+            values <- lift . firstT UnionLogicalSchemaError . hoistEither $ Logical.takeMap table
+            modify' $ Map.unionWith (+) (Map.map Logical.sizeValue values)
+            pure $ Input values (Just remaining)
 {-# INLINABLE updateInput #-}
 
 takeExcessiveValues :: Maybe MaximumRowSize -> Map Logical.Value Int64 -> Map Logical.Value Int64
@@ -203,8 +195,12 @@ unionInput msize inputs0 sizes0 = do
     if Map.null values then
       unionInput msize inputs3 sizes1
     else do
+      let
+        unyieldedSizes
+          = sizes1 `Map.difference` values
+
       Stream.yield $ Logical.Map values
-      unionInput msize inputs3 sizes1
+      unionInput msize inputs3 unyieldedSizes
 {-# INLINABLE unionInput #-}
 
 unionLogical ::
