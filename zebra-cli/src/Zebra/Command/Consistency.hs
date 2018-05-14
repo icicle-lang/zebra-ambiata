@@ -12,7 +12,8 @@ module Zebra.Command.Consistency (
   , renderConsistencyError
   ) where
 
-import           Control.Monad.Catch (MonadCatch)
+import           Control.Monad.Catch (MonadCatch, MonadMask)
+import           Control.Monad.IO.Class (MonadIO(..))
 import           Control.Monad.Morph (hoist)
 import           Control.Monad.Trans.Resource (MonadResource, ResourceT)
 
@@ -21,14 +22,16 @@ import qualified Data.Map as Map
 
 import           P
 
+import qualified System.Console.Regions as Concurrent
 import           System.IO (IO, FilePath)
 import           System.IO.Error (IOError)
 
 import qualified Viking.ByteStream as ByteStream
 import qualified Viking.Stream as Stream
 
-import           X.Control.Monad.Trans.Either (EitherT, firstJoin, hoistEither)
+import           X.Control.Monad.Trans.Either (EitherT, pattern EitherT, runEitherT, firstJoin, hoistEither)
 
+import           Zebra.Command.Summary (zebraDisplay)
 import           Zebra.Serial.Binary (BinaryStripedDecodeError)
 import qualified Zebra.Serial.Binary as Binary
 import qualified Zebra.Table.Logical as Logical
@@ -85,31 +88,38 @@ summariseBlock = \case
       in
         BlockRange (Just bmin) (Just bmax)
 
-zebraConsistency :: (MonadResource m, MonadCatch m) => Consistency -> EitherT ConsistencyError m ()
-zebraConsistency x = do
-  let
-    tables =
-      hoist (firstJoin ConsistencyStripedDecodeError) .
-        Binary.decodeStriped .
-      hoist (firstT ConsistencyIOError) $
-        ByteStream.readFile (consistencyInput x)
+zebraConsistency ::
+     (MonadResource m, MonadCatch m, MonadMask m)
+  => Consistency
+  -> EitherT ConsistencyError m ()
+zebraConsistency x =
+  EitherT . Concurrent.displayConsoleRegions . runEitherT $ do
+    region <- liftIO $ Concurrent.openConsoleRegion Concurrent.Linear
 
-    fromStriped =
-      Stream.mapM (hoistEither . first ConsistencyStripedError . Striped.toLogical)
+    let
+      tables =
+        Stream.store (zebraDisplay region) .
+        hoist (firstJoin ConsistencyStripedDecodeError) .
+          Binary.decodeStriped .
+        hoist (firstT ConsistencyIOError) $
+          ByteStream.readFile (consistencyInput x)
 
-    blockRanges =
-      Stream.map summariseBlock $ fromStriped tables
+      fromStriped =
+        Stream.mapM (hoistEither . first ConsistencyStripedError . Striped.toLogical)
 
-    loop mseen (BlockRange mbmin mbmax) =
-      case (mseen, mbmin) of
-        ((chunk, Just seen), Just bmin) ->
-          case compare seen bmin of
-            LT -> pure (chunk + 1, mbmax)
-            _  -> hoistEither (Left $ ConsistencyInterBlock chunk seen bmin)
-        ((chunk, _), _) ->
-          pure (chunk + 1, mbmax)
+      blockRanges =
+        Stream.map summariseBlock $ fromStriped tables
 
-  _ <- Stream.foldM_ loop (pure (0, Nothing)) pure blockRanges
-  pure ()
+      loop mseen (BlockRange mbmin mbmax) =
+        case (mseen, mbmin) of
+          ((chunk, Just seen), Just bmin) ->
+            case compare seen bmin of
+              LT -> pure (chunk + 1, mbmax)
+              _  -> hoistEither (Left $ ConsistencyInterBlock chunk seen bmin)
+          ((chunk, _), _) ->
+            pure (chunk + 1, mbmax)
+
+    _ <- Stream.foldM_ loop (pure (0, Nothing)) pure blockRanges
+    pure ()
 
 {-# SPECIALIZE zebraConsistency :: Consistency -> EitherT ConsistencyError (ResourceT IO) () #-}

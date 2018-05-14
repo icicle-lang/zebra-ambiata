@@ -10,6 +10,9 @@ module Zebra.Command.Summary (
 
   , SummaryError(..)
   , renderSummaryError
+
+  -- * Display for other consumers
+  , zebraDisplay
   ) where
 
 import           Control.Monad.Catch (MonadMask(..))
@@ -134,6 +137,31 @@ renderFileSummary (FileSummary nblocks nrows nmaxrows mschema mfirst mlast) =
     , "last_key           = " <> fromMaybe "<file is not a map>" (renderKey mschema mlast)
     ]
 
+-- | Display a summary of a stream.
+--
+-- Typically, one would use this with this with 'store' if further
+-- work is also required.
+--
+-- @
+-- Stream.store (zebraDisplay region)
+-- @
+zebraDisplay :: forall m r. (MonadResource m) => Concurrent.ConsoleRegion -> Stream.Stream (Of Striped.Table) m r -> m r
+zebraDisplay region tables = do
+  let
+    loop summary0 table = do
+      let
+        !summary =
+          summary0 <> fromTable table
+
+      liftIO $ Concurrent.setConsoleRegion region (renderFileSummary summary)
+      pure summary
+
+  summary :> r <-
+    Stream.foldM loop (pure mempty) pure tables
+
+  liftIO $ Concurrent.finishConsoleRegion region (renderFileSummary summary)
+  return r
+
 zebraSummary :: forall m. (MonadResource m, MonadMask m) => Summary -> EitherT SummaryError m ()
 zebraSummary export =
   EitherT . Concurrent.displayConsoleRegions . runEitherT $ do
@@ -146,15 +174,5 @@ zebraSummary export =
         hoist (firstT SummaryIOError) $
           ByteStream.readFile (summaryInput export)
 
-      loop summary0 table = do
-        let
-          !summary =
-            summary0 <> fromTable table
-
-        liftIO $ Concurrent.setConsoleRegion region (renderFileSummary summary)
-        pure summary
-
-    summary :> () <- Stream.foldM loop (pure mempty) pure tables
-
-    liftIO $ Concurrent.finishConsoleRegion region (renderFileSummary summary)
+    zebraDisplay region tables
 {-# SPECIALIZE zebraSummary :: Summary -> EitherT SummaryError (ResourceT IO) () #-}
