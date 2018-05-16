@@ -162,14 +162,22 @@ takeExcessiveValues = \case
     Map.filter (> unMaximumRowSize size)
 {-# INLINABLE takeExcessiveValues #-}
 
-unionStep :: Monad m => Cons Boxed.Vector (Input m) -> EitherT UnionTableError m (Step m)
-unionStep inputs = do
-  step <- firstT UnionLogicalMergeError . hoistEither . Logical.unionStep $ fmap inputData inputs
+unionStep :: Monad m => Logical.Value -> Cons Boxed.Vector (Input m) -> EitherT UnionTableError m (Step m)
+unionStep key inputs = do
+  step <- firstT UnionLogicalMergeError . hoistEither . (Logical.unionStep key) $ fmap inputData inputs
   pure $
     Step
       (Logical.unionComplete step)
       (Cons.zipWith replaceData (Logical.unionRemaining step) inputs)
 {-# INLINABLE unionStep #-}
+
+maximumKey :: Map Logical.Value Logical.Value -> Maybe Logical.Value
+maximumKey kvs =
+  if Map.null kvs then
+    Nothing
+  else
+    pure . fst $ Map.findMax kvs
+{-# INLINABLE maximumKey #-}
 
 unionInput ::
      Monad m
@@ -179,22 +187,21 @@ unionInput ::
   -> Stream (Of Logical.Table) (EitherT UnionTableError m) ()
 unionInput msize inputs0 sizes0 = do
   (inputs1, sizes1) <- lift $ runStateT (traverse updateInput inputs0) sizes0
+  unless (Cons.all isClosed inputs1) $ do
+    let
+      drops =
+        takeExcessiveValues msize sizes1
 
-  let
-    drops =
-      takeExcessiveValues msize sizes1
+      inputs2 =
+        fmap (dropData drops) inputs1
 
-    inputs2 =
-      fmap (dropData drops) inputs1
+      maximums =
+        Cons.mapMaybe (maximumKey . inputData) inputs1
 
-  if Cons.all isClosed inputs2 then do
-    pure ()
-  else do
-    Step values inputs3 <- lift $ unionStep inputs2
-
-    if Map.null values then
-      unionInput msize inputs3 sizes1
+    if Boxed.null maximums then
+      unionInput msize inputs2 sizes1
     else do
+      Step values inputs3 <- lift $ unionStep (Boxed.minimum maximums) inputs2
       let
         unyieldedSizes
           = sizes1 `Map.difference` values
