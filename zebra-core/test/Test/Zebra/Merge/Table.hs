@@ -6,8 +6,9 @@ import           Data.Functor.Identity (runIdentity)
 import           Data.List.NonEmpty (NonEmpty(..))
 import           Data.String (String)
 import qualified Data.Vector as Boxed
+import qualified Data.Map as Map
 
-import           Disorder.Jack (Property, Jack, quickCheckAll, property, succeeded)
+import           Disorder.Jack (Property, Jack, quickCheckAll, property)
 import           Disorder.Jack ((===), (==>), gamble, counterexample, oneOf, listOfN, sized, chooseInt, choose)
 
 import           P
@@ -30,6 +31,7 @@ import qualified Zebra.Merge.Table as Merge
 import qualified Zebra.Table.Schema as Schema
 import           Zebra.Table.Striped (StripedError(..))
 import qualified Zebra.Table.Striped as Striped
+import qualified Zebra.Table.Logical as Logical
 
 jFileTable :: Schema.Table -> Jack Striped.Table
 jFileTable schema = do
@@ -156,16 +158,19 @@ prop_union_files_diff_schema =
       ===
       fmap normalizeStriped y
 
-prop_union_with_max_valid :: Property
-prop_union_with_max_valid =
+prop_union_with_max_is_submap :: Property
+prop_union_with_max_is_submap =
   gamble jMapSchema $ \schema ->
   gamble (Cons.unsafeFromList <$> listOfN 1 10 (jFile schema)) $ \files ->
   gamble (choose ((-1),100)) $ \msize ->
   either (flip counterexample False) property $ do
-    x <- first ppShow $ unionList (Just (Merge.MaximumRowSize msize)) files
-    for_ x $
-      first ppShow . Striped.toLogical
-    return succeeded
+    x0 <- first ppShow $ unionList (Just (Merge.MaximumRowSize msize)) files
+    y0 <- first ppShow $ unionSimple files
+    ok <- for (liftA2 (,) x0 y0) $ \(x1, y1) -> do
+      x2 <- first ppShow . Logical.takeMap =<< first ppShow (Striped.toLogical x1)
+      y2 <- first ppShow . Logical.takeMap =<< first ppShow (Striped.toLogical y1)
+      return $ x2 `Map.isSubmapOf` y2
+    return $ maybe True id ok
 
 return []
 tests :: IO Bool
