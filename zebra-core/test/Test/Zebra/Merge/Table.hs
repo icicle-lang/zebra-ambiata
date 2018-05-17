@@ -7,8 +7,8 @@ import           Data.List.NonEmpty (NonEmpty(..))
 import           Data.String (String)
 import qualified Data.Vector as Boxed
 
-import           Disorder.Jack (Property, Jack, quickCheckAll)
-import           Disorder.Jack ((===), (==>), gamble, counterexample, oneOf, listOfN, sized, chooseInt)
+import           Disorder.Jack (Property, Jack, quickCheckAll, property, succeeded)
+import           Disorder.Jack ((===), (==>), gamble, counterexample, oneOf, listOfN, sized, chooseInt, choose)
 
 import           P
 
@@ -155,6 +155,17 @@ prop_union_files_diff_schema =
       fmap normalizeStriped x
       ===
       fmap normalizeStriped y
+
+prop_union_with_max_valid :: Property
+prop_union_with_max_valid =
+  gamble jMapSchema $ \schema ->
+  gamble (Cons.unsafeFromList <$> listOfN 1 10 (jFile schema)) $ \files ->
+  gamble (choose ((-1),100)) $ \msize ->
+  either (flip counterexample False) property $ do
+    x <- first ppShow $ unionList (Just (Merge.MaximumRowSize msize)) files
+    for_ x $
+      first ppShow . Striped.toLogical
+    return succeeded
 
 return []
 tests :: IO Bool
