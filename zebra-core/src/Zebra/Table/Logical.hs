@@ -342,42 +342,24 @@ data UnionStep =
     , unionRemaining :: !(Cons Boxed.Vector (Map Value Value))
     } deriving (Eq, Ord, Show)
 
-maximumKey :: Map Value Value -> Maybe Value
-maximumKey kvs =
-  if Map.null kvs then
-    Nothing
-  else
-    pure . fst $ Map.findMax kvs
-{-# INLINABLE maximumKey #-}
-
-unionStep :: Cons Boxed.Vector (Map Value Value) -> Either LogicalMergeError UnionStep
-unionStep kvss =
+unionStep :: Value -> Cons Boxed.Vector (Map Value Value) -> Either LogicalMergeError UnionStep
+unionStep key kvss = do
   let
-    maximums =
-      Cons.mapMaybe maximumKey kvss
-  in
-    if Boxed.null maximums then
-      pure $ UnionStep Map.empty kvss
-    else do
-      let
-        key =
-          Boxed.minimum maximums
+    (done0, done1, incomplete) =
+      Cons.unzip3 $ fmap (Map.splitLookup key) kvss
 
-        (done0, done1, incomplete) =
-          Cons.unzip3 $ fmap (Map.splitLookup key) kvss
+    insert = \case
+      Nothing ->
+        id
+      Just x ->
+        Map.insert key x
 
-        insert = \case
-          Nothing ->
-            id
-          Just x ->
-            Map.insert key x
+    dones =
+      Cons.zipWith insert done1 done0
 
-        dones =
-          Cons.zipWith insert done1 done0
+  done <- mergeMaps $ Cons.toVector dones
 
-      done <- mergeMaps $ Cons.toVector dones
-
-      pure $ UnionStep done incomplete
+  pure $ UnionStep done incomplete
 {-# INLINABLE unionStep #-}
 
 ------------------------------------------------------------------------
