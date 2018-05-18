@@ -26,7 +26,6 @@ import qualified Viking.Stream.Binary as Stream
 
 import           X.Control.Monad.Trans.Either (EitherT, left, hoistEither)
 
-import           Zebra.Factset.Table
 import           Zebra.Serial.Binary.Block
 import           Zebra.Serial.Binary.Data
 import           Zebra.Serial.Binary.Header
@@ -35,7 +34,6 @@ import qualified Zebra.Table.Striped as Striped
 
 data BinaryStripedEncodeError =
     BinaryStripedEncodeEmpty
-  | BinaryStripedEncodeBlockTableError !BlockTableError
   | BinaryStripedEncodeError !BinaryEncodeError
     deriving (Eq, Show)
 
@@ -48,8 +46,6 @@ renderBinaryStripedEncodeError :: BinaryStripedEncodeError -> Text
 renderBinaryStripedEncodeError = \case
   BinaryStripedEncodeEmpty ->
     "Cannot encode a zebra file with no schema"
-  BinaryStripedEncodeBlockTableError err ->
-    renderBlockTableError err
   BinaryStripedEncodeError err ->
     renderBinaryEncodeError err
 
@@ -80,8 +76,9 @@ encodeStripedWith version input = do
       lift $ left BinaryStripedEncodeEmpty
 
     Right (hd, tl) -> do
-      header <- lift . hoistEither . first BinaryStripedEncodeBlockTableError $
-        headerOfSchema version (Striped.schema hd)
+      let
+        header
+          = headerOfSchema version (Striped.schema hd)
 
       ByteStream.fromBuilders . Stream.cons (bHeader header) .
         Stream.mapM (hoistEither . first BinaryStripedEncodeError . bBlockTable header) $

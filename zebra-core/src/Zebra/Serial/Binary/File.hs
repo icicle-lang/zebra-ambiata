@@ -10,13 +10,11 @@ module Zebra.Serial.Binary.File (
     FileError(..)
   , renderFileError
 
-  , readBlocks
   , readTables
   , readBytes
 
   , hPutStream
 
-  , decodeBlocks
   , decodeTables
 
   , decodeGetOne
@@ -50,7 +48,6 @@ import           X.Control.Monad.Trans.Either (EitherT, pattern EitherT, runEith
 import           X.Data.Vector.Stream (Stream(..), Step, SPEC(..))
 import qualified X.Data.Vector.Stream as Stream
 
-import           Zebra.Factset.Block
 import           Zebra.Serial.Binary.Block
 import           Zebra.Serial.Binary.Data
 import           Zebra.Serial.Binary.Header
@@ -90,11 +87,6 @@ renderFileError = \case
   FileDecodeEndOfFile ->
     "Decode error: the parser asked for more input after telling it the stream " <>
     "has ended. This means there is a bug in the parser."
-
-readBlocks :: MonadResource m => FilePath -> EitherT FileError m (Header, Stream (EitherT FileError m) Block)
-readBlocks path = do
-  bytes <- readBytes path
-  decodeBlocks bytes
 
 readTables :: MonadResource m => FilePath -> EitherT FileError m (Schema.Table, Stream (EitherT FileError m) Striped.Table)
 readTables path = do
@@ -141,17 +133,6 @@ hPutStream path handle (Stream step sinit) =
           pure ()
   in
     loop SPEC sinit
-
-decodeBlocks ::
-     Monad m
-  => Stream (EitherT FileError m) ByteString
-  -> EitherT FileError m (Header, Stream (EitherT FileError m) Block)
-decodeBlocks input = do
-  (header, rest) <- decodeGetOne getHeader input
-  pure (
-      header
-    , decodeGetAll (getBlock header) rest
-    )
 
 decodeTables ::
      Monad m

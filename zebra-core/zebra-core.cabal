@@ -58,29 +58,10 @@ library
                     src
 
   exposed-modules:
-                    Zebra.Factset.Block
-                    Zebra.Factset.Block.Block
-                    Zebra.Factset.Block.Entity
-                    Zebra.Factset.Block.Index
-                    Zebra.Factset.Data
-                    Zebra.Factset.Entity
-                    Zebra.Factset.Fact
-                    Zebra.Factset.Table
-
                     Zebra.Foreign.Bindings
-                    Zebra.Foreign.Block
-                    Zebra.Foreign.Entity
-                    Zebra.Foreign.Merge
                     Zebra.Foreign.Serial
-                    Zebra.Foreign.Table
                     Zebra.Foreign.Util
 
-                    Zebra.Merge.Base
-                    Zebra.Merge.Block
-                    Zebra.Merge.BlockC
-                    Zebra.Merge.Entity
-                    Zebra.Merge.Puller.File
-                    Zebra.Merge.Puller.List
                     Zebra.Merge.Table
 
                     Zebra.Serial.Binary

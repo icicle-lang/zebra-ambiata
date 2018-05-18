@@ -35,8 +35,6 @@ bTable version = \case
   Striped.Binary _def encoding bs -> do
     () <- first BinaryEncodeUtf8 $ Encoding.validateBinary encoding bs
     case version of
-      BinaryV2 ->
-        pure $ bSizedByteArray bs
       BinaryV3 ->
         pure $ bByteArray bs
 
@@ -87,9 +85,6 @@ getTable version n = \case
     bs <-
       validateBinary encoding =<<
       case version of
-        BinaryV2 -> do
-          getSizedByteArray
-
         BinaryV3 ->
           getByteArray n
 

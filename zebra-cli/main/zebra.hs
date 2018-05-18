@@ -22,7 +22,6 @@ import           X.Control.Monad.Trans.Either.Exit (orDie)
 import           X.Options.Applicative (Parser, Mod, CommandFields)
 import qualified X.Options.Applicative as Options
 
-import           Zebra.Command
 import           Zebra.Command.Adapt
 import           Zebra.Command.Export
 import           Zebra.Command.Import
@@ -45,10 +44,6 @@ data Command =
   | ZebraExport !Export
   | ZebraMerge !Merge
   | ZebraAdapt !Adapt
-  -- FIXME cleanup: move to own module like above commands
-  | ZebraCat !(NonEmpty FilePath) !CatOptions
-  | ZebraFacts !FilePath
-  | ZebraFastMerge !(NonEmpty FilePath) !(Maybe FilePath) !MergeOptions
     deriving (Eq, Show)
 
 parser :: Parser Command
@@ -81,19 +76,6 @@ commands =
       (ZebraAdapt <$> pAdapt)
       "adapt"
       "Adapt a zebra binary file so that it uses a different, but compatible, schema."
-  -- FIXME cleanup: move to own module like above commands
-  , cmd
-      (ZebraCat <$> some1 pInputBinary <*> pCatOptions)
-      "cat"
-      "Dump all information in a zebra file."
-  , cmd
-      (ZebraFacts <$> pInputBinary)
-      "facts"
-      "Dump a zebra file as facts."
-  , cmd
-      (ZebraFastMerge <$> some1 pInputBinary <*> pMaybeOutputBinary <*> pMergeOptions)
-      "fast-merge"
-      "Merge multiple input files together using the C merging algorithm."
   ]
 
 pInputBinary :: Parser FilePath
@@ -101,16 +83,6 @@ pInputBinary =
   Options.argument Options.str $
     Options.metavar "INPUT_ZEBRA_BINARY" <>
     Options.help "Path to an input file (in zebra binary format)"
-
-pMaybeOutputBinary :: Parser (Maybe FilePath)
-pMaybeOutputBinary =
-  let
-    none =
-      Options.flag' Nothing $
-        Options.long "no-output" <>
-        Options.help "Don't output block file, just print entity-id"
-  in
-    (Just <$> pOutputBinary) <|> none
 
 pOutputBinary :: Parser FilePath
 pOutputBinary =
@@ -236,46 +208,13 @@ pMergeMaximumRowSize =
 
 pOutputFormat :: Parser BinaryVersion
 pOutputFormat =
-  fromMaybe BinaryV3 <$> optional (pOutputV2 <|> pOutputV3)
-
-pOutputV2 :: Parser BinaryVersion
-pOutputV2 =
-  Options.flag' BinaryV2 $
-    Options.long "output-v2" <>
-    Options.help "Force merge to output files in version 2 format."
+  fromMaybe BinaryV3 <$> optional pOutputV3
 
 pOutputV3 :: Parser BinaryVersion
 pOutputV3 =
   Options.flag' BinaryV3 $
     Options.long "output-v3" <>
     Options.help "Force merge to output files in version 3 format. (default)"
-
-pCatOptions :: Parser CatOptions
-pCatOptions =
-  fmap fixCatOptions $
-    CatOptions
-      <$> Options.switch (Options.long "header")
-      <*> Options.switch (Options.long "block-summary")
-      <*> Options.switch (Options.long "entities")
-      <*> Options.switch (Options.long "entity-details")
-      <*> Options.switch (Options.long "entity-summary")
-      <*> Options.switch (Options.long "summary")
-
-fixCatOptions :: CatOptions -> CatOptions
-fixCatOptions opts =
-  opts {
-      catEntities =
-        catEntities opts ||
-        catEntityDetails opts ||
-        catEntitySummary opts
-    }
-
-pMergeOptions :: Parser MergeOptions
-pMergeOptions =
-  MergeOptions
-    <$> pGCLimit
-    <*> pOutputBlockFacts
-    <*> pOutputFormat
 
 pSummary :: Parser Summary
 pSummary =
@@ -288,20 +227,6 @@ pAdapt =
    <$> pInputBinary
    <*> pAdaptSchema
    <*> ((Just <$> pOutputBinary) <|> pOutputBinaryStdout <|> pure Nothing)
-
-pGCLimit :: Parser Double
-pGCLimit =
-  Options.option Options.auto $
-    Options.value 2 <>
-    Options.long "gc-gigabytes" <>
-    Options.help "Garbage collect input blocks when pool becomes this large. Fractions allowed."
-
-pOutputBlockFacts :: Parser Int
-pOutputBlockFacts =
-  Options.option Options.auto $
-    Options.value 4096 <>
-    Options.long "output-block-facts" <>
-    Options.help "Minimum number of facts per output block (last block of leftovers will contain fewer)"
 
 run :: Command -> IO ()
 run = \case
@@ -324,17 +249,3 @@ run = \case
   ZebraAdapt adapt ->
     orDie renderAdaptError . hoist runResourceT $
       zebraAdapt adapt
-
-  -- FIXME cleanup: move to own module like above commands
-
-  ZebraCat inputs options ->
-    orDie id . hoist runResourceT $
-      zebraCat inputs options
-
-  ZebraFacts input ->
-    orDie id . hoist runResourceT $
-      zebraFacts input
-
-  ZebraFastMerge inputs output options ->
-    orDie id . hoist runResourceT $
-      zebraFastMerge inputs output options
