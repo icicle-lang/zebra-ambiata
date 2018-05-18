@@ -12,7 +12,7 @@ module Zebra.Command.Consistency (
   , renderConsistencyError
   ) where
 
-import           Control.Monad.Catch (MonadCatch, MonadMask)
+import           Control.Monad.Catch (MonadMask)
 import           Control.Monad.IO.Class (MonadIO(..))
 import           Control.Monad.Morph (hoist)
 import           Control.Monad.Trans.Resource (MonadResource, ResourceT)
@@ -89,7 +89,7 @@ summariseBlock = \case
         BlockRange (Just bmin) (Just bmax)
 
 zebraConsistency ::
-     (MonadResource m, MonadCatch m, MonadMask m)
+     (MonadResource m, MonadMask m)
   => Consistency
   -> EitherT ConsistencyError m ()
 zebraConsistency x =
