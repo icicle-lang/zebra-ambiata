@@ -112,10 +112,6 @@ import           X.Control.Monad.Trans.Either (EitherT, runEitherT)
 import           X.Data.Vector.Cons (Cons)
 import qualified X.Data.Vector.Cons as Cons
 
-import           Zebra.Factset.Block
-import qualified Zebra.Factset.Data as Factset
-import           Zebra.Factset.Entity
-import           Zebra.Factset.Fact
 import           Zebra.Serial.Binary.Data
 import           Zebra.Table.Data
 import qualified Zebra.Table.Encoding as Encoding

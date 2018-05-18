@@ -1,12 +1,5 @@
 import           Disorder.Core.Main
 
-import qualified Test.Zebra.Factset.Block
-import qualified Test.Zebra.Factset.Data
-import qualified Test.Zebra.Foreign.Block
-import qualified Test.Zebra.Foreign.Entity
-import qualified Test.Zebra.Foreign.Merge
-import qualified Test.Zebra.Foreign.Table
-import qualified Test.Zebra.Merge.Entity
 import qualified Test.Zebra.Merge.Table
 import qualified Test.Zebra.Serial.Binary.Array
 import qualified Test.Zebra.Serial.Binary.Block
@@ -29,14 +22,7 @@ import qualified Test.Zebra.Time
 main :: IO ()
 main =
   disorderMain [
-      Test.Zebra.Factset.Block.tests
-    , Test.Zebra.Factset.Data.tests
-    , Test.Zebra.Foreign.Block.tests
-    , Test.Zebra.Foreign.Entity.tests
-    , Test.Zebra.Foreign.Merge.tests
-    , Test.Zebra.Foreign.Table.tests
-    , Test.Zebra.Merge.Table.tests
-    , Test.Zebra.Merge.Entity.tests
+      Test.Zebra.Merge.Table.tests
     , Test.Zebra.Serial.Binary.Array.tests
     , Test.Zebra.Serial.Binary.Block.tests
     , Test.Zebra.Serial.Binary.File.tests

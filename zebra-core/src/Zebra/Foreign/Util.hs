@@ -47,26 +47,10 @@ import           System.IO (IO)
 import           X.Control.Monad.Trans.Either (EitherT, pattern EitherT, runEitherT, hoistEither)
 
 import           Zebra.Foreign.Bindings
-import           Zebra.X.Vector.Segment (SegmentError)
 
 
 data ForeignError =
-    ForeignInvalidAttributeCount !Int !Int
-  | ForeignTableNotEnoughCapacity
-  | ForeignInvalidColumnType
-  | ForeignInvalidTableType
-  | ForeignInvalidDefault !Int
-  | ForeignInvalidBinaryEncoding !Int
-  | ForeignInvalidIntEncoding !Int
-  | ForeignAttributeNotFound
-  | ForeignNotEnoughBytes
-  | ForeignNotEnoughRows
-  | ForeignMergeNoEntities
-  | ForeignAppendDifferentColumnTypes
-  | ForeignAppendDifferentAttributeCount
-  | ForeignSegmentError !SegmentError
-  | ForeignFoundEmptyStructOrEnum
-  | ForeignUnpackBufferTooSmall
+    ForeignUnpackBufferTooSmall
   | ForeignUnpackBufferTooLarge
   | ForeignUnknownError !CError
     deriving (Eq, Show)
@@ -75,22 +59,6 @@ fromCError :: CError -> Either ForeignError ()
 fromCError = \case
   C'ZEBRA_SUCCESS ->
     Right ()
-  C'ZEBRA_INVALID_COLUMN_TYPE ->
-    Left ForeignInvalidColumnType
-  C'ZEBRA_INVALID_TABLE_TYPE ->
-    Left ForeignInvalidTableType
-  C'ZEBRA_ATTRIBUTE_NOT_FOUND ->
-    Left ForeignAttributeNotFound
-  C'ZEBRA_NOT_ENOUGH_BYTES ->
-    Left ForeignNotEnoughBytes
-  C'ZEBRA_NOT_ENOUGH_ROWS ->
-    Left ForeignNotEnoughRows
-  C'ZEBRA_MERGE_NO_ENTITIES ->
-    Left ForeignMergeNoEntities
-  C'ZEBRA_APPEND_DIFFERENT_COLUMN_TYPES ->
-    Left ForeignAppendDifferentColumnTypes
-  C'ZEBRA_APPEND_DIFFERENT_ATTRIBUTE_COUNT ->
-    Left ForeignAppendDifferentAttributeCount
   C'ZEBRA_UNPACK_BUFFER_TOO_SMALL ->
     Left ForeignUnpackBufferTooSmall
   C'ZEBRA_UNPACK_BUFFER_TOO_LARGE ->

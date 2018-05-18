@@ -101,35 +101,15 @@ library
                        csrc
 
   install-includes:
-                       zebra_append.h
-                       zebra_block_split.h
-                       zebra_clone.h
-                       zebra_data.h
-                       zebra_grow.h
-                       zebra_hash.h
-                       zebra_merge.h
-                       zebra_merge_many.h
                        zebra_unpack.h
 
   includes:
-                       zebra_append.h
-                       zebra_block_split.h
-                       zebra_clone.h
+
                        zebra_data.h
-                       zebra_grow.h
-                       zebra_hash.h
-                       zebra_merge.h
-                       zebra_merge_many.h
                        zebra_unpack.h
 
 
   c-sources:
-                       csrc/zebra_append.c
-                       csrc/zebra_block_split.c
-                       csrc/zebra_clone.c
-                       csrc/zebra_grow.c
-                       csrc/zebra_merge.c
-                       csrc/zebra_merge_many.c
                        csrc/zebra_unpack.c
 
   cc-options:
