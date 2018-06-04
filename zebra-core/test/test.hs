@@ -2,7 +2,6 @@ import           Disorder.Core.Main
 
 import qualified Test.Zebra.Merge.Table
 import qualified Test.Zebra.Serial.Binary.Array
-import qualified Test.Zebra.Serial.Binary.Block
 import qualified Test.Zebra.Serial.Binary.File
 import qualified Test.Zebra.Serial.Binary.Header
 import qualified Test.Zebra.Serial.Binary.Logical
@@ -24,7 +23,6 @@ main =
   disorderMain [
       Test.Zebra.Merge.Table.tests
     , Test.Zebra.Serial.Binary.Array.tests
-    , Test.Zebra.Serial.Binary.Block.tests
     , Test.Zebra.Serial.Binary.File.tests
     , Test.Zebra.Serial.Binary.Header.tests
     , Test.Zebra.Serial.Binary.Logical.tests

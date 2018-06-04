@@ -97,7 +97,7 @@ getVersion = do
     MagicV1 ->
       fail $ "This version of zebra cannot read v1 zebra files."
     MagicV2 ->
-      fail $ "This version of zebra cannot read v3 zebra files."
+      fail $ "This version of zebra cannot read v2 zebra files."
     MagicV3 ->
       pure BinaryV3
     _ ->
