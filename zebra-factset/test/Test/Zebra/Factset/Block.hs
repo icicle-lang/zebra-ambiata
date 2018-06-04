@@ -17,7 +17,7 @@ import           P
 import           System.IO (IO)
 
 import           Test.Zebra.Jack
-import           Test.Zebra.JackFactsets
+import           Test.Zebra.Factset.Jack
 
 import           Text.Show.Pretty (ppShow)
 

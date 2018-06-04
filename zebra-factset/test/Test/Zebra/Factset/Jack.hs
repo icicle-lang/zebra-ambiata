@@ -1,6 +1,6 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
-module Test.Zebra.JackFactsets (
+module Test.Zebra.Factset.Jack (
 
   -- * Zebra.Factset.Block
     jBlock

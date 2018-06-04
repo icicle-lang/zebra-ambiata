@@ -10,10 +10,9 @@ import           P
 
 import           System.IO (IO)
 
-import           Test.Zebra.JackFactsets
+import           Test.Zebra.Factset.Jack
 
 import           Zebra.Factset.Data
-
 
 prop_roundtrip_day :: Property
 prop_roundtrip_day =

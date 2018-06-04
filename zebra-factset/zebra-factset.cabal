@@ -68,6 +68,8 @@ library
                     Zebra.Factset.Fact
                     Zebra.Factset.Table
 
+                    Zebra.X.Vector.Generic
+
 test-suite test
   type:
                     exitcode-stdio-1.0
