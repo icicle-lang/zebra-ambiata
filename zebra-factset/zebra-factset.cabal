@@ -1,0 +1,109 @@
+name:                  ambiata-zebra-factset
+version:               0.0.1
+license:               BSD3
+author:                Ambiata <info@ambiata.com>
+maintainer:            Ambiata <info@ambiata.com>
+copyright:             (c) 2015 Ambiata.
+synopsis:              zebra
+category:              System
+cabal-version:         >= 1.8
+build-type:            Custom
+description:           zebra
+
+library
+  build-depends:
+                      base                            >= 3          && < 5
+                    , ambiata-anemone
+                    , ambiata-p
+                    , ambiata-snapper
+                    , ambiata-viking
+                    , ambiata-x-bytestring
+                    , ambiata-x-eithert
+                    , ambiata-x-show
+                    , ambiata-x-vector
+                    , ambiata-zebra-core
+                    , aeson                           >= 1.0        && < 1.2
+                    , aeson-pretty                    == 0.8.*
+                    , attoparsec                      >= 0.13       && < 0.14
+                    , base64-bytestring               == 1.0.*
+                    , bifunctors                      >= 4.2        && < 5.5
+                    , binary                          >= 0.7.2      && < 0.9
+                    , bindings-DSL                    >= 1.0.0      && <= 1.0.23
+                    , bytestring                      == 0.10.*
+                    , containers                      == 0.5.*
+                    , exceptions                      >= 0.6        && < 0.9
+                    , ghc-prim                        >= 0.4        && < 0.6
+                    , lens                            >= 4.7        && < 4.15
+                    , mmorph                          == 1.0.*
+                    , mtl                             == 2.2.*
+                    , old-locale                      == 1.0.*
+                    , pretty-show                     == 1.6.*
+                    , primitive                       == 0.6.*
+                    , random                          == 1.1.*
+                    , resourcet                       == 1.1.*
+                    , semigroups                      == 0.18.*
+                    , streaming                       == 0.1.*
+                    , streaming-bytestring            == 0.1.*
+                    , text                            == 1.2.*
+                    , thyme                           == 0.3.*
+                    , transformers                    == 0.5.*
+                    , unordered-containers            == 0.2.*
+                    , vector                          >= 0.10       && < 0.12
+                    , vector-space                    == 0.10.*
+                    , vector-th-unbox                 == 0.2.*
+
+  ghc-options:
+                    -Wall
+
+  hs-source-dirs:
+                    src
+
+  exposed-modules:
+                    Zebra.Factset.Block
+                    Zebra.Factset.Block.Block
+                    Zebra.Factset.Block.Entity
+                    Zebra.Factset.Block.Index
+                    Zebra.Factset.Data
+                    Zebra.Factset.Entity
+                    Zebra.Factset.Fact
+                    Zebra.Factset.Table
+
+test-suite test
+  type:
+                    exitcode-stdio-1.0
+
+  main-is:
+                    test.hs
+
+  ghc-options:
+                    -Wall -threaded -O2
+
+  hs-source-dirs:
+                    test
+
+  build-depends:
+                      base                            >= 3          && < 5
+                    , ambiata-anemone
+                    , ambiata-disorder-core
+                    , ambiata-disorder-corpus
+                    , ambiata-disorder-jack
+                    , ambiata-p
+                    , ambiata-viking
+                    , ambiata-x-eithert
+                    , ambiata-x-vector
+                    , ambiata-zebra-core
+                    , ambiata-zebra-core-test
+                    , ambiata-zebra-factset
+                    , binary                          >= 0.7.2      && < 0.9
+                    , bytestring                      == 0.10.*
+                    , containers                      == 0.5.*
+                    , exceptions                      == 0.8.*
+                    , pretty-show                     == 1.6.*
+                    , QuickCheck                      >= 2.8.2      && < 2.9
+                    , quickcheck-instances            == 0.3.*
+                    , semigroups                      == 0.18.*
+                    , text                            == 1.2.*
+                    , thyme                           == 0.3.*
+                    , time                            >= 1.5        && < 1.9
+                    , transformers                    == 0.5.*
+                    , vector                          >= 0.10       && < 0.12
