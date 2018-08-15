@@ -24,6 +24,7 @@ import qualified X.Options.Applicative as Options
 
 import           Zebra.Command
 import           Zebra.Command.Adapt
+import           Zebra.Command.Consistency
 import           Zebra.Command.Export
 import           Zebra.Command.Import
 import           Zebra.Command.Merge
@@ -45,6 +46,7 @@ data Command =
   | ZebraExport !Export
   | ZebraMerge !Merge
   | ZebraAdapt !Adapt
+  | ZebraConsistency !Consistency
   -- FIXME cleanup: move to own module like above commands
   | ZebraCat !(NonEmpty FilePath) !CatOptions
   | ZebraFacts !FilePath
@@ -81,6 +83,10 @@ commands =
       (ZebraAdapt <$> pAdapt)
       "adapt"
       "Adapt a zebra binary file so that it uses a different, but compatible, schema."
+  , cmd
+      (ZebraConsistency <$> pConsistency)
+      "consistency"
+      "Check zebra maps are well formed and blocks have a consistent ordering."
   -- FIXME cleanup: move to own module like above commands
   , cmd
       (ZebraCat <$> some1 pInputBinary <*> pCatOptions)
@@ -148,6 +154,9 @@ pAdaptSchema =
     Options.long "schema" <>
     Options.metavar "INPUT_ZEBRA_SCHEMA" <>
     Options.help "Path to a schema file which all inputs will be adapted to before processing"
+
+pConsistency :: Parser Consistency
+pConsistency = Consistency <$> pInputBinary
 
 pOutputBinaryStdout :: Parser (Maybe FilePath)
 pOutputBinaryStdout =
@@ -324,6 +333,10 @@ run = \case
   ZebraAdapt adapt ->
     orDie renderAdaptError . hoist runResourceT $
       zebraAdapt adapt
+
+  ZebraConsistency consistency ->
+    orDie renderConsistencyError . hoist runResourceT $
+      zebraConsistency consistency
 
   -- FIXME cleanup: move to own module like above commands
 
