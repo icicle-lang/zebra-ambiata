@@ -5,13 +5,17 @@
 import           BuildInfo_ambiata_zebra_cli
 import           DependencyInfo_ambiata_zebra_cli
 
+import           Control.Exception (bracket_)
+import           Control.Monad.IO.Class
 import           Control.Monad.Morph (hoist)
 import           Control.Monad.Trans.Resource (runResourceT)
 
 import           Data.List.NonEmpty (NonEmpty(..), some1)
 import           Data.String (String)
 
-import           GHC.Conc (getNumProcessors, setNumCapabilities)
+import           GHC.Conc (getNumProcessors, setNumCapabilities, numCapabilities)
+import           GHC.Conc (getNumCapabilities)
+import           GHC.RTS.Flags (getRTSFlags)
 
 import           P
 
@@ -34,17 +38,31 @@ import           Zebra.Serial.Binary (BinaryVersion(..))
 
 main :: IO ()
 main = do
-  n <- getNumProcessors
-  setNumCapabilities (min 8 n)
   IO.hSetBuffering IO.stdout IO.LineBuffering
   IO.hSetBuffering IO.stderr IO.LineBuffering
-  Options.cli "zebra" buildInfoVersion dependencyInfo parser run
+  Options.cli "zebra" buildInfoVersion dependencyInfo parser $ \x -> 
+    bracket_ (setupThreading $ verbosity x) (return ()) (run x)
 
+setupThreading :: Verbosity -> IO ()
+setupThreading v = do
+  -- getParFlags isn't added till base-4.12.0.0 (ghc 8.2.1)
+  flags <- getRTSFlags
+  print $ "Current RTS flags: " <> show flags
+  print $ "Initial numCapabilities: " <> show numCapabilities
+  n <- getNumProcessors
+  when (numCapabilities == 1) $
+    setNumCapabilities (min 8 n)
+  currentCap <- getNumCapabilities
+  print $ "Updated/current numCapabilities: " <> show currentCap
+  IO.hFlush IO.stderr
+  pure ()
+  where print = whenVerbose v . liftIO . IO.hPutStrLn IO.stderr
+  
 data Command =
     ZebraSummary !Summary
   | ZebraImport !Import
   | ZebraExport !Export
-  | ZebraMerge !Merge
+  | ZebraMerge !Merge !Verbosity
   | ZebraAdapt !Adapt
   | ZebraConsistency !Consistency
   -- FIXME cleanup: move to own module like above commands
@@ -52,6 +70,18 @@ data Command =
   | ZebraFacts !FilePath
   | ZebraFastMerge !(NonEmpty FilePath) !(Maybe FilePath) !MergeOptions
     deriving (Eq, Show)
+
+data Verbosity
+  = NotVerbose | Verbose
+  deriving (Eq, Show)
+
+verbosity :: Command -> Verbosity
+verbosity (ZebraMerge _ x) = x
+verbosity _                = NotVerbose
+
+whenVerbose :: Monad m => Verbosity -> m () -> m ()
+whenVerbose Verbose     act = act
+whenVerbose NotVerbose  _   = return ()
 
 parser :: Parser Command
 parser =
@@ -76,7 +106,7 @@ commands =
       "export"
       "Export a zebra binary file to a zebra text file."
   , cmd
-      (ZebraMerge <$> pMerge)
+      (ZebraMerge <$> pMerge <*> verbose')
       "merge"
       "Merge multiple zebra binary files together."
   , cmd
@@ -312,6 +342,11 @@ pOutputBlockFacts =
     Options.long "output-block-facts" <>
     Options.help "Minimum number of facts per output block (last block of leftovers will contain fewer)"
 
+verbose' :: Parser Verbosity
+verbose'
+  = Options.flag NotVerbose Verbose
+  $ Options.long "verbose" <> Options.short 'v' <> Options.help "Whether to be verbose"
+
 run :: Command -> IO ()
 run = \case
   ZebraSummary summary ->
@@ -326,7 +361,7 @@ run = \case
     orDie renderExportError . hoist runResourceT $
       zebraExport export
 
-  ZebraMerge merge ->
+  ZebraMerge merge _ ->
     orDie renderMergeError . hoist runResourceT $
       zebraMerge merge
 

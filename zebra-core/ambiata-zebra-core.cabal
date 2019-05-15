@@ -1,5 +1,5 @@
 name:                  ambiata-zebra-core
-version:               0.0.1
+version:               0.0.2
 license:               BSD3
 author:                Ambiata <info@ambiata.com>
 maintainer:            Ambiata <info@ambiata.com>
@@ -41,11 +41,11 @@ library
                     , random                          == 1.1.*
                     , resourcet                       == 1.1.*
                     , semigroups                      == 0.18.*
-                    , streaming                       == 0.1.*
-                    , streaming-bytestring            == 0.1.*
+                    , streaming
+                    , streaming-bytestring
                     , text                            == 1.2.*
                     , thyme                           == 0.3.*
-                    , transformers                    == 0.5.*
+                    , transformers
                     , unordered-containers            == 0.2.*
                     , vector                          >= 0.10       && < 0.12
                     , vector-space                    == 0.10.*
@@ -162,7 +162,7 @@ test-suite test
                     test.hs
 
   ghc-options:
-                    -Wall -threaded -O2
+                    -Wall -threaded -O2 -rtsopts
 
   hs-source-dirs:
                     test

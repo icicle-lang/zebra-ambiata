@@ -1,3 +1,5 @@
+{-# LANGUAGE PartialTypeSignatures #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DoAndIfThenElse #-}
@@ -6,6 +8,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Zebra.Merge.Table (
     MaximumRowSize(..)
+  , MergeRowsPerBlock(..)
 
   , UnionTableError(..)
   , renderUnionTableError
@@ -39,10 +42,14 @@ import qualified Zebra.Table.Schema as Schema
 import           Zebra.Table.Striped (StripedError)
 import qualified Zebra.Table.Striped as Striped
 
-
 newtype MaximumRowSize =
   MaximumRowSize {
       unMaximumRowSize :: Int64
+    } deriving (Eq, Ord, Show)
+
+newtype MergeRowsPerBlock =
+  MergeRowsPerBlock {
+      unMergeRowsPerBlock :: Int
     } deriving (Eq, Ord, Show)
 
 data Input m =
@@ -130,28 +137,40 @@ closeStream input =
     }
 {-# INLINABLE closeStream #-}
 
-updateInput ::
+
+type NextInput m = (Input m, Map Logical.Value Int64)
+type NextInput' m = (EitherT UnionTableError m (NextInput m))
+ 
+nextInput ::
      Monad m
   => Input m
-  -> StateT (Map Logical.Value Int64) (EitherT UnionTableError m) (Input m)
-updateInput input =
+  -> NextInput' m
+nextInput input = {-# SCC nextInput #-} 
   case inputStream input of
     Nothing ->
-      pure input
+      pure (input, Map.empty)
     Just stream ->
       if hasData input then
-        pure input
+        pure (input, Map.empty)
       else do
-        e <- lift . lift $ Stream.next stream
+        e <- lift $ Stream.next stream    
         case e of
           Left () ->
-            pure $
-              closeStream input
+            pure (closeStream input, Map.empty)
 
           Right (table, remaining) -> do
-            values <- lift . firstT UnionLogicalSchemaError . hoistEither $ Logical.takeMap table
-            modify' $ Map.unionWith (+) (Map.map Logical.sizeValue values)
-            pure $ Input values (Just remaining)
+            values' <- firstT UnionLogicalSchemaError . hoistEither $ Logical.takeMap table
+            let sizes = Map.map Logical.sizeValue values'
+            pure (Input values' (Just remaining), sizes)
+{-# INLINABLE nextInput #-}
+
+updateInput ::
+     Monad m
+  => NextInput m
+  -> StateT (Map Logical.Value Int64) (EitherT UnionTableError m) (Input m)
+updateInput (newInput, sizes) = {-# SCC updateInput #-} do
+  modify' $ Map.unionWith (+) sizes
+  pure newInput
 {-# INLINABLE updateInput #-}
 
 takeExcessiveValues :: Maybe MaximumRowSize -> Map Logical.Value Int64 -> Map Logical.Value Int64
@@ -182,11 +201,13 @@ maximumKey kvs =
 unionInput ::
      Monad m
   => Maybe MaximumRowSize
+  -> Maybe MergeRowsPerBlock
   -> Cons Boxed.Vector (Input m)
   -> Map Logical.Value Int64
   -> Stream (Of Logical.Table) (EitherT UnionTableError m) ()
-unionInput msize inputs0 sizes0 = do
-  (inputs1, sizes1) <- lift $ runStateT (traverse updateInput inputs0) sizes0
+unionInput msize blockRows inputs0 sizes0 = {-# SCC unionInput #-} do
+  inputsNext <- lift $ traverse nextInput inputs0
+  (inputs1, sizes1) <- lift $ runStateT (traverse updateInput inputsNext) sizes0
   unless (Cons.all isClosed inputs1) $ do
     let
       drops =
@@ -194,40 +215,60 @@ unionInput msize inputs0 sizes0 = do
 
       inputs2 =
         fmap (dropData drops) inputs1
+      
+      sizes2 =
+         sizes1 `Map.difference` drops
 
       maximums =
         Cons.mapMaybe (maximumKey . inputData) inputs1
 
     if Boxed.null maximums then
-      unionInput msize inputs2 sizes1
+      unionInput msize blockRows inputs2 sizes1
     else do
-      Step values inputs3 <- lift $ unionStep (Boxed.minimum maximums) inputs2
+      let 
+        minMax = Boxed.minimum maximums
+
+        indexOfMinMax :: Maybe Int = fmap (flip Map.findIndex sizes2 . fst) (Map.lookupLE minMax sizes2)
+        
+        splitKey' :: Maybe MergeRowsPerBlock -> Maybe Int -> Logical.Value 
+        splitKey' (Just (MergeRowsPerBlock r)) (Just i) 
+          | i > r = 
+            fst $ Map.elemAt (r - 1) sizes2
+        splitKey' _ _ = 
+            minMax
+        
+        splitKey = splitKey' blockRows indexOfMinMax
+        
+      Step values inputs3 <- lift $ unionStep splitKey inputs2
       let
+        -- note sizes1 still includes the dropped keys (some tests break if switched to sizes2) 
         unyieldedSizes
           = sizes1 `Map.difference` values
-
+       
       Stream.yield $ Logical.Map values
-      unionInput msize inputs3 unyieldedSizes
+      unionInput msize blockRows inputs3 unyieldedSizes
 {-# INLINABLE unionInput #-}
 
 unionLogical ::
      Monad m
   => Schema.Table
   -> Maybe MaximumRowSize
+  -> Maybe MergeRowsPerBlock
   -> Cons Boxed.Vector (Stream (Of Logical.Table) m ())
   -> Stream (Of Logical.Table) (EitherT UnionTableError m) ()
-unionLogical schema msize inputs = do
+unionLogical schema msize blockRows inputs = do
   Stream.whenEmpty (Logical.empty schema) $
-    unionInput msize (fmap (Input Map.empty . Just) inputs) Map.empty
+    unionInput msize blockRows (fmap (Input Map.empty . Just) inputs) Map.empty
 {-# INLINABLE unionLogical #-}
 
 unionStripedWith ::
      Monad m
   => Schema.Table
   -> Maybe MaximumRowSize
+  -> Maybe MergeRowsPerBlock
   -> Cons Boxed.Vector (Stream (Of Striped.Table) m ())
   -> Stream (Of Striped.Table) (EitherT UnionTableError m) ()
-unionStripedWith schema msize inputs0 = do
+unionStripedWith schema msize blockRows inputs0 = do
   let
     fromStriped =
       Stream.mapM (hoistEither . first UnionStripedError . Striped.toLogical) .
@@ -236,16 +277,17 @@ unionStripedWith schema msize inputs0 = do
 
   hoist squash .
     Stream.mapM (hoistEither . first UnionStripedError . Striped.fromLogical schema) $
-    unionLogical schema msize (fmap fromStriped inputs0)
+    unionLogical schema msize blockRows (fmap fromStriped inputs0)
 {-# INLINABLE unionStripedWith #-}
 
 unionStriped ::
      Monad m
   => Maybe MaximumRowSize
+  -> Maybe MergeRowsPerBlock
   -> Cons Boxed.Vector (Stream (Of Striped.Table) m ())
   -> Stream (Of Striped.Table) (EitherT UnionTableError m) ()
-unionStriped msize inputs0 = do
+unionStriped msize blockRows inputs0 = do
   (heads, inputs1) <- fmap Cons.unzip . lift $ traverse peekHead inputs0
   schema <- lift . hoistEither . unionSchemas $ fmap Striped.schema heads
-  unionStripedWith schema msize inputs1
+  unionStripedWith schema msize blockRows inputs1
 {-# INLINABLE unionStriped #-}

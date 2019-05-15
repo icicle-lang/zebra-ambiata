@@ -1005,7 +1005,7 @@ rechunk max_n =
   let
     loop :: Rechunk -> Stream (Of Table) m r -> Stream (Of Table) (EitherT StripedError m) r
     loop (Rechunk n0 emit dl) incoming0 =
-      if n0 >= max_n then do
+      if n0 > max_n then do
         x <- lift . hoistEither $ unsafeFromDList dl []
 
         let
