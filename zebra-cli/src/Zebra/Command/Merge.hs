@@ -119,7 +119,7 @@ zebraMerge x = do
       unMergeRowsPerBlock $ mergeRowsPerChunk x
 
     blockRows = 
-      Just $ MergeRowsPerBlock $ rowsPerBlock * 2
+      Just $ MergeRowsPerBlock $ rowsPerBlock
     
     union =
       maybe Merge.unionStriped Merge.unionStripedWith mschema
