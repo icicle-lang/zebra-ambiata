@@ -1,30 +1,25 @@
 [master]
-  runner = "s3://ambiata-dispensary-v2/dist/master/master-haskell/linux/x86_64/20170613033625-fddfe03/master-haskell-20170613033625-fddfe03"
+  runner = "s3://ambiata-dispensary-v2/dist/master/master-haskell/linux/x86_64/latest/master-haskell-latest"
   version = 1
-  sha1 = "0a9e91a8c3373a402c5f2c4fc8d9aabb210c03b3"
+
+[global]
+  CABAL_VERSION = "1.24.0.2"
+  CACHE = "true"
 
 [build.dist-7-10]
   GHC_VERSION = "7.10.2"
-  CABAL_VERSION = "1.24.0.0"
-  CACHE = "true"
   PUBLISH = "true"
   PUBLISH_S3 = "$AMBIATA_ARTEFACTS_MASTER"
   PUBLISH_EXECUTABLES = "zebra"
 
 [build.dist-8-0]
-  GHC_VERSION = "8.0.1"
-  CABAL_VERSION = "1.24.0.0"
-  CACHE = "true"
+  GHC_VERSION = "8.0.2"
 
 [build.branches-7-10]
   GHC_VERSION = "7.10.2"
-  CABAL_VERSION = "1.24.0.0"
-  CACHE = "true"
   PUBLISH = "true"
   PUBLISH_S3 = "$AMBIATA_ARTEFACTS_BRANCHES"
   PUBLISH_EXECUTABLES = "zebra"
 
 [build.branches-8-0]
-  GHC_VERSION = "8.0.1"
-  CABAL_VERSION = "1.24.0.0"
-  CACHE = "true"
+  GHC_VERSION = "8.0.2"
