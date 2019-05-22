@@ -21,18 +21,18 @@ library
                     , ambiata-x-eithert
                     , ambiata-x-show
                     , ambiata-x-vector
-                    , aeson                           >= 1.0        && < 1.2
+                    , aeson                           >= 1.0        && < 1.5
                     , aeson-pretty                    == 0.8.*
                     , attoparsec                      >= 0.13       && < 0.14
                     , base64-bytestring               == 1.0.*
-                    , bifunctors                      >= 4.2        && < 5.5
+                    , bifunctors                      >= 4.2        && < 5.6
                     , binary                          >= 0.7.2      && < 0.9
                     , bindings-DSL                    >= 1.0.0      && <= 1.0.23
                     , bytestring                      == 0.10.*
                     , containers                      == 0.5.*
                     , exceptions                      >= 0.6        && < 0.9
                     , ghc-prim                        >= 0.4        && < 0.6
-                    , lens                            >= 4.7        && < 4.15
+                    , lens                            >= 4.7        && < 4.18
                     , mmorph                          == 1.0.*
                     , mtl                             == 2.2.*
                     , old-locale                      == 1.0.*
@@ -41,13 +41,13 @@ library
                     , random                          == 1.1.*
                     , resourcet                       == 1.1.*
                     , semigroups                      == 0.18.*
-                    , streaming                       == 0.1.*
-                    , streaming-bytestring            == 0.1.*
+                    , streaming                       >= 0.1        && < 0.3
+                    , streaming-bytestring            >= 0.1        && < 0.3
                     , text                            == 1.2.*
                     , thyme                           == 0.3.*
                     , transformers                    == 0.5.*
                     , unordered-containers            == 0.2.*
-                    , vector                          >= 0.10       && < 0.12
+                    , vector                          >= 0.11       && < 0.13
                     , vector-space                    == 0.10.*
                     , vector-th-unbox                 == 0.2.*
 
@@ -168,7 +168,7 @@ test-suite test
                     test
 
   build-depends:
-                      base                            >= 3          && < 5
+                      base
                     , ambiata-anemone
                     , ambiata-disorder-core
                     , ambiata-disorder-corpus
@@ -178,19 +178,19 @@ test-suite test
                     , ambiata-x-eithert
                     , ambiata-x-vector
                     , ambiata-zebra-core
-                    , binary                          >= 0.7.2      && < 0.9
-                    , bytestring                      == 0.10.*
-                    , containers                      == 0.5.*
-                    , exceptions                      == 0.8.*
-                    , pretty-show                     == 1.6.*
-                    , QuickCheck                      >= 2.8.2      && < 2.9
-                    , quickcheck-instances            == 0.3.*
-                    , semigroups                      == 0.18.*
-                    , text                            == 1.2.*
-                    , thyme                           == 0.3.*
-                    , time                            >= 1.5        && < 1.9
-                    , transformers                    == 0.5.*
-                    , vector                          >= 0.10       && < 0.12
+                    , binary
+                    , bytestring
+                    , containers
+                    , exceptions
+                    , pretty-show
+                    , QuickCheck
+                    , quickcheck-instances
+                    , semigroups
+                    , text
+                    , thyme
+                    , time
+                    , transformers
+                    , vector
 
 test-suite test-io
   type:
@@ -206,12 +206,12 @@ test-suite test-io
                     test
 
   build-depends:
-                      base                            >= 3          && < 5
+                      base
                     , ambiata-disorder-core
                     , ambiata-disorder-corpus
                     , ambiata-disorder-jack
                     , ambiata-p
                     , ambiata-zebra-core
                     , text
-                    , QuickCheck                      >= 2.8.2      && < 2.9
-                    , quickcheck-instances            == 0.3.*
+                    , QuickCheck
+                    , quickcheck-instances

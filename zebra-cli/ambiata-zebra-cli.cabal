@@ -6,7 +6,7 @@ maintainer:            Ambiata <info@ambiata.com>
 copyright:             (c) 2015 Ambiata.
 synopsis:              zebra
 category:              System
-cabal-version:         >= 1.8
+cabal-version:         >= 1.22
 build-type:            Custom
 description:           zebra
 
@@ -30,7 +30,7 @@ library
                     , text                            == 1.2.*
                     , transformers                    == 0.5.*
                     , concurrent-output               >= 1.6        && < 1.11
-                    , vector                          >= 0.10       && < 0.12
+                    , vector                          >= 0.11       && < 0.13
 
   ghc-options:
                     -Wall
@@ -59,6 +59,12 @@ executable zebra
   hs-source-dirs:
                     gen
 
+  other-modules:
+                    BuildInfo_ambiata_zebra_cli
+
+  autogen-modules:
+                    BuildInfo_ambiata_zebra_cli
+
   main-is:
                     ../main/zebra.hs
 
@@ -71,16 +77,16 @@ executable zebra
                     , ambiata-x-vector
                     , ambiata-zebra-cli
                     , ambiata-zebra-core
-                    , binary                          >= 0.7.2      && < 0.9
-                    , bytestring                      == 0.10.*
-                    , containers                      == 0.5.*
-                    , mmorph                          == 1.0.*
-                    , optparse-applicative            >= 0.12       && < 0.14
-                    , pretty-show                     == 1.6.*
-                    , resourcet                       == 1.1.*
-                    , semigroups                      == 0.18.*
-                    , text                            == 1.2.*
-                    , transformers                    == 0.5.*
+                    , binary
+                    , bytestring
+                    , containers
+                    , mmorph
+                    , optparse-applicative
+                    , pretty-show
+                    , resourcet
+                    , semigroups
+                    , text
+                    , transformers
 
 test-suite test
   type:
@@ -96,7 +102,7 @@ test-suite test
                     test
 
   build-depends:
-                      base                            >= 3          && < 5
+                      base
                     , ambiata-disorder-core
                     , ambiata-disorder-corpus
                     , ambiata-disorder-jack
@@ -116,7 +122,7 @@ test-suite test-io
                     test
 
   build-depends:
-                      base                            >= 3          && < 5
+                      base
                     , ambiata-disorder-core
                     , ambiata-disorder-corpus
                     , ambiata-disorder-jack
@@ -136,5 +142,5 @@ test-suite test-cli
                     test
 
   build-depends:
-                      base                            >= 3          && < 5
+                      base
                     , ambiata-disorder-core
