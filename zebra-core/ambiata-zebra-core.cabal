@@ -1,5 +1,5 @@
 name:                  ambiata-zebra-core
-version:               0.0.1
+version:               0.0.1.1
 license:               BSD3
 author:                Ambiata <info@ambiata.com>
 maintainer:            Ambiata <info@ambiata.com>
@@ -47,7 +47,7 @@ library
                     , thyme                           == 0.3.*
                     , transformers                    == 0.5.*
                     , unordered-containers            == 0.2.*
-                    , vector                          >= 0.11       && < 0.13
+                    , vector                          >= 0.10       && < 0.13
                     , vector-space                    == 0.10.*
                     , vector-th-unbox                 == 0.2.*
 
