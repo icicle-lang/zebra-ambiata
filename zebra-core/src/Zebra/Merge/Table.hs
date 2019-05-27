@@ -13,11 +13,12 @@ module Zebra.Merge.Table (
   , unionLogical
   , unionStriped
   , unionStripedWith
+  , MergeResult(..)
   ) where
 
 import           Control.Monad.Morph (hoist, squash)
 import           Control.Monad.Trans.Class (lift)
-import           Control.Monad.Trans.State.Strict (StateT, runStateT, modify')
+import           Control.Monad.Trans.State.Strict (StateT, runStateT, modify', get)
 
 import           Data.Map (Map)
 import qualified Data.Map.Strict as Map
@@ -63,6 +64,10 @@ data UnionTableError =
   | UnionLogicalSchemaError !LogicalSchemaError
   | UnionLogicalMergeError !LogicalMergeError
   | UnionSchemaError !SchemaUnionError
+    deriving (Eq, Show)
+    
+newtype MergeResult =
+  MergeResult (Map Logical.Value Int64)
     deriving (Eq, Show)
 
 renderUnionTableError :: UnionTableError -> Text
@@ -132,9 +137,10 @@ closeStream input =
 
 updateInput ::
      Monad m
-  => Input m
+  => Maybe MaximumRowSize
+  -> Input m
   -> StateT (Map Logical.Value Int64) (EitherT UnionTableError m) (Input m)
-updateInput input =
+updateInput msize input =
   case inputStream input of
     Nothing ->
       pure input
@@ -151,7 +157,18 @@ updateInput input =
           Right (table, remaining) -> do
             values <- lift . firstT UnionLogicalSchemaError . hoistEither $ Logical.takeMap table
             modify' $ Map.unionWith (+) (Map.map Logical.sizeValue values)
-            pure $ Input values (Just remaining)
+            -- drop as they are consumed, as some entities are huge and we don't need them
+            -- it does mean it is done per input file then done for all inputs 
+            -- but at least this give GHC a chance to garbage collect some of it before it reads in the next set of values
+            newSizes <- get
+            let
+              drops = takeExcessiveValues msize newSizes
+              -- replace all to big values with empty placeholder 
+              -- (it doesn't matter what it is as the key will be dropped entirely later)
+              dropped = Map.map (const Logical.Unit) $ values `Map.intersection` drops
+              values2 = dropped `Map.union` values
+
+            pure $ Input values2 (Just remaining)
 {-# INLINABLE updateInput #-}
 
 takeExcessiveValues :: Maybe MaximumRowSize -> Map Logical.Value Int64 -> Map Logical.Value Int64
@@ -184,28 +201,31 @@ unionInput ::
   => Maybe MaximumRowSize
   -> Cons Boxed.Vector (Input m)
   -> Map Logical.Value Int64
-  -> Stream (Of Logical.Table) (EitherT UnionTableError m) ()
+  -> Stream (Of Logical.Table) (EitherT UnionTableError m) MergeResult
 unionInput msize inputs0 sizes0 = do
-  (inputs1, sizes1) <- lift $ runStateT (traverse updateInput inputs0) sizes0
-  unless (Cons.all isClosed inputs1) $ do
+  (inputs1, sizes1) <- lift $ runStateT (traverse (updateInput msize) inputs0) sizes0
+  if Cons.all isClosed inputs1 then 
+    pure $ MergeResult $ takeExcessiveValues msize sizes1
+    
+  else do
     let
       drops =
         takeExcessiveValues msize sizes1
-
+  
       inputs2 =
         fmap (dropData drops) inputs1
-
+  
       maximums =
         Cons.mapMaybe (maximumKey . inputData) inputs1
-
+  
     if Boxed.null maximums then
-      unionInput msize inputs2 sizes1
+        unionInput msize inputs2 sizes1
     else do
       Step values inputs3 <- lift $ unionStep (Boxed.minimum maximums) inputs2
       let
         unyieldedSizes
           = sizes1 `Map.difference` values
-
+      
       Stream.yield $ Logical.Map values
       unionInput msize inputs3 unyieldedSizes
 {-# INLINABLE unionInput #-}
@@ -215,8 +235,8 @@ unionLogical ::
   => Schema.Table
   -> Maybe MaximumRowSize
   -> Cons Boxed.Vector (Stream (Of Logical.Table) m ())
-  -> Stream (Of Logical.Table) (EitherT UnionTableError m) ()
-unionLogical schema msize inputs = do
+  -> Stream (Of Logical.Table) (EitherT UnionTableError m) MergeResult
+unionLogical schema msize inputs =
   Stream.whenEmpty (Logical.empty schema) $
     unionInput msize (fmap (Input Map.empty . Just) inputs) Map.empty
 {-# INLINABLE unionLogical #-}
@@ -226,7 +246,7 @@ unionStripedWith ::
   => Schema.Table
   -> Maybe MaximumRowSize
   -> Cons Boxed.Vector (Stream (Of Striped.Table) m ())
-  -> Stream (Of Striped.Table) (EitherT UnionTableError m) ()
+  -> Stream (Of Striped.Table) (EitherT UnionTableError m) MergeResult
 unionStripedWith schema msize inputs0 = do
   let
     fromStriped =
@@ -243,7 +263,7 @@ unionStriped ::
      Monad m
   => Maybe MaximumRowSize
   -> Cons Boxed.Vector (Stream (Of Striped.Table) m ())
-  -> Stream (Of Striped.Table) (EitherT UnionTableError m) ()
+  -> Stream (Of Striped.Table) (EitherT UnionTableError m) MergeResult
 unionStriped msize inputs0 = do
   (heads, inputs1) <- fmap Cons.unzip . lift $ traverse peekHead inputs0
   schema <- lift . hoistEither . unionSchemas $ fmap Striped.schema heads

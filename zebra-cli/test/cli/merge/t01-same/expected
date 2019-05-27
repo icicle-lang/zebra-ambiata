@@ -1,3 +1,5 @@
+Dropped entities:
+MergeResult (fromList [])
 === Schema ===
 {
   "version": "v0",

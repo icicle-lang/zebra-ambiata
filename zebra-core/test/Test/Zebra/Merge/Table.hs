@@ -1,5 +1,6 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# OPTIONS_GHC -fno-warn-unused-imports #-}
 module Test.Zebra.Merge.Table where
 
 import           Data.Functor.Identity (runIdentity)
@@ -90,7 +91,7 @@ unionList msize xss0 =
       pure Nothing
     Left err ->
       Left $ ppShow err
-    Right (xs0 :> ()) ->
+    Right (xs0 :> _) ->
       case Cons.fromList xs0 of
         Nothing ->
           Left "Union returned empty stream"
