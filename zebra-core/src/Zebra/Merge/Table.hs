@@ -18,9 +18,10 @@ module Zebra.Merge.Table (
 
 import           Control.Monad.Morph (hoist, squash)
 import           Control.Monad.Trans.Class (lift)
-import           Control.Monad.Trans.State.Strict (StateT, runStateT, modify', get)
+import           Control.Monad.Trans.State.Strict (StateT, runStateT, modify')
 
 import           Data.Map (Map)
+import           Data.List ((++))
 import qualified Data.Map.Strict as Map
 import qualified Data.Vector as Boxed
 
@@ -156,17 +157,30 @@ updateInput msize input =
 
           Right (table, remaining) -> do
             values <- lift . firstT UnionLogicalSchemaError . hoistEither $ Logical.takeMap table
-            modify' $ Map.unionWith (+) (Map.map Logical.sizeValue values)
-            -- drop as they are consumed, as some entities are huge and we don't need them
-            -- it does mean it is done per input file then done for all inputs 
-            -- but at least this give GHC a chance to garbage collect some of it before it reads in the next set of values
-            newSizes <- get
-            let
-              drops = takeExcessiveValues msize newSizes
-              -- replace all to big values with empty placeholder 
-              -- (it doesn't matter what it is as the key will be dropped entirely later)
-              dropped = Map.map (const Logical.Unit) $ values `Map.intersection` drops
-              values2 = dropped `Map.union` values
+            -- more naive dropping of values, only caring if the current value is too big 
+            -- to try and reduce excessive memory as early as possible
+            (sizes, values2) <- pure $ Map.mapAccumWithKey (\a k v -> do
+                let
+                  size = Logical.sizeValue v
+                  a2 = a ++ [(k, size)]
+                if isExessiveSize msize size then
+                  (a2, Logical.Unit)
+                else 
+                  (a2, v)
+                ) [] values
+            modify' $ Map.unionWith (+) (Map.fromDistinctAscList sizes)
+              
+--             modify' $ Map.unionWith (+) (Map.map Logical.sizeValue values)
+--             -- drop as they are consumed, as some entities are huge and we don't need them
+--             -- it does mean it is done per input file then done for all inputs 
+--             -- but at least this give GHC a chance to garbage collect some of it before it reads in the next set of values
+--             newSizes <- get
+--             let
+--               drops = takeExcessiveValues msize newSizes
+--               -- replace all to big values with empty placeholder 
+--               -- (it doesn't matter what it is as the key will be dropped entirely later)
+--               dropped = Map.map (const Logical.Unit) $ values `Map.intersection` drops
+--               values2 = dropped `Map.union` values
 
             pure $ Input values2 (Just remaining)
 {-# INLINABLE updateInput #-}
@@ -178,6 +192,14 @@ takeExcessiveValues = \case
   Just size ->
     Map.filter (> unMaximumRowSize size)
 {-# INLINABLE takeExcessiveValues #-}
+
+isExessiveSize :: Maybe MaximumRowSize -> Int64 -> Bool
+isExessiveSize = \case
+  Nothing ->
+    const False
+  Just size ->
+    (> unMaximumRowSize size)
+{-# INLINABLE isExessiveSize #-}
 
 unionStep :: Monad m => Logical.Value -> Cons Boxed.Vector (Input m) -> EitherT UnionTableError m (Step m)
 unionStep key inputs = do
