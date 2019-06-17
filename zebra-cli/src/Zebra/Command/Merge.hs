@@ -26,8 +26,9 @@ import qualified Data.Text as Text
 
 import           P
 
-import           System.IO (IO, FilePath)
+import           System.IO (IO, FilePath, hPutStrLn, stderr)
 import           System.IO.Error (IOError)
+import           Text.Show.Pretty (ppShow)
 
 import           Viking (Stream, Of)
 import qualified Viking.ByteStream as ByteStream
@@ -46,7 +47,6 @@ import qualified Zebra.Serial.Text as Text
 import qualified Zebra.Table.Schema as Schema
 import           Zebra.Table.Striped (StripedError)
 import qualified Zebra.Table.Striped as Striped
-
 
 data Merge =
   Merge {
@@ -129,6 +129,20 @@ zebraMerge x = do
       Binary.encodeStripedWith (mergeVersion x) .
     hoist (firstJoin MergeStripedError) .
       Striped.rechunk (unMergeRowsPerBlock $ mergeRowsPerChunk x) .
+--     hoist (firstJoin MergeStripedError) .
+    printStats .
     hoist (firstJoin MergeUnionTableError) $
       union msize inputs
 {-# SPECIALIZE zebraMerge :: Merge -> EitherT MergeError (ResourceT IO) () #-}
+
+printStats ::
+     forall m t.
+     (MonadResource m, MonadCatch m)
+  => Stream (Of t) m Merge.MergeResult
+  -> Stream (Of t) m ()
+printStats s = 
+  s >>= (\a -> do
+        liftIO $ hPutStrLn stderr "Dropped entities:"
+        liftIO $ hPutStrLn stderr (ppShow a)
+        pure () 
+      )
