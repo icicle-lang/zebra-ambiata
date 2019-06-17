@@ -21,7 +21,7 @@ import           Control.Monad.Trans.Class (lift)
 import           Control.Monad.Trans.State.Strict (StateT, runStateT, modify')
 
 import           Data.Map (Map)
-import           Data.List ((++))
+-- import           Data.List ((++))
 import qualified Data.Map.Strict as Map
 import qualified Data.Vector as Boxed
 
@@ -141,7 +141,7 @@ updateInput ::
   => Maybe MaximumRowSize
   -> Input m
   -> StateT (Map Logical.Value Int64) (EitherT UnionTableError m) (Input m)
-updateInput msize input =
+updateInput _msize input =
   case inputStream input of
     Nothing ->
       pure input
@@ -159,17 +159,17 @@ updateInput msize input =
             values <- lift . firstT UnionLogicalSchemaError . hoistEither $ Logical.takeMap table
             -- more naive dropping of values, only caring if the current value is too big 
             -- to try and reduce excessive memory as early as possible
-            (sizes, values2) <- pure $ Map.mapAccumWithKey (\a k v -> do
-                let
-                  size = Logical.sizeValue v
-                  a2 = a ++ [(k, size)]
-                if isExessiveSize msize size then
-                  (a2, Logical.Unit)
-                else 
-                  (a2, v)
-                ) [] values
-            modify' $ Map.unionWith (+) (Map.fromDistinctAscList sizes)
-              
+--             (sizes, values2) <- pure $ Map.mapAccumWithKey (\a k v -> do
+--                 let
+--                   size = Logical. v
+--                   a2 = a ++ [(k, size)]
+--                 if isExessiveSize msize size then
+--                   (a2, Logical.Unit)
+--                 else 
+--                   (a2, v)
+--                 ) [] values
+--             modify' $ Map.unionWith (+) (Map.fromDistinctAscList sizes)
+               -- **************************** version 2              
 --             modify' $ Map.unionWith (+) (Map.map Logical.sizeValue values)
 --             -- drop as they are consumed, as some entities are huge and we don't need them
 --             -- it does mean it is done per input file then done for all inputs 
@@ -181,8 +181,10 @@ updateInput msize input =
 --               -- (it doesn't matter what it is as the key will be dropped entirely later)
 --               dropped = Map.map (const Logical.Unit) $ values `Map.intersection` drops
 --               values2 = dropped `Map.union` values
-
-            pure $ Input values2 (Just remaining)
+                -- result ***************************
+--             pure $ Input values2 (Just remaining)
+            modify' $ Map.unionWith (+) (Map.map Logical.sizeValue values)
+            pure $ Input values (Just remaining)
 {-# INLINABLE updateInput #-}
 
 takeExcessiveValues :: Maybe MaximumRowSize -> Map Logical.Value Int64 -> Map Logical.Value Int64
@@ -193,13 +195,13 @@ takeExcessiveValues = \case
     Map.filter (> unMaximumRowSize size)
 {-# INLINABLE takeExcessiveValues #-}
 
-isExessiveSize :: Maybe MaximumRowSize -> Int64 -> Bool
-isExessiveSize = \case
-  Nothing ->
-    const False
-  Just size ->
-    (> unMaximumRowSize size)
-{-# INLINABLE isExessiveSize #-}
+-- isExessiveSize :: Maybe MaximumRowSize -> Int64 -> Bool
+-- isExessiveSize = \case
+--   Nothing ->
+--     const False
+--   Just size ->
+--     (> unMaximumRowSize size)
+-- {-# INLINABLE isExessiveSize #-}
 
 unionStep :: Monad m => Logical.Value -> Cons Boxed.Vector (Input m) -> EitherT UnionTableError m (Step m)
 unionStep key inputs = do
