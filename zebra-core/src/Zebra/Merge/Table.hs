@@ -4,6 +4,8 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module Zebra.Merge.Table (
     MaximumRowSize(..)
 
@@ -21,7 +23,7 @@ import           Control.Monad.Trans.Class (lift)
 import           Control.Monad.Trans.State.Strict (StateT, runStateT, modify')
 
 import           Data.Map (Map)
--- import           Data.List ((++))
+import           Data.List ((++))
 import qualified Data.Map.Strict as Map
 import qualified Data.Vector as Boxed
 
@@ -136,39 +138,40 @@ closeStream input =
     }
 {-# INLINABLE closeStream #-}
 
-updateInput ::
+type NextInput m = (Input m, Map Logical.Value Int64)
+type NextInput' m = (EitherT UnionTableError m (NextInput m))
+ 
+nextInput ::
      Monad m
   => Maybe MaximumRowSize
   -> Input m
-  -> StateT (Map Logical.Value Int64) (EitherT UnionTableError m) (Input m)
-updateInput _msize input =
+  -> NextInput' m
+nextInput msize input = {-# SCC nextInput #-} 
   case inputStream input of
     Nothing ->
-      pure input
+      pure (input, Map.empty)
     Just stream ->
       if hasData input then
-        pure input
+        pure (input, Map.empty)
       else do
-        e <- lift . lift $ Stream.next stream
+        e <- lift $ Stream.next stream    
         case e of
           Left () ->
-            pure $
-              closeStream input
+            pure (closeStream input, Map.empty)
 
           Right (table, remaining) -> do
-            values <- lift . firstT UnionLogicalSchemaError . hoistEither $ Logical.takeMap table
+            values <- firstT UnionLogicalSchemaError . hoistEither $ Logical.takeMap table
             -- more naive dropping of values, only caring if the current value is too big 
             -- to try and reduce excessive memory as early as possible
---             (sizes, values2) <- pure $ Map.mapAccumWithKey (\a k v -> do
---                 let
---                   size = Logical. v
---                   a2 = a ++ [(k, size)]
---                 if isExessiveSize msize size then
---                   (a2, Logical.Unit)
---                 else 
---                   (a2, v)
---                 ) [] values
---             modify' $ Map.unionWith (+) (Map.fromDistinctAscList sizes)
+            (sizes, values') <- pure $ Map.mapAccumWithKey (\a k v -> do
+                let
+                  size = Logical.sizeValue v
+                  a2 = a ++ [(k, size)]
+                if isExessiveSize msize size then
+                  (a2, Logical.Unit)
+                else 
+                  (a2, v)
+                ) [] values
                -- **************************** version 2              
 --             modify' $ Map.unionWith (+) (Map.map Logical.sizeValue values)
 --             -- drop as they are consumed, as some entities are huge and we don't need them
@@ -183,8 +186,17 @@ updateInput _msize input =
 --               values2 = dropped `Map.union` values
                 -- result ***************************
 --             pure $ Input values2 (Just remaining)
-            modify' $ Map.unionWith (+) (Map.map Logical.sizeValue values)
-            pure $ Input values (Just remaining)
+            pure (Input values' (Just remaining), (Map.fromDistinctAscList sizes))
+{-# INLINABLE nextInput #-}
+
+            
+updateInput ::
+     Monad m
+  => NextInput m
+  -> StateT (Map Logical.Value Int64) (EitherT UnionTableError m) (Input m)
+updateInput (newInput, sizes) = {-# SCC updateInput #-} do
+  modify' $ Map.unionWith (+) sizes
+  pure newInput
 {-# INLINABLE updateInput #-}
 
 takeExcessiveValues :: Maybe MaximumRowSize -> Map Logical.Value Int64 -> Map Logical.Value Int64
@@ -195,13 +207,13 @@ takeExcessiveValues = \case
     Map.filter (> unMaximumRowSize size)
 {-# INLINABLE takeExcessiveValues #-}
 
--- isExessiveSize :: Maybe MaximumRowSize -> Int64 -> Bool
--- isExessiveSize = \case
---   Nothing ->
---     const False
---   Just size ->
---     (> unMaximumRowSize size)
--- {-# INLINABLE isExessiveSize #-}
+isExessiveSize :: Maybe MaximumRowSize -> Int64 -> Bool
+isExessiveSize = \case
+  Nothing ->
+    const False
+  Just size ->
+    (> unMaximumRowSize size)
+{-# INLINABLE isExessiveSize #-}
 
 unionStep :: Monad m => Logical.Value -> Cons Boxed.Vector (Input m) -> EitherT UnionTableError m (Step m)
 unionStep key inputs = do
@@ -226,9 +238,13 @@ unionInput ::
   -> Cons Boxed.Vector (Input m)
   -> Map Logical.Value Int64
   -> Stream (Of Logical.Table) (EitherT UnionTableError m) MergeResult
-unionInput msize inputs0 sizes0 = do
-  (inputs1, sizes1) <- lift $ runStateT (traverse (updateInput msize) inputs0) sizes0
-  if Cons.all isClosed inputs1 then 
+unionInput msize inputs0 sizes0 = {-# SCC unionInput #-} do
+  inputsNext <- lift $ traverse (nextInput msize) inputs0
+  -- TODO do we need the state monad when it's just adding all the sizes together?
+  (inputs1, sizes1) <- lift $ runStateT (traverse updateInput inputsNext) sizes0
+  
+  if Cons.all isClosed inputs1 then
+    -- since we don't remove the sizes of dropped entities we can get the list of them
     pure $ MergeResult $ takeExcessiveValues msize sizes1
     
   else do
